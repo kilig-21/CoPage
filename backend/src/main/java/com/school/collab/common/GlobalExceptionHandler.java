@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -23,6 +24,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({MethodArgumentNotValidException.class, ConstraintViolationException.class})
     public ResponseEntity<Result<Void>> handleValidationException(Exception exception) {
         return ResponseEntity.badRequest().body(Result.fail(ErrorCode.PARAM_ERROR));
+    }
+
+    /**
+     * 路径写错（或接口还没实现）时，Spring 会抛 NoResourceFoundException。
+     * 如果不单独接住，它会掉进下面的兜底分支变成 500「服务器内部错误」，
+     * 让人误以为是自己代码崩了 —— 明明只是 URL 打错了。
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Result<Void>> handleNoResourceFound(NoResourceFoundException exception) {
+        log.warn("接口不存在: {}", exception.getResourcePath());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Result.fail(ErrorCode.NOT_FOUND));
     }
 
     @ExceptionHandler(Exception.class)

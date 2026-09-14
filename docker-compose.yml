@@ -6,13 +6,12 @@ services:
     container_name: collab-mysql
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-collab_docs}
-      MYSQL_USER: ${MYSQL_USER:-collab}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-collab_dev_password}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_dev_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-collab_doc}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
       TZ: Asia/Shanghai
     ports:
-      - "3307:3306"
+      # 本机 3307 已被另一个项目（ai-commerce）占用，这里改用 3308。
+      - "3308:3306"
     volumes:
       - mysql-data:/var/lib/mysql
       - ./backend/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
@@ -27,7 +26,8 @@ services:
     container_name: collab-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      # 本机 6379 已被 ai-commerce-redis 占用，这里改用 6380。
+      - "6380:6379"
     volumes:
       - redis-data:/data
     command: ["redis-server", "--appendonly", "yes"]
@@ -42,11 +42,12 @@ services:
     container_name: collab-rabbitmq
     restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: collab
-      RABBITMQ_DEFAULT_PASS: collab_dev_password
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-collab}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-123456}
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      # 本机 5672 / 15672 已被 ai-commerce-rabbitmq 占用，这里改用 5673 / 15673。
+      - "5673:5672"
+      - "15673:15672"
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
@@ -76,7 +77,9 @@ services:
       retries: 20
 
   minio:
-    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    # MinIO 已从 Docker Hub 撤下官方镜像（拉取会报 pull access denied），改用官方 registry quay.io。
+    # 如 quay.io 拉取慢，可替换为：docker.m.daocloud.io/minio/minio:latest
+    image: quay.io/minio/minio:latest
     container_name: collab-minio
     restart: unless-stopped
     environment:
@@ -90,16 +93,25 @@ services:
       - minio-data:/data
 
   minio-init:
-    image: minio/mc:RELEASE.2024-10-08T09-37-26Z
+    image: quay.io/minio/mc:latest
     container_name: collab-minio-init
     depends_on:
       - minio
     restart: "no"
     entrypoint: ["/bin/sh", "-c"]
-    command: >-
-      until mc alias set collab http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin}; do sleep 2; done;
-      mc mb --ignore-existing collab/collab;
-      mc anonymous set download collab/collab
+    # 注意：这里必须写成「只有一个元素的 YAML 列表」。
+    # 写成折叠标量（>-）时，Compose 会把整段命令按空格拆成 argv 列表，
+    # entrypoint 的 -c 就只拿到 "until" 一个词，报 `syntax error: unexpected end of file`。
+    # 单元素列表保证 /bin/sh -c 收到的是完整的一段脚本。
+    command:
+      - |
+        until mc alias set collab http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do
+          echo "等待 MinIO 就绪..."
+          sleep 2
+        done
+        mc mb --ignore-existing collab/collab
+        mc anonymous set download collab/collab
+        echo "MinIO 初始化完成：bucket=collab（公共读）"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}

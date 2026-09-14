@@ -17,13 +17,16 @@ docker compose up -d
 docker compose ps
 ```
 
-本项目的 MySQL 映射为 **3307**（不是本机常见的 3306），所有服务由 Docker Compose 统一管理。首次启动会执行 [schema.sql](backend/src/main/resources/db/schema.sql)，并建立 `testA`、`testB` 两个演示账号；两者初始密码均为 `123456`。
+> ⚠️ **端口注意**：本项目的容器端口都**故意错开了常用端口**，以免和本机其他项目（如 `ai-commerce` 用的
+> 3307 / 6379 / 5672 / 15672）撞车。**不要**把它们改回 3306 / 6379 / 5672 / 15672。
+
+所有服务由 Docker Compose 统一管理。首次启动会执行 [schema.sql](backend/src/main/resources/db/schema.sql)，并建立 `testA`、`testB` 两个演示账号；两者初始密码均为 `123456`。
 
 | 服务 | 地址 | 默认账号 |
 | --- | --- | --- |
-| MySQL | `localhost:3307` | `collab / collab_dev_password` |
-| Redis | `localhost:6379` | 无 |
-| RabbitMQ 管理台 | http://localhost:15672 | `collab / collab_dev_password` |
+| MySQL | `localhost:3308`（库 `collab_doc`） | `root / 123456` |
+| Redis | `localhost:6380` | 无 |
+| RabbitMQ 管理台 | http://localhost:15673 | `collab / 123456` |
 | Elasticsearch | http://localhost:9200 | 无认证（仅本地开发） |
 | MinIO API | http://localhost:9000 | `minioadmin / minioadmin` |
 | MinIO 控制台 | http://localhost:9001 | `minioadmin / minioadmin` |

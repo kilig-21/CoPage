@@ -1,5 +1,5 @@
-CREATE DATABASE IF NOT EXISTS collab_docs DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE collab_docs;
+CREATE DATABASE IF NOT EXISTS collab_doc DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE collab_doc;
 
 CREATE TABLE IF NOT EXISTS `user` (
   `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -56,5 +56,5 @@ CREATE TABLE IF NOT EXISTS `doc_collaborator` (
 
 -- testA / testB 的初始密码均为 123456（BCrypt，cost=10）。
 INSERT IGNORE INTO `user` (`username`, `password`, `nickname`) VALUES
-  ('testA', '$2a$10$6nYTSUSh2BQfbOLIyCXn8eUViBcnn.WcjUrW0tJLMND0dAtI85zMa', '测试用户 A'),
-  ('testB', '$2a$10$6nYTSUSh2BQfbOLIyCXn8eUViBcnn.WcjUrW0tJLMND0dAtI85zMa', '测试用户 B');
+  ('testA', '$2a$10$gGfvADvFVCzg8LCHc2Zmm.7Vdd1C5asti6mnE2RPIwdxNKMIUsQ7m', '测试用户 A'),
+  ('testB', '$2a$10$gGfvADvFVCzg8LCHc2Zmm.7Vdd1C5asti6mnE2RPIwdxNKMIUsQ7m', '测试用户 B');

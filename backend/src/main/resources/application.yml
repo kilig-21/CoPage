@@ -7,19 +7,21 @@ spring:
   application:
     name: collab-docs
   datasource:
-    url: ${MYSQL_URL:jdbc:mysql://localhost:3307/collab_docs?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
-    username: ${MYSQL_USER:collab}
-    password: ${MYSQL_PASSWORD:collab_dev_password}
+    # allowPublicKeyRetrieval=true 是 MySQL 8 用 caching_sha2_password 时的必需参数，
+    # 否则非 SSL 连接会报 "Public Key Retrieval is not allowed"。
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3308/collab_doc?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:123456}
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
       host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
+      port: ${REDIS_PORT:6380}
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
-    port: ${RABBITMQ_PORT:5672}
+    port: ${RABBITMQ_PORT:5673}
     username: ${RABBITMQ_USER:collab}
-    password: ${RABBITMQ_PASSWORD:collab_dev_password}
+    password: ${RABBITMQ_PASSWORD:123456}
     listener:
       simple:
         acknowledge-mode: manual
@@ -35,6 +37,9 @@ mybatis-plus:
   global-config:
     db-config:
       id-type: auto
+      logic-delete-field: isDeleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
 
 collab:
   jwt:
