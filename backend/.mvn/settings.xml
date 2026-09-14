@@ -1,0 +1,6 @@
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+  <!-- 让受限环境也能把临时依赖缓存留在项目内，而不是写入全局 Maven 目录。 -->
+  <localRepository>${user.dir}/.mvn-cache</localRepository>
+</settings>
