@@ -1,5 +1,6 @@
 package com.school.collab.collab.ws;
 
+import com.school.collab.collab.CollabException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
@@ -33,7 +34,7 @@ public class WsSessionRegistry {
     public SessionInfo require(WebSocketSession session) {
         SessionInfo info = current(session);
         if (info == null) {
-            throw new IllegalStateException("请先发送 join 消息");
+            throw new CollabException(400, "请先发送 join 消息");
         }
         return info;
     }
