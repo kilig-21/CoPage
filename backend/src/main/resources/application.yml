@@ -6,6 +6,10 @@ server:
 spring:
   application:
     name: collab-docs
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
   datasource:
     # allowPublicKeyRetrieval=true 是 MySQL 8 用 caching_sha2_password 时的必需参数，
     # 否则非 SSL 连接会报 "Public Key Retrieval is not allowed"。
