@@ -3,6 +3,7 @@ package com.school.collab.collab.persist;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import com.school.collab.config.RabbitMqConfig;
+import com.school.collab.search.SearchIndex;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
@@ -18,7 +19,8 @@ class DocPersistenceQueueTest {
     private final RabbitTemplate rabbit = mock(RabbitTemplate.class);
     private final DocumentPersistence persistence = mock(DocumentPersistence.class);
     private final ObjectMapper mapper = new ObjectMapper();
-    private final DocPersistenceQueue queue = new DocPersistenceQueue(rabbit, persistence, mapper, 2);
+    private final SearchIndex searchIndex = mock(SearchIndex.class);
+    private final DocPersistenceQueue queue = new DocPersistenceQueue(rabbit, persistence, mapper, searchIndex, 2);
     private final Channel channel = mock(Channel.class);
 
     @Test
@@ -31,6 +33,7 @@ class DocPersistenceQueueTest {
                 RabbitMqConfig.SNAPSHOT_ROUTING_KEY,
                 new DocPersistenceQueue.SnapshotRequested(9));
         verify(channel).basicAck(17, false);
+        verify(searchIndex).upsert(9);
     }
 
     @Test

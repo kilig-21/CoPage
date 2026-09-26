@@ -88,6 +88,23 @@ public class DocumentRepository {
                 """, ROW_MAPPER, userId, userId, keyword, keyword, size, offset);
     }
 
+    /** 搜索前在数据库计算权限边界，ES 不保存或推断协作者权限。 */
+    public List<Long> visibleIds(long userId) {
+        return jdbc.query("""
+                SELECT d.id FROM document d
+                WHERE d.is_deleted = 0 AND
+                      (d.owner_id = ? OR EXISTS (
+                          SELECT 1 FROM doc_collaborator c
+                          WHERE c.doc_id = d.id AND c.user_id = ?
+                      ))
+                """, (rs, index) -> rs.getLong(1), userId, userId);
+    }
+
+    /** 包括软删除文档，以便周期巡检清除索引里的旧条目。 */
+    public List<Long> allIds() {
+        return jdbc.query("SELECT id FROM document ORDER BY id", (rs, index) -> rs.getLong(1));
+    }
+
     public boolean rename(long docId, String title) {
         return jdbc.update(
                 "UPDATE document SET title = ?, update_time = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0",

@@ -7,23 +7,37 @@ import com.school.collab.common.BizException;
 import com.school.collab.common.ErrorCode;
 import com.school.collab.common.UserContext;
 import com.school.collab.document.DocumentRepository.DocumentRow;
+import com.school.collab.search.SearchIndex;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Service
 public class DocumentService {
+    private static final Logger log = LoggerFactory.getLogger(DocumentService.class);
     private static final String EMPTY_CONTENT = "{\"ops\":[{\"insert\":\"\\n\"}]}";
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final DocumentRepository documents;
     private final ObjectMapper objectMapper;
+    private final SearchIndex searchIndex;
 
     public DocumentService(DocumentRepository documents, ObjectMapper objectMapper) {
+        this(documents, objectMapper, null);
+    }
+
+    @Autowired
+    public DocumentService(DocumentRepository documents, ObjectMapper objectMapper, SearchIndex searchIndex) {
         this.documents = documents;
         this.objectMapper = objectMapper;
+        this.searchIndex = searchIndex;
     }
 
     public ListView list(int page, int size, String keyword) {
@@ -52,6 +66,7 @@ public class DocumentService {
         }
         String normalizedTitle = normalizeTitle(title, true);
         long id = documents.create(normalizedTitle, userId, parentId, EMPTY_CONTENT);
+        indexAfterCommit(id);
         DocumentRow row = documents.find(id).orElseThrow(() -> new BizException(ErrorCode.INTERNAL_ERROR));
         return summary(row);
     }
@@ -75,6 +90,7 @@ public class DocumentService {
         if (!documents.rename(docId, normalizeTitle(title, false))) {
             throw new BizException(ErrorCode.NOT_FOUND);
         }
+        indexAfterCommit(docId);
         DocumentRow updated = documents.find(docId).orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
         return new RenameView(updated.id(), updated.title(), format(updated.updateTime()));
     }
@@ -89,6 +105,7 @@ public class DocumentService {
         if (!documents.softDelete(docId)) {
             throw new BizException(ErrorCode.NOT_FOUND);
         }
+        indexAfterCommit(docId);
     }
 
     public int permissionFor(long docId, long userId) {
@@ -116,6 +133,21 @@ public class DocumentService {
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("数据库中的文档内容不是合法 Delta", exception);
         }
+    }
+
+    private void indexAfterCommit(long docId) {
+        if (searchIndex == null) return;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    searchIndex.upsert(docId);
+                } catch (RuntimeException exception) {
+                    // 文档事务已成功；周期重建会补索引，不能让客户端误重试创建/重命名。
+                    log.warn("文档已提交但 ES 索引暂时失败, docId={}", docId, exception);
+                }
+            }
+        });
     }
 
     private SummaryView summary(DocumentRow row) {

@@ -3,6 +3,7 @@ package com.school.collab.collab.persist;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import com.school.collab.config.RabbitMqConfig;
+import com.school.collab.search.SearchIndex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
@@ -22,14 +23,16 @@ public class DocPersistenceQueue {
     private final RabbitTemplate rabbit;
     private final DocumentPersistence persistence;
     private final ObjectMapper mapper;
+    private final SearchIndex searchIndex;
     private final int interval;
 
     public DocPersistenceQueue(RabbitTemplate rabbit, DocumentPersistence persistence,
-                               ObjectMapper mapper,
+                               ObjectMapper mapper, SearchIndex searchIndex,
                                @Value("${collab.snapshot.interval:20}") int interval) {
         this.rabbit = rabbit;
         this.persistence = persistence;
         this.mapper = mapper;
+        this.searchIndex = searchIndex;
         this.interval = interval;
         if (interval < 1) {
             throw new IllegalArgumentException("快照间隔必须大于 0");
@@ -53,6 +56,11 @@ public class DocPersistenceQueue {
             OperationCommitted event = mapper.readValue(message.getBody(), OperationCommitted.class);
             if (!persistence.operationExists(event.docId(), event.revision())) {
                 throw new IllegalStateException("操作日志尚未落库: " + event);
+            }
+            try {
+                searchIndex.upsert(event.docId());
+            } catch (RuntimeException exception) {
+                log.warn("ES 索引暂时失败，巡检会补建, docId={}", event.docId(), exception);
             }
             if (event.revision() % interval == 0) {
                 requestSnapshot(event.docId());
