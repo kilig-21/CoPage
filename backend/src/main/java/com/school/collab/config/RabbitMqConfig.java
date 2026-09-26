@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * 文档操作的异步落库通道。
+ * 已落库操作通知与异步快照通道。正文、版本和操作日志由 MySQL 事务先行提交。
  * 交换机、队列、绑定都在这里声明 —— 队列如果只由生产端临时声明，
  * 消费端尚未启动时消息会被 broker 直接丢弃且不报错，是最难排查的一类问题。
  */

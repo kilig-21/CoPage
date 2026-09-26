@@ -42,6 +42,46 @@ public class DocumentPersistence {
                 rs.getLong("revision"), read(rs.getString("op"))), docId, baseRevision);
     }
 
+    public boolean operationExists(long docId, long revision) {
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM doc_operation WHERE doc_id = ? AND revision = ?",
+                Integer.class, docId, revision);
+        return count != null && count > 0;
+    }
+
+    /** 巡检漏发消息的文档；一次只取有限批次，下一轮继续补齐。 */
+    public List<Long> snapshotCandidates(int interval) {
+        return jdbc.query("""
+                SELECT d.id FROM document d
+                LEFT JOIN (
+                    SELECT doc_id, MAX(revision) AS revision
+                    FROM doc_snapshot GROUP BY doc_id
+                ) s ON s.doc_id = d.id
+                WHERE d.is_deleted = 0 AND d.revision - COALESCE(s.revision, 0) >= ?
+                ORDER BY d.id LIMIT 100
+                """, (rs, index) -> rs.getLong(1), interval);
+    }
+
+    /** 锁住文档行后检查并保存快照，重复 MQ 消息和多实例消费都不会重复插入。 */
+    @Transactional
+    public void saveSnapshotIfNeeded(long docId, int interval) {
+        List<CollabDocumentSnapshot> rows = jdbc.query(
+                "SELECT content, revision FROM document WHERE id = ? AND is_deleted = 0 FOR UPDATE",
+                (rs, index) -> new CollabDocumentSnapshot(
+                        rs.getLong("revision"), read(rs.getString("content"))), docId);
+        if (rows.isEmpty()) {
+            return;
+        }
+        CollabDocumentSnapshot current = rows.getFirst();
+        Long last = jdbc.queryForObject(
+                "SELECT COALESCE(MAX(revision), 0) FROM doc_snapshot WHERE doc_id = ?",
+                Long.class, docId);
+        if (current.revision() - (last == null ? 0 : last) >= interval) {
+            jdbc.update("INSERT INTO doc_snapshot (doc_id, revision, content) VALUES (?, ?, ?)",
+                    docId, current.revision(), write(current.content()));
+        }
+    }
+
     /** CAS 更新文档与追加操作日志同处一个事务；任一步失败都会回滚。 */
     @Transactional
     public void persist(long docId, long expectedRevision, Delta content, Delta operation, Long userId) {

@@ -2,6 +2,7 @@ package com.school.collab.collab.service;
 
 import com.school.collab.collab.CollabException;
 import com.school.collab.collab.persist.DocumentPersistence;
+import com.school.collab.collab.persist.DocPersistenceQueue;
 import com.school.collab.collab.store.CollabDocumentSnapshot;
 import com.school.collab.collab.store.DocumentStateStore;
 import com.school.collab.collab.store.InMemoryDocumentStateStore;
@@ -29,15 +30,22 @@ public class DocRevService {
 
     private final DocumentStateStore store;
     private final DocumentPersistence persistence;
+    private final DocPersistenceQueue queue;
 
     public DocRevService() {
-        this(new InMemoryDocumentStateStore(), null);
+        this(new InMemoryDocumentStateStore(), null, null);
+    }
+
+    public DocRevService(DocumentStateStore store, DocumentPersistence persistence) {
+        this(store, persistence, null);
     }
 
     @Autowired
-    public DocRevService(DocumentStateStore store, DocumentPersistence persistence) {
+    public DocRevService(DocumentStateStore store, DocumentPersistence persistence,
+                         DocPersistenceQueue queue) {
         this.store = store;
         this.persistence = persistence;
+        this.queue = queue;
     }
 
     public Snapshot snapshot(long docId) {
@@ -121,6 +129,15 @@ public class DocRevService {
             }
             CommitResult result = new CommitResult(revision, transformed.copy());
             afterCommit.accept(result);
+            if (queue != null) {
+                try {
+                    queue.publishCommitted(docId, revision);
+                } catch (RuntimeException exception) {
+                    // 操作已在 MySQL 提交；巡检会补快照，不能要求客户端重发。
+                    log.warn("操作已持久化但 RabbitMQ 通知失败, docId={}, revision={}",
+                            docId, revision, exception);
+                }
+            }
             return result;
         });
     }
