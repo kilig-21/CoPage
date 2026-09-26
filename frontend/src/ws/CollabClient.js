@@ -15,6 +15,8 @@ export default class CollabClient {
     this.pending = null
     this.buffer = null
     this.socket = null
+    this.busyRetryTimer = null
+    this.busyRetryDelay = 100
   }
 
   attachSocket(socket) {
@@ -40,6 +42,7 @@ export default class CollabClient {
   receive(message) {
     switch (message.type) {
       case 'sync':
+        this.clearBusyRetry()
         this.revision = message.revision
         this.pending = null
         this.buffer = null
@@ -57,6 +60,7 @@ export default class CollabClient {
         break
       case 'error':
         this.onError?.(message.message)
+        if (message.code === 40901) this.scheduleBusyRetry()
         if (message.code === 40903) this.join()
         break
       default:
@@ -65,6 +69,8 @@ export default class CollabClient {
   }
 
   acknowledge(revision) {
+    this.clearBusyRetry()
+    this.busyRetryDelay = 100
     this.revision = Math.max(this.revision, revision)
     this.pending = null
     if (this.buffer) {
@@ -102,5 +108,25 @@ export default class CollabClient {
       baseRevision: this.revision,
       op: this.pending,
     })
+  }
+
+  scheduleBusyRetry() {
+    if (!this.pending || this.busyRetryTimer !== null) return
+    this.busyRetryTimer = globalThis.setTimeout(() => {
+      this.busyRetryTimer = null
+      this.sendPending()
+    }, this.busyRetryDelay)
+    this.busyRetryDelay = Math.min(this.busyRetryDelay * 2, 2_000)
+  }
+
+  clearBusyRetry() {
+    if (this.busyRetryTimer !== null) {
+      globalThis.clearTimeout(this.busyRetryTimer)
+      this.busyRetryTimer = null
+    }
+  }
+
+  close() {
+    this.clearBusyRetry()
   }
 }

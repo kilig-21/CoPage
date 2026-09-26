@@ -138,6 +138,7 @@ export default function useQuillCollab(docId) {
       quill.off('text-change', onTextChange)
       quill.root.removeEventListener('compositionstart', onCompositionStart)
       quill.root.removeEventListener('compositionend', onCompositionEnd)
+      client.close()
       socket.close()
       quillRef.current = null
     }
