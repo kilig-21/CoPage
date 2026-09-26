@@ -8,6 +8,7 @@ export default class CollabSocket {
     this.onError = onError
     this.socket = null
     this.reconnectTimer = null
+    this.heartbeatTimer = null
     this.shouldReconnect = true
     this.reconnectDelay = 500
   }
@@ -24,6 +25,7 @@ export default class CollabSocket {
 
     socket.onopen = () => {
       this.reconnectDelay = 500
+      this.heartbeatTimer = window.setInterval(() => this.send({ type: 'ping' }), 20_000)
       this.onOpen?.()
     }
     socket.onmessage = (event) => {
@@ -35,6 +37,8 @@ export default class CollabSocket {
     }
     socket.onerror = () => this.onError?.('协同连接发生错误')
     socket.onclose = () => {
+      window.clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = null
       this.onClose?.()
       if (this.shouldReconnect) this.scheduleReconnect()
     }
@@ -49,6 +53,7 @@ export default class CollabSocket {
   close() {
     this.shouldReconnect = false
     window.clearTimeout(this.reconnectTimer)
+    window.clearInterval(this.heartbeatTimer)
     this.socket?.close()
   }
 

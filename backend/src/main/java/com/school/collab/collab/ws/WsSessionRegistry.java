@@ -19,23 +19,27 @@ public class WsSessionRegistry {
     private final ConcurrentMap<String, SessionInfo> bySessionId = new ConcurrentHashMap<>();
     private final ConcurrentMap<Long, ConcurrentMap<String, SessionInfo>> byDocumentId = new ConcurrentHashMap<>();
 
-    public SessionInfo register(WebSocketSession rawSession, long docId, String clientId, long userId, String username) {
+    public SessionInfo register(WebSocketSession rawSession, long docId, String clientId, long userId, String nickname) {
         unregister(rawSession);
         WebSocketSession safeSession = new ConcurrentWebSocketSessionDecorator(
                 rawSession, SEND_TIME_LIMIT_MS, SEND_BUFFER_LIMIT_BYTES
         );
-        SessionInfo info = new SessionInfo(rawSession.getId(), safeSession, docId, clientId, userId, username);
+        SessionInfo info = new SessionInfo(rawSession.getId(), safeSession, docId, clientId, userId, nickname);
         bySessionId.put(info.sessionId(), info);
         byDocumentId.computeIfAbsent(docId, ignored -> new ConcurrentHashMap<>()).put(info.sessionId(), info);
         return info;
     }
 
     public SessionInfo require(WebSocketSession session) {
-        SessionInfo info = bySessionId.get(session.getId());
+        SessionInfo info = current(session);
         if (info == null) {
             throw new IllegalStateException("请先发送 join 消息");
         }
         return info;
+    }
+
+    public SessionInfo current(WebSocketSession session) {
+        return bySessionId.get(session.getId());
     }
 
     public List<SessionInfo> sessionsOf(long docId) {
@@ -60,7 +64,7 @@ public class WsSessionRegistry {
             long docId,
             String clientId,
             long userId,
-            String username
+            String nickname
     ) {
     }
 }

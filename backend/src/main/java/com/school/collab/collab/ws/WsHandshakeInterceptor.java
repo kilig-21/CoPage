@@ -20,6 +20,7 @@ public class WsHandshakeInterceptor implements HandshakeInterceptor {
 
     public static final String USER_ID = "ws.userId";
     public static final String USERNAME = "ws.username";
+    public static final String NICKNAME = "ws.nickname";
 
     private final String jwtSecret;
 
@@ -47,6 +48,8 @@ public class WsHandshakeInterceptor implements HandshakeInterceptor {
             Claims claims = JwtUtil.parse(token, jwtSecret);
             attributes.put(USER_ID, Long.parseLong(claims.getSubject()));
             attributes.put(USERNAME, claims.get("username", String.class));
+            String nickname = claims.get("nickname", String.class);
+            attributes.put(NICKNAME, nickname == null ? claims.get("username", String.class) : nickname);
             return true;
         } catch (Exception exception) {
             response.setStatusCode(HttpStatus.UNAUTHORIZED);

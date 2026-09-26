@@ -50,6 +50,7 @@ class AuthServiceTest {
 
         AuthService.LoginView login = service.login("testA", "123456");
         assertEquals("9", JwtUtil.parse(login.token(), SECRET).getSubject());
+        assertEquals("测试用户 A", JwtUtil.parse(login.token(), SECRET).get("nickname", String.class));
         assertEquals("testA", login.user().username());
         BizException rejected = assertThrows(BizException.class, () -> service.login("testA", "wrong"));
         assertEquals(ErrorCode.UNAUTHORIZED, rejected.getErrorCode());

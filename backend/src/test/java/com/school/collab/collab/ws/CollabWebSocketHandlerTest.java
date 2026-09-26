@@ -3,6 +3,7 @@ package com.school.collab.collab.ws;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.school.collab.collab.service.DocRevService;
+import com.school.collab.collab.presence.RedisPresenceStore;
 import com.school.collab.common.BizException;
 import com.school.collab.common.ErrorCode;
 import com.school.collab.document.DocumentService;
@@ -23,15 +24,18 @@ class CollabWebSocketHandlerTest {
     private final DocumentService documents = mock(DocumentService.class);
     private final WsSessionRegistry registry = mock(WsSessionRegistry.class);
     private final WsSender sender = mock(WsSender.class);
+    private final CollabEventBus eventBus = mock(CollabEventBus.class);
+    private final RedisPresenceStore presence = mock(RedisPresenceStore.class);
     private final CollabWebSocketHandler handler =
-            new CollabWebSocketHandler(objectMapper, revisions, documents, registry, sender);
+            new CollabWebSocketHandler(
+                    objectMapper, revisions, documents, registry, sender, eventBus, presence);
 
     @Test
     void unauthorizedUserCannotJoinDocument() throws Exception {
         WebSocketSession session = mock(WebSocketSession.class);
         when(session.getAttributes()).thenReturn(Map.of(
                 WsHandshakeInterceptor.USER_ID, 2L,
-                WsHandshakeInterceptor.USERNAME, "testB"));
+                WsHandshakeInterceptor.NICKNAME, "测试用户 B"));
         when(documents.permissionFor(5L, 2L)).thenThrow(new BizException(ErrorCode.FORBIDDEN));
 
         handler.handleTextMessage(session,

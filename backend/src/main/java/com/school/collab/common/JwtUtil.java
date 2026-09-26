@@ -17,10 +17,17 @@ public final class JwtUtil {
     }
 
     public static String createToken(Long userId, String username, String secret, Duration expiresIn) {
+        return createToken(userId, username, username, secret, expiresIn);
+    }
+
+    public static String createToken(
+            Long userId, String username, String nickname, String secret, Duration expiresIn
+    ) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim("username", username)
+                .claim("nickname", nickname)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(expiresIn)))
                 .signWith(signingKey(secret))

@@ -58,6 +58,11 @@ export default class CollabClient {
       case 'cursor':
         // 远端光标渲染层会在 Day 3 消费该消息；此处不改变 OT 状态。
         break
+      case 'presence':
+        this.onUsers?.(message.users ?? [])
+        break
+      case 'pong':
+        break
       case 'error':
         this.onError?.(message.message)
         if (message.code === 40901) this.scheduleBusyRetry()

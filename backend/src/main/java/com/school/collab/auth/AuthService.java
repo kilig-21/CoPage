@@ -64,7 +64,8 @@ public class AuthService {
             throw new BizException(ErrorCode.UNAUTHORIZED, "用户名或密码错误");
         }
         String token = JwtUtil.createToken(
-                user.getId(), user.getUsername(), jwtSecret, Duration.ofHours(jwtExpireHours));
+                user.getId(), user.getUsername(), user.getNickname(),
+                jwtSecret, Duration.ofHours(jwtExpireHours));
         return new LoginView(token, view(user));
     }
 

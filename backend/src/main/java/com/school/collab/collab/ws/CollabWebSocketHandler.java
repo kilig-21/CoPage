@@ -2,9 +2,9 @@ package com.school.collab.collab.ws;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.school.collab.collab.CollabException;
+import com.school.collab.collab.presence.RedisPresenceStore;
 import com.school.collab.collab.service.DocRevService;
 import com.school.collab.common.BizException;
 import com.school.collab.document.DocumentService;
@@ -18,40 +18,36 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.concurrent.locks.ReentrantLock;
 
 @Component
 public class CollabWebSocketHandler extends TextWebSocketHandler {
 
     private static final Logger log = LoggerFactory.getLogger(CollabWebSocketHandler.class);
-    private static final ReentrantLock[] SEND_ORDER_LOCKS = new ReentrantLock[256];
-
-    static {
-        for (int index = 0; index < SEND_ORDER_LOCKS.length; index++) {
-            SEND_ORDER_LOCKS[index] = new ReentrantLock();
-        }
-    }
 
     private final ObjectMapper objectMapper;
     private final DocRevService docRevService;
     private final DocumentService documents;
     private final WsSessionRegistry registry;
     private final WsSender sender;
+    private final CollabEventBus eventBus;
+    private final RedisPresenceStore presence;
 
     public CollabWebSocketHandler(
             ObjectMapper objectMapper,
             DocRevService docRevService,
             DocumentService documents,
             WsSessionRegistry registry,
-            WsSender sender
+            WsSender sender,
+            CollabEventBus eventBus,
+            RedisPresenceStore presence
     ) {
         this.objectMapper = objectMapper;
         this.docRevService = docRevService;
         this.documents = documents;
         this.registry = registry;
         this.sender = sender;
+        this.eventBus = eventBus;
+        this.presence = presence;
     }
 
     @Override
@@ -63,7 +59,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
                 case "join" -> join(session, payload);
                 case "op" -> commit(session, payload);
                 case "cursor" -> cursor(session, payload);
-                case "ping" -> send(session, objectMapper.createObjectNode().put("type", "pong"));
+                case "ping" -> ping(session);
                 default -> throw new CollabException(400, "不支持的消息类型: " + type);
             }
         } catch (CollabException exception) {
@@ -78,29 +74,42 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        WsSessionRegistry.SessionInfo info = registry.current(session);
         registry.unregister(session);
+        if (info != null) {
+            presence.leave(info, eventBus.instanceId());
+            publishPresence(info.docId());
+        }
     }
 
     private void join(WebSocketSession session, JsonNode payload) {
         long docId = requiredPositiveLong(payload, "docId");
         String clientId = requiredText(payload, "clientId");
         Long userId = (Long) session.getAttributes().get(WsHandshakeInterceptor.USER_ID);
-        String username = (String) session.getAttributes().get(WsHandshakeInterceptor.USERNAME);
-        if (userId == null || username == null) {
+        String nickname = (String) session.getAttributes().get(WsHandshakeInterceptor.NICKNAME);
+        if (userId == null || nickname == null) {
             throw new CollabException(401, "WebSocket 未认证");
         }
 
         documents.permissionFor(docId, userId);
         DocRevService.Snapshot snapshot = docRevService.snapshot(docId);
-        WsSessionRegistry.SessionInfo info = registry.register(session, docId, clientId, userId, username);
+        WsSessionRegistry.SessionInfo previous = registry.current(session);
+        if (previous != null) {
+            registry.unregister(session);
+            presence.leave(previous, eventBus.instanceId());
+            publishPresence(previous.docId());
+        }
+        WsSessionRegistry.SessionInfo info = registry.register(session, docId, clientId, userId, nickname);
+        presence.join(info, eventBus.instanceId());
 
         ObjectNode sync = objectMapper.createObjectNode()
                 .put("type", "sync")
                 .put("docId", docId)
                 .put("revision", snapshot.revision());
         sync.set("content", objectMapper.valueToTree(snapshot.content()));
-        sync.set("users", users(docId));
+        sync.set("users", objectMapper.valueToTree(presence.users(docId)));
         send(info.session(), sync);
+        publishPresence(docId);
     }
 
     private void commit(WebSocketSession session, JsonNode payload) {
@@ -128,12 +137,8 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception exception) {
             throw new CollabException(400, "op 不是合法的 Delta");
         }
-        // 单实例内把提交和发送放在同一临界区，避免 revision 2 先于 revision 1 广播。
-        ReentrantLock sendOrder = SEND_ORDER_LOCKS[(int) Math.floorMod(docId, SEND_ORDER_LOCKS.length)];
-        sendOrder.lock();
-        try {
-            DocRevService.CommitResult result = docRevService.commit(docId, baseRevision, operation);
-
+        docRevService.commit(docId, baseRevision, operation, result -> {
+            // ack 先于广播，且整个回调仍在 Redis 文档锁内。
             ObjectNode ack = objectMapper.createObjectNode()
                     .put("type", "ack")
                     .put("docId", docId)
@@ -147,14 +152,13 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
                     .put("originClientId", source.clientId())
                     .put("revision", result.revision());
             remoteOp.set("op", objectMapper.valueToTree(result.operation()));
-            for (WsSessionRegistry.SessionInfo target : registry.sessionsOf(docId)) {
-                if (!target.sessionId().equals(source.sessionId())) {
-                    send(target.session(), remoteOp);
-                }
+            try {
+                eventBus.publish(docId, source.sessionId(), remoteOp);
+            } catch (RuntimeException exception) {
+                log.error("操作已提交，但 Redis 广播失败, docId={}, revision={}",
+                        docId, result.revision(), exception);
             }
-        } finally {
-            sendOrder.unlock();
-        }
+        });
     }
 
     private void cursor(WebSocketSession session, JsonNode payload) {
@@ -175,25 +179,23 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
                 .put("length", length)
                 .put("color", colorFor(source.userId()));
 
-        for (WsSessionRegistry.SessionInfo target : registry.sessionsOf(docId)) {
-            if (!target.sessionId().equals(source.sessionId())) {
-                send(target.session(), cursor);
-            }
-        }
+        eventBus.publish(docId, source.sessionId(), cursor);
     }
 
-    private ArrayNode users(long docId) {
-        ArrayNode users = objectMapper.createArrayNode();
-        Set<Long> seenUsers = new HashSet<>();
-        for (WsSessionRegistry.SessionInfo info : registry.sessionsOf(docId)) {
-            if (seenUsers.add(info.userId())) {
-                users.addObject()
-                        .put("userId", info.userId())
-                        .put("nickname", info.username())
-                        .put("color", colorFor(info.userId()));
-            }
+    private void ping(WebSocketSession session) {
+        WsSessionRegistry.SessionInfo info = registry.current(session);
+        if (info != null) {
+            presence.heartbeat(info, eventBus.instanceId());
         }
-        return users;
+        send(session, objectMapper.createObjectNode().put("type", "pong"));
+    }
+
+    private void publishPresence(long docId) {
+        ObjectNode payload = objectMapper.createObjectNode()
+                .put("type", "presence")
+                .put("docId", docId);
+        payload.set("users", objectMapper.valueToTree(presence.users(docId)));
+        eventBus.publish(docId, "", payload);
     }
 
     private void sendError(WebSocketSession session, int code, String message) {

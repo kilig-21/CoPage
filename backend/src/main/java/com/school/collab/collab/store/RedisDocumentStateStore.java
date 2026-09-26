@@ -29,8 +29,16 @@ public class RedisDocumentStateStore implements DocumentStateStore {
 
     @Override
     public CollabDocumentSnapshot snapshot(long docId) {
-        String contentJson = redis.opsForValue().get(contentKey(docId));
-        String revisionValue = redis.opsForValue().get(revisionKey(docId));
+        // MGET 是单条 Redis 命令，避免两次 GET 跨过一次事务提交而读到错配版本。
+        List<String> values = redis.opsForValue().multiGet(List.of(contentKey(docId), revisionKey(docId)));
+        if (values == null || values.size() != 2) {
+            throw new IllegalStateException("无法读取 Redis 文档状态");
+        }
+        String contentJson = values.get(0);
+        String revisionValue = values.get(1);
+        if ((contentJson == null) != (revisionValue == null)) {
+            throw new IllegalStateException("Redis 文档内容与版本号不匹配");
+        }
         Delta content = contentJson == null ? new Delta().insert("\n") : readDelta(contentJson);
         long revision = revisionValue == null ? 0 : Long.parseLong(revisionValue);
         return new CollabDocumentSnapshot(revision, content);
@@ -40,7 +48,7 @@ public class RedisDocumentStateStore implements DocumentStateStore {
     public long minimumAvailableBaseRevision(long docId) {
         Set<String> first = redis.opsForZSet().range(historyKey(docId), 0, 0);
         if (first == null || first.isEmpty()) {
-            return 0;
+            return snapshot(docId).revision();
         }
         return readVersioned(first.iterator().next()).revision() - 1;
     }

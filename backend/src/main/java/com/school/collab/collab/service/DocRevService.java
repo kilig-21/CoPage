@@ -11,6 +11,7 @@ import com.school.collab.ot.DeltaTransform;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.function.Consumer;
 
 /**
  * 单实例文档版本服务。
@@ -43,6 +44,15 @@ public class DocRevService {
      * 服务端是唯一全序来源。晚到操作会逐条跨过 baseRevision 之后的历史操作。
      */
     public CommitResult commit(long docId, long baseRevision, Delta operation) {
+        return commit(docId, baseRevision, operation, ignored -> {});
+    }
+
+    /**
+     * afterCommit 在文档锁释放前执行，供跨实例广播保证发布顺序与 revision 顺序一致。
+     */
+    public CommitResult commit(
+            long docId, long baseRevision, Delta operation, Consumer<CommitResult> afterCommit
+    ) {
         if (baseRevision < 0) {
             throw new CollabException(400, "baseRevision 不能小于 0");
         }
@@ -74,7 +84,9 @@ public class DocRevService {
                     new VersionedOperation(revision, transformed),
                     HISTORY_LIMIT
             );
-            return new CommitResult(revision, transformed.copy());
+            CommitResult result = new CommitResult(revision, transformed.copy());
+            afterCommit.accept(result);
+            return result;
         });
     }
 
