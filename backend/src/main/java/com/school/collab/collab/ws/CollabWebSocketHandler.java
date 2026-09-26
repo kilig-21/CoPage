@@ -125,6 +125,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         if (!source.clientId().equals(clientId)) {
             throw new CollabException(403, "clientId 与当前会话不匹配");
         }
+        String opId = optionalOpId(payload, clientId);
         if (documents.permissionFor(docId, source.userId()) != 2) {
             throw new CollabException(403, "当前用户没有文档编辑权限");
         }
@@ -140,28 +141,44 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception exception) {
             throw new CollabException(400, "op 不是合法的 Delta");
         }
-        docRevService.commit(docId, baseRevision, operation, source.userId(), result -> {
+        DocRevService.CommitResult result = docRevService.commit(
+                docId, baseRevision, operation, source.userId(),
+                opId == null ? null : clientId, opId, committed -> {
             // ack 先于广播，且整个回调仍在 Redis 文档锁内。
-            ObjectNode ack = objectMapper.createObjectNode()
-                    .put("type", "ack")
-                    .put("docId", docId)
-                    .put("clientId", source.clientId())
-                    .put("revision", result.revision());
-            send(source.session(), ack);
+            sendAck(source, docId, committed.revision(), opId);
 
             ObjectNode remoteOp = objectMapper.createObjectNode()
                     .put("type", "op")
                     .put("docId", docId)
                     .put("originClientId", source.clientId())
-                    .put("revision", result.revision());
-            remoteOp.set("op", objectMapper.valueToTree(result.operation()));
+                    .put("revision", committed.revision());
+            if (opId != null) {
+                remoteOp.put("opId", opId);
+            }
+            remoteOp.set("op", objectMapper.valueToTree(committed.operation()));
             try {
                 eventBus.publish(docId, source.sessionId(), remoteOp);
             } catch (RuntimeException exception) {
                 log.error("操作已提交，但 Redis 广播失败, docId={}, revision={}",
-                        docId, result.revision(), exception);
+                        docId, committed.revision(), exception);
             }
         });
+        if (!result.applied()) {
+            // 已落库操作的重试只补发原 ack，不能再次广播。
+            sendAck(source, docId, result.revision(), opId);
+        }
+    }
+
+    private void sendAck(WsSessionRegistry.SessionInfo source, long docId, long revision, String opId) {
+        ObjectNode ack = objectMapper.createObjectNode()
+                .put("type", "ack")
+                .put("docId", docId)
+                .put("clientId", source.clientId())
+                .put("revision", revision);
+        if (opId != null) {
+            ack.put("opId", opId);
+        }
+        send(source.session(), ack);
     }
 
     private void cursor(WebSocketSession session, JsonNode payload) {
@@ -220,6 +237,18 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         JsonNode node = payload.get(field);
         if (node == null || !node.isTextual() || node.asText().isBlank()) {
             throw new CollabException(400, "缺少或非法字段: " + field);
+        }
+        return node.asText();
+    }
+
+    private static String optionalOpId(JsonNode payload, String clientId) {
+        JsonNode node = payload.get("opId");
+        if (node == null) {
+            return null;
+        }
+        if (!node.isTextual() || node.asText().isBlank() || node.asText().length() > 128
+                || clientId.length() > 255) {
+            throw new CollabException(400, "opId 或 clientId 长度非法");
         }
         return node.asText();
     }

@@ -3,6 +3,7 @@ package com.school.collab.collab.service;
 import com.school.collab.collab.CollabException;
 import com.school.collab.collab.persist.DocumentPersistence;
 import com.school.collab.collab.persist.DocPersistenceQueue;
+import com.school.collab.collab.persist.OperationFingerprint;
 import com.school.collab.collab.store.CollabDocumentSnapshot;
 import com.school.collab.collab.store.DocumentStateStore;
 import com.school.collab.collab.store.InMemoryDocumentStateStore;
@@ -15,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.function.Consumer;
 
 /**
@@ -31,6 +34,9 @@ public class DocRevService {
     private final DocumentStateStore store;
     private final DocumentPersistence persistence;
     private final DocPersistenceQueue queue;
+    /** 仅供无 MySQL 的纯单元测试实现去重；生产环境以持久化收据为准。 */
+    private final ConcurrentMap<OperationKey, DocumentPersistence.Receipt> inMemoryReceipts =
+            new ConcurrentHashMap<>();
 
     public DocRevService() {
         this(new InMemoryDocumentStateStore(), null, null);
@@ -76,15 +82,39 @@ public class DocRevService {
             long docId, long baseRevision, Delta operation, Long userId,
             Consumer<CommitResult> afterCommit
     ) {
+        return commit(docId, baseRevision, operation, userId, null, null, afterCommit);
+    }
+
+    public CommitResult commit(
+            long docId, long baseRevision, Delta operation, Long userId,
+            String clientId, String opId, Consumer<CommitResult> afterCommit
+    ) {
         if (baseRevision < 0) {
             throw new CollabException(400, "baseRevision 不能小于 0");
+        }
+        if (opId != null && (userId == null || clientId == null || clientId.isBlank())) {
+            throw new CollabException(400, "opId 需要有效的用户和 clientId");
         }
         if (operation == null || operation.getOps().isEmpty()) {
             throw new CollabException(400, "操作不能为空");
         }
 
         validateDocId(docId);
+        String requestHash = opId == null ? null : OperationFingerprint.of(baseRevision, operation);
         return store.withDocumentLock(docId, () -> {
+            OperationKey key = opId == null ? null : new OperationKey(docId, userId, clientId, opId);
+            if (key != null) {
+                DocumentPersistence.Receipt prior = persistence == null
+                        ? inMemoryReceipts.get(key)
+                        : persistence.receipt(docId, userId, clientId, opId);
+                if (prior != null) {
+                    if (!requestHash.equals(prior.requestHash())) {
+                        throw new CollabException(40904, "opId 已用于其他操作，请重新同步文档");
+                    }
+                    // 仅补发原 ack；正文、广播及 MQ 事件均不得再次执行。
+                    return new CommitResult(prior.revision(), null, false);
+                }
+            }
             CollabDocumentSnapshot current = persistence == null
                     ? store.snapshot(docId) : reconcileLegacy(docId);
             if (baseRevision > current.revision()) {
@@ -110,7 +140,12 @@ public class DocRevService {
             long revision = current.revision() + 1;
             Delta nextContent = DeltaApply.apply(current.content(), transformed);
             if (persistence != null) {
-                persistence.persist(docId, current.revision(), nextContent, transformed, userId);
+                if (key == null) {
+                    persistence.persist(docId, current.revision(), nextContent, transformed, userId);
+                } else {
+                    persistence.persist(docId, current.revision(), nextContent, transformed,
+                            userId, clientId, opId, requestHash);
+                }
             }
             try {
                 store.save(
@@ -126,6 +161,9 @@ public class DocRevService {
                 // MySQL 已提交；Redis 只是缓存，不能让客户端误以为操作失败后重放。
                 log.warn("MySQL 已持久化但 Redis 热状态更新失败, docId={}, revision={}",
                         docId, revision, exception);
+            }
+            if (key != null && persistence == null) {
+                inMemoryReceipts.put(key, new DocumentPersistence.Receipt(revision, requestHash));
             }
             CommitResult result = new CommitResult(revision, transformed.copy());
             afterCommit.accept(result);
@@ -178,7 +216,13 @@ public class DocRevService {
     public record Snapshot(long docId, long revision, Delta content) {
     }
 
-    public record CommitResult(long revision, Delta operation) {
+    public record CommitResult(long revision, Delta operation, boolean applied) {
+        public CommitResult(long revision, Delta operation) {
+            this(revision, operation, true);
+        }
+    }
+
+    private record OperationKey(long docId, long userId, String clientId, String opId) {
     }
 
 }

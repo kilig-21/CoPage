@@ -36,6 +36,16 @@ CREATE TABLE IF NOT EXISTS `doc_operation` (
   KEY `idx_doc_operation_doc` (`doc_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS `doc_operation_receipt` (
+  `doc_id` BIGINT NOT NULL,
+  `user_id` BIGINT NOT NULL,
+  `client_id` VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `op_id` VARCHAR(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
+  `revision` BIGINT NOT NULL,
+  `request_hash` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  PRIMARY KEY (`doc_id`, `user_id`, `client_id`, `op_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS `doc_snapshot` (
   `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
   `doc_id` BIGINT NOT NULL,

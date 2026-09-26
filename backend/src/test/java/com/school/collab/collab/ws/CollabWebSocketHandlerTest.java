@@ -16,6 +16,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class CollabWebSocketHandlerTest {
@@ -64,5 +65,28 @@ class CollabWebSocketHandlerTest {
         verify(sender).send(eq(session), response.capture());
         assertEquals(403, response.getValue().get("code").asInt());
         verifyNoInteractions(revisions);
+    }
+
+    @Test
+    void repeatedOperationOnlyResendsTheOriginalAck() throws Exception {
+        WebSocketSession session = mock(WebSocketSession.class);
+        WsSessionRegistry.SessionInfo info = new WsSessionRegistry.SessionInfo(
+                "session-1", session, 5L, "test-client", 2L, "testB");
+        when(registry.require(session)).thenReturn(info);
+        when(documents.permissionFor(5L, 2L)).thenReturn(2);
+        when(revisions.commit(eq(5L), eq(0L), any(), eq(2L), eq("test-client"),
+                eq("op-1"), any())).thenReturn(new DocRevService.CommitResult(3, null, false));
+
+        handler.handleTextMessage(session,
+                new TextMessage("{\"type\":\"op\",\"docId\":5,\"clientId\":\"test-client\","
+                        + "\"opId\":\"op-1\",\"baseRevision\":0,"
+                        + "\"op\":{\"ops\":[{\"insert\":\"X\"}]}}"));
+
+        ArgumentCaptor<JsonNode> response = ArgumentCaptor.forClass(JsonNode.class);
+        verify(sender).send(eq(session), response.capture());
+        assertEquals("ack", response.getValue().get("type").asText());
+        assertEquals("op-1", response.getValue().get("opId").asText());
+        assertEquals(3, response.getValue().get("revision").asInt());
+        verifyNoInteractions(eventBus);
     }
 }

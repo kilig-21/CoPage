@@ -1,5 +1,6 @@
 package com.school.collab.collab.service;
 
+import com.school.collab.collab.CollabException;
 import com.school.collab.collab.persist.DocumentPersistence;
 import com.school.collab.collab.store.CollabDocumentSnapshot;
 import com.school.collab.collab.store.InMemoryDocumentStateStore;
@@ -9,8 +10,15 @@ import com.school.collab.ot.Op;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -47,6 +55,74 @@ class DocRevServiceTest {
         verify(persistence).persist(eq(7L), eq(1L),
                 org.mockito.ArgumentMatchers.argThat(content -> "XY\n".equals(text(content))),
                 any(Delta.class), eq(null));
+    }
+
+    @Test
+    void 相同操作ID和请求重试只提交及回调一次() {
+        DocRevService service = new DocRevService();
+        AtomicInteger callbacks = new AtomicInteger();
+
+        DocRevService.CommitResult first = service.commit(8, 0, new Delta().insert("X"),
+                1L, "client-1", "op-1", ignored -> callbacks.incrementAndGet());
+        DocRevService.CommitResult retry = service.commit(8, 0, new Delta().insert("X"),
+                1L, "client-1", "op-1", ignored -> callbacks.incrementAndGet());
+
+        assertTrue(first.applied());
+        assertFalse(retry.applied());
+        assertEquals(1, first.revision());
+        assertEquals(first.revision(), retry.revision());
+        assertEquals(1, callbacks.get());
+        assertEquals(1, service.snapshot(8).revision());
+        assertEquals("X\n", text(service.snapshot(8).content()));
+    }
+
+    @Test
+    void 相同操作ID的不同基线或内容必须拒绝而不能确认旧操作() {
+        DocRevService service = new DocRevService();
+        AtomicInteger callbacks = new AtomicInteger();
+        service.commit(9, 0, new Delta().insert("X"), 1L, "client-1", "op-1",
+                ignored -> callbacks.incrementAndGet());
+
+        CollabException changedBase = assertThrows(CollabException.class, () -> service.commit(
+                9, 1, new Delta().insert("X"), 1L, "client-1", "op-1",
+                ignored -> callbacks.incrementAndGet()));
+        CollabException changedContent = assertThrows(CollabException.class, () -> service.commit(
+                9, 0, new Delta().insert("Y"), 1L, "client-1", "op-1",
+                ignored -> callbacks.incrementAndGet()));
+
+        assertEquals(40904, changedBase.getCode());
+        assertEquals(40904, changedContent.getCode());
+        assertEquals(1, callbacks.get());
+        assertEquals(1, service.snapshot(9).revision());
+        assertEquals("X\n", text(service.snapshot(9).content()));
+    }
+
+    @Test
+    void 三十个客户端同基线并发提交均应收敛() throws Exception {
+        DocRevService service = new DocRevService();
+        CountDownLatch start = new CountDownLatch(1);
+        try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<Long>> futures = java.util.stream.IntStream.range(0, 30)
+                    .mapToObj(index -> pool.submit(() -> {
+                        start.await();
+                        return service.commit(12, 0,
+                                new Delta().insert(String.valueOf((char) ('!' + index)))).revision();
+                    }))
+                    .toList();
+            start.countDown();
+            for (Future<Long> future : futures) {
+                future.get();
+            }
+        }
+
+        DocRevService.Snapshot snapshot = service.snapshot(12);
+        String content = text(snapshot.content());
+        assertEquals(30, snapshot.revision());
+        assertEquals(31, content.length());
+        for (int index = 0; index < 30; index++) {
+            org.junit.jupiter.api.Assertions.assertTrue(content.contains(
+                    String.valueOf((char) ('!' + index))));
+        }
     }
 
     private static String text(Delta delta) {
