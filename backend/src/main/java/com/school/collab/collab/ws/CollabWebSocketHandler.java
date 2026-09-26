@@ -1,5 +1,6 @@
 package com.school.collab.collab.ws;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -66,9 +67,11 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
             sendError(session, exception.getCode(), exception.getMessage());
         } catch (BizException exception) {
             sendError(session, exception.getErrorCode().code(), exception.getMessage());
+        } catch (JsonProcessingException | IllegalArgumentException exception) {
+            sendError(session, 400, "消息格式错误");
         } catch (Exception exception) {
             log.warn("处理协同消息失败, session={}", session.getId(), exception);
-            sendError(session, 400, "消息格式错误");
+            sendError(session, 500, "服务端处理失败，请稍后重新同步");
         }
     }
 
@@ -137,7 +140,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception exception) {
             throw new CollabException(400, "op 不是合法的 Delta");
         }
-        docRevService.commit(docId, baseRevision, operation, result -> {
+        docRevService.commit(docId, baseRevision, operation, source.userId(), result -> {
             // ack 先于广播，且整个回调仍在 Redis 文档锁内。
             ObjectNode ack = objectMapper.createObjectNode()
                     .put("type", "ack")
