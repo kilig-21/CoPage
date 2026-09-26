@@ -15,6 +15,10 @@ body { margin: 0; min-width: 320px; }
 .auth-tip { margin: 20px 0 8px !important; }
 .editor-wrap { width: min(1000px, 92vw); }
 .editor-canvas { margin-top: 16px; min-height: 600px; padding: 64px 72px; background: #fff; border: 1px solid #e8ecf3; border-radius: 10px; box-shadow: 0 12px 32px rgb(15 23 42 / 5%); }
+.editor-alert { margin-top: 16px; }
+.editor-host .ql-toolbar.ql-snow { border: 0; border-bottom: 1px solid #e8ecf3; padding: 0 0 16px; }
+.editor-host .ql-container.ql-snow { min-height: 500px; border: 0; font-family: inherit; font-size: 16px; line-height: 1.8; }
+.editor-host .ql-editor { min-height: 500px; padding: 28px 0 0; }
 .search-title { margin-bottom: 24px; }
 .search-title .ant-typography { margin: 0; }
 .search-box { margin-bottom: 24px; }
