@@ -1,0 +1,65 @@
+package com.school.collab.document;
+
+import com.school.collab.common.Result;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/doc")
+public class DocumentController {
+    private final DocumentService documents;
+
+    public DocumentController(DocumentService documents) {
+        this.documents = documents;
+    }
+
+    @GetMapping("/list")
+    public Result<DocumentService.ListView> list(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "") String keyword
+    ) {
+        return Result.ok(documents.list(page, size, keyword));
+    }
+
+    @PostMapping
+    public Result<DocumentService.SummaryView> create(@RequestBody(required = false) CreateRequest request) {
+        return Result.ok(documents.create(
+                request == null ? null : request.title(),
+                request == null || request.parentId() == null ? 0 : request.parentId()));
+    }
+
+    @GetMapping("/{id}")
+    public Result<DocumentService.DetailView> detail(@PathVariable long id) {
+        return Result.ok(documents.detail(id));
+    }
+
+    @PutMapping("/{id}")
+    public Result<DocumentService.RenameView> rename(
+            @PathVariable long id, @Valid @RequestBody RenameRequest request
+    ) {
+        return Result.ok(documents.rename(id, request.title()));
+    }
+
+    @DeleteMapping("/{id}")
+    public Result<Void> delete(@PathVariable long id) {
+        documents.delete(id);
+        return Result.ok();
+    }
+
+    public record CreateRequest(String title, Long parentId) {
+    }
+
+    public record RenameRequest(@NotBlank @Size(max = 200) String title) {
+    }
+}
