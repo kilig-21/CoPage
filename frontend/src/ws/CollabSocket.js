@@ -24,19 +24,24 @@ export default class CollabSocket {
     this.socket = socket
 
     socket.onopen = () => {
+      if (this.socket !== socket || !this.shouldReconnect) return
       this.reconnectDelay = 500
       this.heartbeatTimer = window.setInterval(() => this.send({ type: 'ping' }), 20_000)
       this.onOpen?.()
     }
     socket.onmessage = (event) => {
+      if (this.socket !== socket || !this.shouldReconnect) return
       try {
         this.onMessage?.(JSON.parse(event.data))
       } catch {
         this.onError?.('服务端返回了无法解析的协同消息')
       }
     }
-    socket.onerror = () => this.onError?.('协同连接发生错误')
+    socket.onerror = () => {
+      if (this.socket === socket && this.shouldReconnect) this.onError?.('协同连接发生错误')
+    }
     socket.onclose = () => {
+      if (this.socket !== socket || !this.shouldReconnect) return
       window.clearInterval(this.heartbeatTimer)
       this.heartbeatTimer = null
       this.onClose?.()

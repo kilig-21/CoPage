@@ -51,17 +51,22 @@ export default function useQuillCollab(docId) {
     let composing = false
     let compositionDirty = false
     let lastKnownContents = quill.getContents()
+    let canEdit = false
+    let connected = false
+    let synced = false
+    const updateEditable = () => quill.enable(canEdit && connected && synced)
 
     const client = new CollabClient({
       docId,
       clientId,
       Delta,
       onSync: (content) => {
-        quill.setContents(content, 'api')
+        if (!active || !connected) return
+        if (content) quill.setContents(content, 'api')
         lastKnownContents = quill.getContents()
-        setError('')
       },
       onRemote: (operation) => {
+        if (!active) return
         const selection = quill.getSelection()
         quill.updateContents(operation, 'api')
         if (selection) {
@@ -72,16 +77,38 @@ export default function useQuillCollab(docId) {
       },
       onUsers: setUsers,
       onError: setError,
+      onState: (state) => {
+        if (!active) return
+        synced = state === 'ready'
+        updateEditable()
+        setConnection({ ready: '已连接', syncing: '正在恢复编辑', offline: '正在重连', blocked: '本地内容已保留' }[state])
+        if (state === 'ready') setError('')
+      },
     })
 
     const socket = new CollabSocket({
       token,
       onOpen: () => {
-        setConnection('已连接')
+        if (!active) return
+        connected = true
+        synced = false
+        updateEditable()
+        setConnection('同步中')
         client.join()
       },
-      onMessage: (message) => client.receive(message),
-      onClose: () => setConnection('正在重连'),
+      onMessage: (message) => {
+        if (!active) return
+        flushComposition()
+        client.receive(message)
+      },
+      onClose: () => {
+        if (!active) return
+        flushComposition()
+        connected = false
+        synced = false
+        updateEditable()
+        client.disconnect()
+      },
       onError: setError,
     })
     client.attachSocket(socket)
@@ -99,16 +126,25 @@ export default function useQuillCollab(docId) {
       submit(delta)
     }
     const onCompositionStart = () => { composing = true }
-    const onCompositionEnd = () => {
-      composing = false
+    const flushComposition = () => {
       if (!compositionDirty) return
       compositionDirty = false
       submit(lastKnownContents.diff(quill.getContents()))
+    }
+    const onCompositionEnd = () => {
+      composing = false
+      flushComposition()
+    }
+    const onBeforeUnload = (event) => {
+      if (!client.hasUnconfirmedChanges() && !compositionDirty) return
+      event.preventDefault()
+      event.returnValue = ''
     }
 
     quill.on('text-change', onTextChange)
     quill.root.addEventListener('compositionstart', onCompositionStart)
     quill.root.addEventListener('compositionend', onCompositionEnd)
+    window.addEventListener('beforeunload', onBeforeUnload)
 
     request.get('/doc/' + docId)
       .then((response) => {
@@ -116,9 +152,10 @@ export default function useQuillCollab(docId) {
         const doc = response.data
         setTitle(doc.title)
         setPermission(doc.permission)
+        canEdit = doc.permission === 2
         quill.setContents(new Delta(doc.content), 'api')
         lastKnownContents = quill.getContents()
-        quill.enable(doc.permission === 2)
+        updateEditable()
         if (token) {
           setConnection('正在连接')
           socket.connect()
@@ -138,6 +175,7 @@ export default function useQuillCollab(docId) {
       quill.off('text-change', onTextChange)
       quill.root.removeEventListener('compositionstart', onCompositionStart)
       quill.root.removeEventListener('compositionend', onCompositionEnd)
+      window.removeEventListener('beforeunload', onBeforeUnload)
       client.close()
       socket.close()
       quillRef.current = null

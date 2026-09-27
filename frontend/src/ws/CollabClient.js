@@ -3,7 +3,7 @@
  * pending 是已发送未确认的操作；buffer 是 pending 期间继续输入积累的操作。
  */
 export default class CollabClient {
-  constructor({ docId, clientId, Delta, onSync, onRemote, onUsers, onError }) {
+  constructor({ docId, clientId, Delta, onSync, onRemote, onUsers, onError, onState }) {
     this.docId = docId
     this.clientId = clientId
     this.Delta = Delta
@@ -11,12 +11,17 @@ export default class CollabClient {
     this.onRemote = onRemote
     this.onUsers = onUsers
     this.onError = onError
+    this.onState = onState
     this.revision = 0
     this.pending = null
     this.buffer = null
     this.socket = null
     this.busyRetryTimer = null
     this.busyRetryDelay = 100
+    this.state = 'offline'
+    this.syncId = null
+    this.deferred = []
+    this.deferredOverflow = false
   }
 
   attachSocket(socket) {
@@ -24,7 +29,20 @@ export default class CollabClient {
   }
 
   join() {
-    this.socket?.send({ type: 'join', docId: this.docId, clientId: this.clientId, lastRevision: this.revision })
+    if (this.state === 'blocked') return
+    this.clearBusyRetry()
+    this.setState('syncing')
+    this.syncId = this.newId()
+    const message = {
+      type: 'join', docId: this.docId, clientId: this.clientId,
+      lastRevision: this.revision, syncId: this.syncId,
+    }
+    if (this.pending) {
+      message.pendingOpId = this.pending.opId
+      message.pendingBaseRevision = this.pending.baseRevision
+      message.pendingOp = this.pending.original
+    }
+    if (!this.socket?.send(message)) this.disconnect()
   }
 
   submit(delta) {
@@ -32,7 +50,7 @@ export default class CollabClient {
     if (!operation.ops?.length) return
 
     if (!this.pending) {
-      this.pending = operation
+      this.pending = this.createPending(operation)
       this.sendPending()
       return
     }
@@ -40,20 +58,27 @@ export default class CollabClient {
   }
 
   receive(message) {
+    if (message.docId !== undefined && message.docId !== this.docId) return
+    if (this.state === 'blocked' || this.state === 'offline') return
+    if (this.state === 'syncing' && (message.type === 'op' || message.type === 'ack')) {
+      if (this.deferred.length < 2000) this.deferred.push(message)
+      else this.deferredOverflow = true
+      return
+    }
     switch (message.type) {
       case 'sync':
-        this.clearBusyRetry()
-        this.revision = message.revision
-        this.pending = null
-        this.buffer = null
-        this.onSync?.(new this.Delta(message.content), message)
-        this.onUsers?.(message.users ?? [])
+        this.synchronize(message)
         break
       case 'ack':
-        if (message.clientId === this.clientId) this.acknowledge(message.revision)
+        if (message.clientId === this.clientId) this.acknowledge(message)
         break
       case 'op':
-        if (message.originClientId !== this.clientId) this.receiveRemote(new this.Delta(message.op), message.revision)
+        if (!this.nextRevision(message.revision)) break
+        if (message.originClientId === this.clientId && message.opId === this.pending?.opId) {
+          this.acknowledge(message)
+        } else {
+          this.receiveRemote(new this.Delta(message.op), message.revision)
+        }
         break
       case 'cursor':
         // 远端光标渲染层会在 Day 3 消费该消息；此处不改变 OT 状态。
@@ -62,64 +87,151 @@ export default class CollabClient {
         this.onUsers?.(message.users ?? [])
         break
       case 'pong':
+        if (this.state === 'syncing' || message.revision > this.revision) this.join()
+        else this.sendPending()
         break
       case 'error':
         this.onError?.(message.message)
         if (message.code === 40901) this.scheduleBusyRetry()
-        if (message.code === 40903) this.join()
+        else if (message.code === 40902) this.join()
+        else if (message.code === 40903 && !this.hasUnconfirmedChanges()) this.join()
+        else if (message.code === 500) {
+          if (this.state === 'syncing') this.scheduleBusyRetry()
+          else this.join()
+        } else this.block(message.message)
         break
       default:
         this.onError?.(`未知协同消息：${message.type}`)
     }
   }
 
-  acknowledge(revision) {
+  synchronize(message) {
+    if (this.state !== 'syncing' || message.syncId !== this.syncId) return
+    if (!Number.isSafeInteger(message.revision) || message.revision < 0) {
+      this.block('同步版本无效，已保留当前内容')
+      return
+    }
+    const hasLocalChanges = this.hasUnconfirmedChanges()
+    if (hasLocalChanges) {
+      const history = message.history
+      const ownRevision = message.pendingCommittedRevision
+      const validOwnRevision = ownRevision == null || (this.pending
+        && Number.isSafeInteger(ownRevision) && ownRevision > this.revision && ownRevision <= message.revision)
+      const complete = message.historyComplete === true && message.fromRevision === this.revision
+        && Array.isArray(history) && history.length === message.revision - this.revision
+        && history.every((entry, index) => entry.revision === this.revision + index + 1 && entry.op?.ops)
+      if (!complete || !validOwnRevision) {
+        this.block('无法完整恢复编辑历史，已保留本地内容；请先复制备份')
+        return
+      }
+      // 先在副本上计算全部追赶操作，验证失败时不触碰编辑器及原队列。
+      let pending = this.pending ? { ...this.pending, delta: this.copy(this.pending.delta) } : null
+      let buffer = this.buffer ? this.copy(this.buffer) : null
+      let editorChange = new this.Delta()
+      try {
+        for (const entry of history) {
+          if (entry.revision === ownRevision) {
+            pending = null
+          } else {
+            const result = this.transformRemote(new this.Delta(entry.op), pending, buffer)
+            pending = result.pending
+            buffer = result.buffer
+            editorChange = editorChange.compose(result.operation)
+          }
+        }
+      } catch {
+        this.block('恢复编辑时发现操作异常，已保留本地内容；请先复制备份')
+        return
+      }
+      this.pending = pending
+      this.buffer = buffer
+      this.revision = message.revision
+      if (editorChange.ops.length) this.onRemote?.(editorChange)
+      this.onSync?.(null, message)
+    } else {
+      this.revision = message.revision
+      this.onSync?.(new this.Delta(message.content), message)
+    }
     this.clearBusyRetry()
     this.busyRetryDelay = 100
-    this.revision = Math.max(this.revision, revision)
-    this.pending = null
-    if (this.buffer) {
-      this.pending = this.buffer
-      this.buffer = null
+    this.syncId = null
+    this.onUsers?.(message.users ?? [])
+    this.setState('ready')
+    const deferred = this.deferred
+    const overflow = this.deferredOverflow
+    this.deferred = []
+    this.deferredOverflow = false
+    if (overflow) {
+      this.join()
+      return
+    }
+    for (const entry of deferred) this.receive(entry)
+    if (this.state === 'ready') {
+      this.promoteBuffer()
       this.sendPending()
+    }
+  }
+
+  acknowledge(message) {
+    if (!this.pending || message.opId !== this.pending.opId || !this.nextRevision(message.revision)) return
+    this.clearBusyRetry()
+    this.busyRetryDelay = 100
+    this.revision = message.revision
+    this.pending = null
+    this.promoteBuffer()
+    this.sendPending()
+  }
+
+  promoteBuffer() {
+    if (this.pending) return
+    if (this.buffer) {
+      this.pending = this.createPending(this.buffer)
+      this.buffer = null
     }
   }
 
   receiveRemote(remote, revision) {
+    const result = this.transformRemote(remote, this.pending, this.buffer)
+    this.pending = result.pending
+    this.buffer = result.buffer
+    this.revision = revision
+    this.onRemote?.(result.operation)
+  }
+
+  transformRemote(remote, pending, buffer) {
     let operationForEditor = remote
-
-    if (this.pending) {
+    if (pending) {
       // 服务端远端操作已先提交，因此远端在冲突点有优先级。
-      const pendingAfterRemote = remote.transform(this.pending, true)
-      operationForEditor = this.pending.transform(remote, false)
-      this.pending = pendingAfterRemote
+      const pendingAfterRemote = remote.transform(pending.delta, true)
+      operationForEditor = pending.delta.transform(remote, false)
+      pending = { ...pending, delta: pendingAfterRemote }
     }
-    if (this.buffer) {
-      const bufferAfterRemote = operationForEditor.transform(this.buffer, true)
-      operationForEditor = this.buffer.transform(operationForEditor, false)
-      this.buffer = bufferAfterRemote
+    if (buffer) {
+      const bufferAfterRemote = operationForEditor.transform(buffer, true)
+      operationForEditor = buffer.transform(operationForEditor, false)
+      buffer = bufferAfterRemote
     }
-
-    this.revision = Math.max(this.revision, revision)
-    this.onRemote?.(operationForEditor)
+    return { pending, buffer, operation: operationForEditor }
   }
 
   sendPending() {
-    if (!this.pending) return
+    if (!this.pending || this.state !== 'ready') return
     this.socket?.send({
       type: 'op',
       docId: this.docId,
       clientId: this.clientId,
-      baseRevision: this.revision,
-      op: this.pending,
+      opId: this.pending.opId,
+      baseRevision: this.pending.baseRevision,
+      op: this.pending.original,
     })
   }
 
   scheduleBusyRetry() {
-    if (!this.pending || this.busyRetryTimer !== null) return
+    if (this.busyRetryTimer !== null) return
     this.busyRetryTimer = globalThis.setTimeout(() => {
       this.busyRetryTimer = null
-      this.sendPending()
+      if (this.state === 'syncing') this.join()
+      else this.sendPending()
     }, this.busyRetryDelay)
     this.busyRetryDelay = Math.min(this.busyRetryDelay * 2, 2_000)
   }
@@ -132,6 +244,54 @@ export default class CollabClient {
   }
 
   close() {
+    this.disconnect()
+  }
+
+  disconnect() {
     this.clearBusyRetry()
+    this.syncId = null
+    this.deferred = []
+    this.deferredOverflow = false
+    if (this.state !== 'blocked') this.setState('offline')
+  }
+
+  nextRevision(revision) {
+    if (!Number.isSafeInteger(revision)) {
+      this.block('收到无效版本，已保留当前内容')
+      return false
+    }
+    if (revision <= this.revision) return false
+    if (revision !== this.revision + 1) {
+      this.join()
+      return false
+    }
+    return true
+  }
+
+  createPending(delta) {
+    return { opId: this.newId(), baseRevision: this.revision, original: this.copy(delta), delta: this.copy(delta) }
+  }
+
+  copy(delta) {
+    return new this.Delta(JSON.parse(JSON.stringify(delta)))
+  }
+
+  newId() {
+    return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  }
+
+  hasUnconfirmedChanges() {
+    return this.pending !== null || this.buffer !== null
+  }
+
+  setState(state) {
+    this.state = state
+    this.onState?.(state)
+  }
+
+  block(message) {
+    this.clearBusyRetry()
+    this.setState('blocked')
+    this.onError?.(message)
   }
 }
