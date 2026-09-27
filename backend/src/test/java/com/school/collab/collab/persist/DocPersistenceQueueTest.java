@@ -33,7 +33,7 @@ class DocPersistenceQueueTest {
                 RabbitMqConfig.SNAPSHOT_ROUTING_KEY,
                 new DocPersistenceQueue.SnapshotRequested(9));
         verify(channel).basicAck(17, false);
-        verify(searchIndex).upsert(9);
+        verify(searchIndex).upsertEventually(9);
     }
 
     @Test

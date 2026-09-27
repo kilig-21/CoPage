@@ -43,6 +43,11 @@ public class SearchIndex {
         write(docId, true);
     }
 
+    /** 高频协同操作不逐条等待 ES 刷新；默认刷新周期后即可检索。 */
+    public void upsertEventually(long docId) {
+        write(docId, false);
+    }
+
     private void write(long docId, boolean refresh) {
         ensureIndex();
         DocumentRow row = documents.find(docId).orElse(null);

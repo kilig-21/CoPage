@@ -58,7 +58,7 @@ public class DocPersistenceQueue {
                 throw new IllegalStateException("操作日志尚未落库: " + event);
             }
             try {
-                searchIndex.upsert(event.docId());
+                searchIndex.upsertEventually(event.docId());
             } catch (RuntimeException exception) {
                 log.warn("ES 索引暂时失败，巡检会补建, docId={}", event.docId(), exception);
             }
