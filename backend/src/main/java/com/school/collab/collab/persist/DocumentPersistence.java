@@ -93,6 +93,24 @@ public class DocumentPersistence {
                 rs.getLong("revision"), read(rs.getString("op"))), docId, baseRevision);
     }
 
+    public List<VersionedOperation> operationsBetween(long docId, long afterRevision, long throughRevision) {
+        return jdbc.query("""
+                SELECT revision, op FROM doc_operation
+                WHERE doc_id = ? AND revision > ? AND revision <= ? ORDER BY revision ASC
+                """, (rs, index) -> new VersionedOperation(
+                rs.getLong("revision"), read(rs.getString("op"))), docId, afterRevision, throughRevision);
+    }
+
+    public long currentRevision(long docId) {
+        List<Long> revisions = jdbc.query(
+                "SELECT revision FROM document WHERE id = ? AND is_deleted = 0",
+                (rs, index) -> rs.getLong("revision"), docId);
+        if (revisions.isEmpty()) {
+            throw new CollabException(404, "文档不存在或已删除");
+        }
+        return revisions.getFirst();
+    }
+
     public boolean operationExists(long docId, long revision) {
         Integer count = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM doc_operation WHERE doc_id = ? AND revision = ?",

@@ -7,12 +7,16 @@ import com.school.collab.collab.presence.RedisPresenceStore;
 import com.school.collab.common.BizException;
 import com.school.collab.common.ErrorCode;
 import com.school.collab.document.DocumentService;
+import com.school.collab.collab.store.VersionedOperation;
+import com.school.collab.ot.Delta;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.util.Map;
+import java.util.List;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -30,6 +34,42 @@ class CollabWebSocketHandlerTest {
     private final CollabWebSocketHandler handler =
             new CollabWebSocketHandler(
                     objectMapper, revisions, documents, registry, sender, eventBus, presence);
+
+    @Test
+    void joinRegistersAndSendsCatchupInsideTheServiceCallback() throws Exception {
+        WebSocketSession session = mock(WebSocketSession.class);
+        when(session.getAttributes()).thenReturn(Map.of(
+                WsHandshakeInterceptor.USER_ID, 2L, WsHandshakeInterceptor.NICKNAME, "testB"));
+        WsSessionRegistry.SessionInfo info = new WsSessionRegistry.SessionInfo(
+                "session-1", session, 5L, "test-client", 2L, "testB");
+        when(registry.register(session, 5L, "test-client", 2L, "testB")).thenReturn(info);
+        doAnswer(invocation -> {
+            verifyNoInteractions(registry);
+            DocRevService.PendingOperation pending = invocation.getArgument(4);
+            assertEquals("op-1", pending.opId());
+            Consumer<DocRevService.JoinState> callback = invocation.getArgument(5);
+            callback.accept(new DocRevService.JoinState(1, new Delta().insert("X\n"), true,
+                    List.of(new VersionedOperation(1, new Delta().insert("X"))), 1L));
+            verify(registry).register(session, 5L, "test-client", 2L, "testB");
+            verify(sender).send(eq(session), any());
+            return null;
+        }).when(revisions).joinState(eq(5L), eq(0L), eq(2L), eq("test-client"), any(), any());
+
+        handler.handleTextMessage(session, new TextMessage("""
+                {"type":"join","docId":5,"clientId":"test-client","lastRevision":0,
+                 "syncId":"sync-1","pendingOpId":"op-1","pendingBaseRevision":0,
+                 "pendingOp":{"ops":[{"insert":"X"}]}}
+                """));
+
+        ArgumentCaptor<JsonNode> response = ArgumentCaptor.forClass(JsonNode.class);
+        verify(sender).send(eq(session), response.capture());
+        JsonNode sync = response.getValue();
+        assertEquals("sync", sync.path("type").asText());
+        assertEquals("sync-1", sync.path("syncId").asText());
+        assertEquals(true, sync.path("historyComplete").asBoolean());
+        assertEquals(1, sync.path("pendingCommittedRevision").asLong());
+        assertEquals("X", sync.path("history").get(0).path("op").path("ops").get(0).path("insert").asText());
+    }
 
     @Test
     void unauthorizedUserCannotJoinDocument() throws Exception {

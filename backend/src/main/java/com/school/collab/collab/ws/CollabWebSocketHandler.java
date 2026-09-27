@@ -88,6 +88,15 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
     private void join(WebSocketSession session, JsonNode payload) {
         long docId = requiredPositiveLong(payload, "docId");
         String clientId = requiredText(payload, "clientId");
+        if (clientId.length() > 255) {
+            throw new CollabException(400, "clientId 长度非法");
+        }
+        long lastRevision = requiredNonNegativeLong(payload, "lastRevision");
+        String syncId = optionalBoundedText(payload, "syncId", 128);
+        String pendingOpId = optionalBoundedText(payload, "pendingOpId", 128);
+        DocRevService.PendingOperation pending = pendingOpId == null ? null
+                : new DocRevService.PendingOperation(pendingOpId,
+                    requiredNonNegativeLong(payload, "pendingBaseRevision"), readOperation(payload, "pendingOp"));
         Long userId = (Long) session.getAttributes().get(WsHandshakeInterceptor.USER_ID);
         String nickname = (String) session.getAttributes().get(WsHandshakeInterceptor.NICKNAME);
         if (userId == null || nickname == null) {
@@ -95,23 +104,28 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         }
 
         documents.permissionFor(docId, userId);
-        DocRevService.Snapshot snapshot = docRevService.snapshot(docId);
-        WsSessionRegistry.SessionInfo previous = registry.current(session);
-        if (previous != null) {
-            registry.unregister(session);
-            presence.leave(previous, eventBus.instanceId());
-            publishPresence(previous.docId());
-        }
-        WsSessionRegistry.SessionInfo info = registry.register(session, docId, clientId, userId, nickname);
-        presence.join(info, eventBus.instanceId());
-
-        ObjectNode sync = objectMapper.createObjectNode()
-                .put("type", "sync")
-                .put("docId", docId)
-                .put("revision", snapshot.revision());
-        sync.set("content", objectMapper.valueToTree(snapshot.content()));
-        sync.set("users", objectMapper.valueToTree(presence.users(docId)));
-        send(info.session(), sync);
+        docRevService.joinState(docId, lastRevision, userId, clientId, pending, state -> {
+            WsSessionRegistry.SessionInfo previous = registry.current(session);
+            if (previous != null) {
+                registry.unregister(session);
+                presence.leave(previous, eventBus.instanceId());
+                if (previous.docId() != docId) publishPresence(previous.docId());
+            }
+            WsSessionRegistry.SessionInfo info = registry.register(session, docId, clientId, userId, nickname);
+            presence.join(info, eventBus.instanceId());
+            ObjectNode sync = objectMapper.createObjectNode()
+                    .put("type", "sync").put("docId", docId)
+                    .put("fromRevision", lastRevision).put("revision", state.revision())
+                    .put("historyComplete", state.historyComplete());
+            if (syncId != null) sync.put("syncId", syncId);
+            sync.set("content", objectMapper.valueToTree(state.content()));
+            sync.set("pendingCommittedRevision", objectMapper.valueToTree(state.pendingCommittedRevision()));
+            var history = sync.putArray("history");
+            state.history().forEach(entry -> history.addObject().put("revision", entry.revision())
+                    .set("op", objectMapper.valueToTree(entry.operation())));
+            sync.set("users", objectMapper.valueToTree(presence.users(docId)));
+            send(info.session(), sync);
+        });
         publishPresence(docId);
     }
 
@@ -204,10 +218,13 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
 
     private void ping(WebSocketSession session) {
         WsSessionRegistry.SessionInfo info = registry.current(session);
+        ObjectNode pong = objectMapper.createObjectNode().put("type", "pong");
         if (info != null) {
+            documents.permissionFor(info.docId(), info.userId());
             presence.heartbeat(info, eventBus.instanceId());
+            pong.put("docId", info.docId()).put("revision", docRevService.currentRevision(info.docId()));
         }
-        send(session, objectMapper.createObjectNode().put("type", "pong"));
+        send(session, pong);
     }
 
     private void publishPresence(long docId) {
@@ -253,6 +270,25 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         return node.asText();
     }
 
+    private static String optionalBoundedText(JsonNode payload, String field, int limit) {
+        JsonNode node = payload.get(field);
+        if (node == null || node.isNull()) return null;
+        if (!node.isTextual() || node.asText().isBlank() || node.asText().length() > limit) {
+            throw new CollabException(400, "非法字段: " + field);
+        }
+        return node.asText();
+    }
+
+    private Delta readOperation(JsonNode payload, String field) {
+        JsonNode node = payload.get(field);
+        if (node == null || node.isNull()) throw new CollabException(400, "缺少 " + field);
+        try {
+            return objectMapper.treeToValue(node, Delta.class);
+        } catch (Exception exception) {
+            throw new CollabException(400, field + " 不是合法的 Delta");
+        }
+    }
+
     private static long requiredPositiveLong(JsonNode payload, String field) {
         long value = requiredNonNegativeLong(payload, field);
         if (value <= 0) {
@@ -263,7 +299,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
 
     private static long requiredNonNegativeLong(JsonNode payload, String field) {
         JsonNode node = payload.get(field);
-        if (node == null || !node.canConvertToLong() || node.asLong() < 0) {
+        if (node == null || !node.isIntegralNumber() || !node.canConvertToLong() || node.asLong() < 0) {
             throw new CollabException(400, "缺少或非法字段: " + field);
         }
         return node.asLong();

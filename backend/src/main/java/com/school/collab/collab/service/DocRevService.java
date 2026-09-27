@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Consumer;
@@ -60,6 +61,64 @@ public class DocRevService {
                 ? store.snapshot(docId)
                 : store.withDocumentLock(docId, () -> reconcileLegacy(docId));
         return new Snapshot(docId, snapshot.revision(), snapshot.content());
+    }
+
+    public long currentRevision(long docId) {
+        validateDocId(docId);
+        return persistence == null ? store.snapshot(docId).revision() : persistence.currentRevision(docId);
+    }
+
+    /** 在同一把文档锁内读取追赶边界并注册、同步会话，防止快照与订阅之间漏操作。 */
+    public void joinState(long docId, long lastRevision, long userId, String clientId,
+                          PendingOperation pending, Consumer<JoinState> onJoined) {
+        validateDocId(docId);
+        if (lastRevision < 0) {
+            throw new CollabException(400, "lastRevision 不能小于 0");
+        }
+        if (pending != null && (pending.baseRevision() < 0 || pending.operation() == null
+                || pending.operation().getOps().isEmpty())) {
+            throw new CollabException(400, "待确认操作不完整");
+        }
+        store.withDocumentLock(docId, () -> {
+            CollabDocumentSnapshot snapshot = persistence == null
+                    ? store.snapshot(docId) : reconcileLegacy(docId);
+            Long committedRevision = null;
+            if (pending != null) {
+                DocumentPersistence.Receipt receipt = persistence == null
+                        ? inMemoryReceipts.get(new OperationKey(docId, userId, clientId, pending.opId()))
+                        : persistence.receipt(docId, userId, clientId, pending.opId());
+                if (receipt != null) {
+                    if (!OperationFingerprint.of(pending.baseRevision(), pending.operation())
+                            .equals(receipt.requestHash())) {
+                        throw new CollabException(40904, "opId 已用于其他操作，保留本地编辑并停止重放");
+                    }
+                    committedRevision = receipt.revision();
+                }
+            }
+            boolean complete = lastRevision <= snapshot.revision()
+                    && snapshot.revision() - lastRevision <= HISTORY_LIMIT;
+            List<VersionedOperation> history = List.of();
+            if (complete) {
+                history = persistence == null
+                        ? store.operationsAfter(docId, lastRevision).stream()
+                            .filter(entry -> entry.revision() <= snapshot.revision()).toList()
+                        : persistence.operationsBetween(docId, lastRevision, snapshot.revision());
+                long expected = lastRevision;
+                for (VersionedOperation entry : history) {
+                    if (entry.revision() != ++expected) {
+                        complete = false;
+                        break;
+                    }
+                }
+                complete = complete && expected == snapshot.revision();
+            }
+            if (!complete) {
+                history = List.of();
+            }
+            onJoined.accept(new JoinState(snapshot.revision(), snapshot.content(), complete,
+                    history, committedRevision));
+            return null;
+        });
     }
 
     /**
@@ -214,6 +273,13 @@ public class DocRevService {
     }
 
     public record Snapshot(long docId, long revision, Delta content) {
+    }
+
+    public record PendingOperation(String opId, long baseRevision, Delta operation) {
+    }
+
+    public record JoinState(long revision, Delta content, boolean historyComplete,
+                            List<VersionedOperation> history, Long pendingCommittedRevision) {
     }
 
     public record CommitResult(long revision, Delta operation, boolean applied) {
