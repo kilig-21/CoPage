@@ -98,7 +98,7 @@ npm --prefix frontend ci
 npm --prefix frontend run dev
 ```
 
-打开 [http://localhost:5173](http://localhost:5173)。Vite 已将 `/api` 和 `/ws` 代理到本机 `8080`；前端生产构建仍需部署环境配置相应 HTTP/WebSocket 路由。
+打开 [http://localhost:5173](http://localhost:5173)。Vite 已将 `/api` 和 `/ws` 代理到本机 `8080`；前端部署时可分别配置后端 HTTP/WebSocket 公网地址。
 
 ### 5. 体验编辑流程
 
@@ -122,8 +122,11 @@ Compose 读取根目录 `.env`；**Spring Boot 不会自动读取这份 `.env`**
 | `MINIO_ENDPOINT`、`MINIO_PUBLIC_ENDPOINT` | 后端访问地址、返回给浏览器的可访问地址 |
 | `MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET` | 对象存储凭据与桶 |
 | `JWT_SECRET`、`JWT_EXPIRE_HOURS` | JWT 签名密钥与有效期 |
+| `FRONTEND_ORIGIN` | 允许访问 API 与 WebSocket 的前端精确来源；本地默认 `http://localhost:5173` |
 
-默认值见 [application.yml](backend/src/main/resources/application.yml)。本地 Compose 的 MinIO 桶 `collab` 为公共读，ES 未开启认证；默认账号、密码和 JWT 密钥只用于本地开发。对外部署前需替换凭据、配置网络访问和 HTTPS/WSS，部署验收尚未完成。
+默认值见 [application.yml](backend/src/main/resources/application.yml)。前端部署变量见 [frontend/.env.example](frontend/.env.example)：`VITE_BACKEND_HTTP_ORIGIN` 填后端 HTTPS origin，`VITE_BACKEND_WS_ORIGIN` 填同一后端的 WSS origin，均不带 `/api` 或 `/ws` 路径。留空时仍使用当前页面同源地址，适合本地 Vite 代理。Vercel 预览域名确定后，应将该精确域名设为后端 `FRONTEND_ORIGIN`；切勿用任意来源通配代替。Vite 变量会打包进浏览器代码，不能存放密钥。
+
+本地 Compose 的 MinIO 桶 `collab` 为公共读，ES 未开启认证；默认账号、密码和 JWT 密钥只用于本地开发。对外部署前需替换凭据、配置网络访问和 HTTPS/WSS，部署验收尚未完成。
 
 可选的第二后端实例：
 

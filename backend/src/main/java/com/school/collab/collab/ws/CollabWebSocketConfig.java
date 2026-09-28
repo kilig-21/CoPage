@@ -1,5 +1,6 @@
 package com.school.collab.collab.ws;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
@@ -11,16 +12,20 @@ public class CollabWebSocketConfig implements WebSocketConfigurer {
 
     private final CollabWebSocketHandler handler;
     private final WsHandshakeInterceptor handshakeInterceptor;
+    private final String frontendOrigin;
 
-    public CollabWebSocketConfig(CollabWebSocketHandler handler, WsHandshakeInterceptor handshakeInterceptor) {
+    public CollabWebSocketConfig(CollabWebSocketHandler handler,
+                                 WsHandshakeInterceptor handshakeInterceptor,
+                                 @Value("${collab.frontend-origin}") String frontendOrigin) {
         this.handler = handler;
         this.handshakeInterceptor = handshakeInterceptor;
+        this.frontendOrigin = frontendOrigin;
     }
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(handler, "/ws/collab")
                 .addInterceptors(handshakeInterceptor)
-                .setAllowedOrigins("http://localhost:5173");
+                .setAllowedOrigins(frontendOrigin);
     }
 }

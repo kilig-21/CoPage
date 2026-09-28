@@ -19,7 +19,8 @@ export default class CollabSocket {
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const url = `${protocol}//${window.location.host}/ws/collab?token=${encodeURIComponent(this.token)}`
+    const origin = (import.meta.env.VITE_BACKEND_WS_ORIGIN || `${protocol}//${window.location.host}`).replace(/\/$/, '')
+    const url = `${origin}/ws/collab?token=${encodeURIComponent(this.token)}`
     const socket = new WebSocket(url)
     this.socket = socket
 

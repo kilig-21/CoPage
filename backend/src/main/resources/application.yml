@@ -46,6 +46,7 @@ mybatis-plus:
       logic-not-delete-value: 0
 
 collab:
+  frontend-origin: ${FRONTEND_ORIGIN:http://localhost:5173}
   jwt:
     # 仅本地开发默认值；部署时必须通过环境变量覆盖，并至少 32 字节。
     secret: ${JWT_SECRET:change-this-local-development-secret-key-please}

@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const request = axios.create({
-  baseURL: '/api',
+  baseURL: `${(import.meta.env.VITE_BACKEND_HTTP_ORIGIN ?? '').replace(/\/$/, '')}/api`,
   timeout: 10_000,
 })
 
