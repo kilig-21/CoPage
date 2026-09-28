@@ -178,6 +178,8 @@ export default function useQuillCollab(docId) {
       window.removeEventListener('beforeunload', onBeforeUnload)
       client.close()
       socket.close()
+      quill.getModule('toolbar')?.container.remove()
+      host.replaceChildren()
       quillRef.current = null
     }
   }, [docId])
