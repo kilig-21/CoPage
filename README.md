@@ -128,6 +128,8 @@ Compose 读取根目录 `.env`；**Spring Boot 不会自动读取这份 `.env`**
 
 本地 Compose 的 MinIO 桶 `collab` 为公共读，ES 未开启认证；默认账号、密码和 JWT 密钥只用于本地开发。对外部署前需替换凭据、配置网络访问和 HTTPS/WSS，部署验收尚未完成。
 
+正式后端启动时设置 `SPRING_PROFILES_ACTIVE=prod`。此配置要求显式提供 MySQL、Redis、RabbitMQ、Elasticsearch、MinIO 的地址及凭据、`JWT_SECRET`、`FRONTEND_ORIGIN` 和 `MINIO_PUBLIC_ENDPOINT`；缺项或使用演示密钥时会拒绝启动。`FRONTEND_ORIGIN` 必须是无路径的精确 HTTPS 来源，图片公开地址必须使用 HTTPS（可带反向代理路径）。本地 Compose 的 `app` profile 默认仍为开发配置；仅设置 `prod` 不会自动让当前 Compose 具备公网隔离、TLS 和备份能力。
+
 可选的第二后端实例：
 
 ```powershell

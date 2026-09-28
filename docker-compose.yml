@@ -7,6 +7,7 @@ services:
     container_name: collab-backend
     restart: unless-stopped
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
       MYSQL_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-collab_doc}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
       MYSQL_USER: root
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
