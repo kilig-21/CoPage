@@ -223,3 +223,48 @@ test('join 遇到锁忙也会重试，不能永远卡在同步中', async () => 
   assert.equal(editor.sent.at(-1).type, 'join')
   editor.client.close()
 })
+
+test('刷新后草稿恢复沿用原 clientId/opId，未提交操作和 buffer 不丢失', () => {
+  const before = harness('original-client')
+  before.local(new Delta().insert('A'))
+  before.local(new Delta().retain(1).insert('B'))
+  const draft = before.client.exportDraft(before.document)
+  assert.equal(draft.content.ops[0].insert, 'AB\n')
+  before.client.close()
+
+  let document = new Delta().insert('\n')
+  const sent = []
+  const restored = new CollabClient({
+    docId: 1, clientId: 'new-page', Delta,
+    onSync: (content) => { if (content) document = content },
+    onRemote: (operation) => { document = document.compose(operation) },
+  })
+  restored.attachSocket({ send: (message) => { sent.push(message); return true } })
+  document = restored.restoreDraft(draft)
+  assert.equal(restored.clientId, 'original-client')
+  restored.join()
+  assert.equal(sent[0].pendingOpId, draft.pending.opId)
+  assert.deepEqual(sent[0].pendingOp, draft.pending.original)
+  restored.receive({ type: 'sync', docId: 1, syncId: restored.syncId,
+    fromRevision: 0, revision: 0, historyComplete: true, history: [],
+    pendingCommittedRevision: null, content: new Delta().insert('\n') })
+  assert.equal(sent[1].opId, draft.pending.opId)
+  assert.deepEqual(document.ops, [{ insert: 'AB\n' }])
+  restored.receive({ type: 'ack', docId: 1, clientId: restored.clientId,
+    opId: draft.pending.opId, revision: 1 })
+  assert.equal(sent[2].baseRevision, 1)
+  assert.deepEqual(sent[2].op.ops, [{ retain: 1 }, { insert: 'B' }])
+  restored.close()
+})
+
+test('没有未确认编辑不导出草稿，损坏草稿不会改变客户端状态', () => {
+  const editor = harness('one')
+  assert.equal(editor.client.exportDraft(editor.document), null)
+  assert.throws(() => editor.client.restoreDraft({ version: 1, docId: 1,
+    clientId: 'bad', revision: 0, content: { ops: [] },
+    pending: { opId: 'x', baseRevision: 0, original: {}, delta: {} } }),
+  /未确认操作无效/)
+  assert.equal(editor.client.clientId, 'one')
+  assert.equal(editor.client.pending, null)
+  editor.client.close()
+})

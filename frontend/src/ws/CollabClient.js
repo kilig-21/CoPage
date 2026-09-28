@@ -284,6 +284,51 @@ export default class CollabClient {
     return this.pending !== null || this.buffer !== null
   }
 
+  exportDraft(content) {
+    if (!this.hasUnconfirmedChanges()) return null
+    return {
+      version: 1,
+      docId: this.docId,
+      clientId: this.clientId,
+      revision: this.revision,
+      pending: this.pending ? {
+        opId: this.pending.opId,
+        baseRevision: this.pending.baseRevision,
+        original: this.copy(this.pending.original),
+        delta: this.copy(this.pending.delta),
+      } : null,
+      buffer: this.buffer ? this.copy(this.buffer) : null,
+      content: this.copy(content),
+      savedAt: Date.now(),
+    }
+  }
+
+  restoreDraft(draft) {
+    if (draft?.version !== 1 || draft.docId !== this.docId ||
+        typeof draft.clientId !== 'string' || !draft.clientId ||
+        !Number.isSafeInteger(draft.revision) || draft.revision < 0 ||
+        !Array.isArray(draft.content?.ops) ||
+        (!draft.pending && !draft.buffer)) throw new Error('本地草稿格式无效')
+    const pending = draft.pending
+    if (pending && (typeof pending.opId !== 'string' || !pending.opId ||
+        !Number.isSafeInteger(pending.baseRevision) || pending.baseRevision < 0 ||
+        pending.baseRevision > draft.revision ||
+        !Array.isArray(pending.original?.ops) || !Array.isArray(pending.delta?.ops))) {
+      throw new Error('本地草稿中的未确认操作无效')
+    }
+    if (draft.buffer && !Array.isArray(draft.buffer.ops)) throw new Error('本地草稿中的缓冲操作无效')
+    this.clientId = draft.clientId
+    this.revision = draft.revision
+    this.pending = pending ? {
+      opId: pending.opId,
+      baseRevision: pending.baseRevision,
+      original: this.copy(pending.original),
+      delta: this.copy(pending.delta),
+    } : null
+    this.buffer = draft.buffer ? this.copy(draft.buffer) : null
+    return this.copy(draft.content)
+  }
+
   setState(state) {
     this.state = state
     this.onState?.(state)

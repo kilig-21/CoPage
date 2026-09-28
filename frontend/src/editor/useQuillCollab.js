@@ -17,6 +17,8 @@ export default function useQuillCollab(docId) {
   const [error, setError] = useState('')
   const [title, setTitle] = useState('')
   const [permission, setPermission] = useState(0)
+  const [recoveryDraft, setRecoveryDraft] = useState(null)
+  const recoveryActionsRef = useRef(null)
 
   useEffect(() => {
     const host = editorHostRef.current
@@ -47,7 +49,11 @@ export default function useQuillCollab(docId) {
     quillRef.current = quill
     const Delta = Quill.import('delta')
     const token = localStorage.getItem('collab-token')
-    const clientId = createClientId()
+    const username = localStorage.getItem('collab-user')
+    const draftPrefix = username ? `copage-draft:v1:${encodeURIComponent(username)}:${docId}:` : null
+    const tabKey = `copage-tab-client:${docId}`
+    const clientId = sessionStorage.getItem(tabKey) || createClientId()
+    sessionStorage.setItem(tabKey, clientId)
     let composing = false
     let compositionDirty = false
     let lastKnownContents = quill.getContents()
@@ -100,6 +106,7 @@ export default function useQuillCollab(docId) {
         if (!active) return
         flushComposition()
         client.receive(message)
+        persistDraft()
       },
       onClose: () => {
         if (!active) return
@@ -108,14 +115,54 @@ export default function useQuillCollab(docId) {
         synced = false
         updateEditable()
         client.disconnect()
+        persistDraft()
       },
       onError: setError,
     })
     client.attachSocket(socket)
 
+    const persistDraft = () => {
+      if (!draftPrefix || recoveryActionsRef.current) return
+      const key = draftPrefix + client.clientId
+      try {
+        const draft = client.exportDraft(quill.getContents())
+        if (draft) localStorage.setItem(key, JSON.stringify(draft))
+        else localStorage.removeItem(key)
+      } catch {
+        setError('本地草稿保存失败；离开页面前请复制当前内容')
+      }
+    }
+    const findDraft = () => {
+      if (!draftPrefix) return null
+      const found = []
+      for (let index = 0; index < localStorage.length; index++) {
+        const key = localStorage.key(index)
+        if (!key?.startsWith(draftPrefix)) continue
+        try {
+          const draft = JSON.parse(localStorage.getItem(key))
+          if (draft?.docId === docId && draft?.version === 1) found.push({ key, draft })
+        } catch {
+          // 损坏的草稿保持原样，避免自动删除可能有用的本地内容。
+        }
+      }
+      return found.find(({ key }) => key === draftPrefix + clientId)
+        ?? found.sort((a, b) => (b.draft.savedAt ?? 0) - (a.draft.savedAt ?? 0))[0]
+        ?? null
+    }
+    const startSocket = () => {
+      if (token) {
+        setConnection('正在连接')
+        socket.connect()
+      } else {
+        setConnection('未登录')
+        setError('请先登录后再使用实时协同')
+      }
+    }
+
     const submit = (delta) => {
       if (delta.ops?.length) client.submit(delta)
       lastKnownContents = quill.getContents()
+      persistDraft()
     }
     const onTextChange = (delta, _old, source) => {
       if (source !== 'user') return
@@ -136,6 +183,8 @@ export default function useQuillCollab(docId) {
       flushComposition()
     }
     const onBeforeUnload = (event) => {
+      flushComposition()
+      persistDraft()
       if (!client.hasUnconfirmedChanges() && !compositionDirty) return
       event.preventDefault()
       event.returnValue = ''
@@ -156,12 +205,38 @@ export default function useQuillCollab(docId) {
         quill.setContents(new Delta(doc.content), 'api')
         lastKnownContents = quill.getContents()
         updateEditable()
-        if (token) {
-          setConnection('正在连接')
-          socket.connect()
+        const stored = findDraft()
+        if (stored) {
+          setConnection('等待恢复选择')
+          setRecoveryDraft({ savedAt: stored.draft.savedAt })
+          recoveryActionsRef.current = {
+            recover: () => {
+              if (!canEdit) {
+                setError('当前已无编辑权限，草稿仍保存在此浏览器中')
+                return
+              }
+              try {
+                const content = client.restoreDraft(stored.draft)
+                quill.setContents(content, 'api')
+                lastKnownContents = quill.getContents()
+                sessionStorage.setItem(tabKey, client.clientId)
+                setRecoveryDraft(null)
+                recoveryActionsRef.current = null
+                persistDraft()
+                startSocket()
+              } catch {
+                setError('草稿无法自动恢复，原始草稿仍保存在此浏览器中')
+              }
+            },
+            discard: () => {
+              localStorage.removeItem(stored.key)
+              setRecoveryDraft(null)
+              recoveryActionsRef.current = null
+              startSocket()
+            },
+          }
         } else {
-          setConnection('未登录')
-          setError('请先登录后再使用实时协同')
+          startSocket()
         }
       })
       .catch((loadError) => {
@@ -171,6 +246,8 @@ export default function useQuillCollab(docId) {
       })
 
     return () => {
+      flushComposition()
+      persistDraft()
       active = false
       quill.off('text-change', onTextChange)
       quill.root.removeEventListener('compositionstart', onCompositionStart)
@@ -178,11 +255,16 @@ export default function useQuillCollab(docId) {
       window.removeEventListener('beforeunload', onBeforeUnload)
       client.close()
       socket.close()
+      recoveryActionsRef.current = null
       quill.getModule('toolbar')?.container.remove()
       host.replaceChildren()
       quillRef.current = null
     }
   }, [docId])
 
-  return { editorHostRef, connection, users, error, title, permission }
+  return {
+    editorHostRef, connection, users, error, title, permission, recoveryDraft,
+    recoverDraft: () => recoveryActionsRef.current?.recover(),
+    discardDraft: () => recoveryActionsRef.current?.discard(),
+  }
 }

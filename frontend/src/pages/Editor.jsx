@@ -1,12 +1,13 @@
 import { ArrowLeftOutlined, CloudOutlined } from '@ant-design/icons'
-import { Alert, Avatar, Button, Layout, Space, Tag, Tooltip, Typography } from 'antd'
+import { Alert, Avatar, Button, Layout, Modal, Space, Tag, Tooltip, Typography } from 'antd'
 import { Link, useParams } from 'react-router-dom'
 import useQuillCollab from '../editor/useQuillCollab'
 
 export default function Editor() {
   const { id } = useParams()
   const docId = Number(id)
-  const { editorHostRef, connection, users, error, title, permission } = useQuillCollab(docId)
+  const { editorHostRef, connection, users, error, title, permission,
+    recoveryDraft, recoverDraft, discardDraft } = useQuillCollab(docId)
   const isConnected = connection === '已连接'
 
   return (
@@ -35,6 +36,16 @@ export default function Editor() {
           <div ref={editorHostRef} className="editor-host" aria-label="协同编辑器" />
         </section>
       </main>
+      <Modal title="发现未确认的本地编辑" open={Boolean(recoveryDraft)} closable={false}
+        maskClosable={false} keyboard={false} onCancel={() => undefined}
+        footer={[
+          <Button key="discard" danger onClick={discardDraft}>丢弃本地草稿</Button>,
+          <Button key="recover" type="primary" onClick={recoverDraft}>恢复草稿并同步</Button>,
+        ]}>
+        <Typography.Paragraph>这份草稿可能包含服务端尚未确认的修改。恢复前不会自动重发，也不会覆盖本地草稿。</Typography.Paragraph>
+        {Number.isFinite(recoveryDraft?.savedAt) &&
+          <Typography.Text type="secondary">保存时间：{new Date(recoveryDraft.savedAt).toLocaleString()}</Typography.Text>}
+      </Modal>
     </Layout>
   )
 }
