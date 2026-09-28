@@ -126,6 +126,8 @@ Compose 读取根目录 `.env`；**Spring Boot 不会自动读取这份 `.env`**
 
 默认值见 [application.yml](backend/src/main/resources/application.yml)。前端部署变量见 [frontend/.env.example](frontend/.env.example)：`VITE_BACKEND_HTTP_ORIGIN` 填后端 HTTPS origin，`VITE_BACKEND_WS_ORIGIN` 填同一后端的 WSS origin，均不带 `/api` 或 `/ws` 路径。留空时仍使用当前页面同源地址，适合本地 Vite 代理。Vercel 预览域名确定后，应将该精确域名设为后端 `FRONTEND_ORIGIN`；切勿用任意来源通配代替。Vite 变量会打包进浏览器代码，不能存放密钥。
 
+[frontend/vercel.json](frontend/vercel.json) 为 React Router 的 `/login`、`/docs/:id` 等深层路径回退到 `index.html`。前端必须以 `frontend` 为 Vercel 项目根目录，并在后端公网地址确定后配置上面两个 `VITE_` 变量、重新构建预览。未配置公网后端的预览只能检验静态页面，不代表登录和协同功能可用。
+
 本地 Compose 的 MinIO 桶 `collab` 为公共读，ES 未开启认证；默认账号、密码和 JWT 密钥只用于本地开发。对外部署前需替换凭据、配置网络访问和 HTTPS/WSS，部署验收尚未完成。
 
 正式后端启动时设置 `SPRING_PROFILES_ACTIVE=prod`。此配置要求显式提供 MySQL、Redis、RabbitMQ、Elasticsearch、MinIO 的地址及凭据、`JWT_SECRET`、`FRONTEND_ORIGIN` 和 `MINIO_PUBLIC_ENDPOINT`；缺项或使用演示密钥时会拒绝启动。`FRONTEND_ORIGIN` 必须是无路径的精确 HTTPS 来源，图片公开地址必须使用 HTTPS（可带反向代理路径）。本地 Compose 的 `app` profile 默认仍为开发配置；仅设置 `prod` 不会自动让当前 Compose 具备公网隔离、TLS 和备份能力。
