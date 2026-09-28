@@ -4,6 +4,7 @@ import 'quill/dist/quill.snow.css'
 import CollabSocket from '../ws/CollabSocket'
 import CollabClient from '../ws/CollabClient'
 import request from '../api/request'
+import { IMAGE_ACCEPT, imageValidationError, uploadEditorImage } from './imageUpload'
 
 function createClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `client-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -27,6 +28,11 @@ export default function useQuillCollab(docId) {
     setConnection('加载中')
     setError('')
 
+    const imageInput = document.createElement('input')
+    imageInput.type = 'file'
+    imageInput.accept = IMAGE_ACCEPT
+    imageInput.hidden = true
+
     const quill = new Quill(host, {
       theme: 'snow',
       placeholder: '开始协同编辑…',
@@ -40,11 +46,19 @@ export default function useQuillCollab(docId) {
             ['clean'],
           ],
           handlers: {
-            image: () => setError('图片上传即将接入，暂时无法插入图片'),
+            image: () => {
+              if (!canEdit || !connected || !synced || uploading) {
+                setError(uploading ? '请等待当前图片上传完成' : '文档尚未就绪，暂时不能插入图片')
+                return
+              }
+              imageInsertIndex = quill.getSelection(true)?.index ?? Math.max(0, quill.getLength() - 1)
+              imageInput.click()
+            },
           },
         },
       },
     })
+    host.appendChild(imageInput)
     quill.enable(false)
     quillRef.current = quill
     const Delta = Quill.import('delta')
@@ -60,7 +74,59 @@ export default function useQuillCollab(docId) {
     let canEdit = false
     let connected = false
     let synced = false
+    let uploading = false
+    let imageInsertIndex = null
+    let uploadController = null
     const updateEditable = () => quill.enable(canEdit && connected && synced)
+
+    const abortImageUpload = () => {
+      uploadController?.abort()
+      imageInsertIndex = null
+    }
+
+    const onImageChange = async () => {
+      const file = imageInput.files?.[0]
+      imageInput.value = ''
+      if (!file) {
+        imageInsertIndex = null
+        return
+      }
+      const validationError = imageValidationError(file)
+      if (validationError) {
+        imageInsertIndex = null
+        setError(validationError)
+        return
+      }
+      if (!active || !canEdit || !connected || !synced || uploading) {
+        imageInsertIndex = null
+        setError('文档尚未就绪，暂时不能插入图片')
+        return
+      }
+      uploading = true
+      const controller = new AbortController()
+      uploadController = controller
+      try {
+        const url = await uploadEditorImage(request, file, controller.signal)
+        if (!active || !canEdit || !connected || !synced) {
+          if (active) setError('上传期间协同连接中断，请重连后重新选择图片')
+          return
+        }
+        const index = Math.min(imageInsertIndex ?? quill.getLength() - 1, quill.getLength() - 1)
+        imageInsertIndex = null
+        quill.insertEmbed(index, 'image', url, 'user')
+        quill.setSelection(index + 1, 0, 'silent')
+        setError('')
+      } catch (uploadError) {
+        if (active && !controller.signal.aborted) setError(uploadError?.message || '图片上传失败')
+      } finally {
+        uploading = false
+        uploadController = null
+        imageInsertIndex = null
+      }
+    }
+    const onImageCancel = () => { imageInsertIndex = null }
+    imageInput.addEventListener('change', onImageChange)
+    imageInput.addEventListener('cancel', onImageCancel)
 
     const client = new CollabClient({
       docId,
@@ -68,6 +134,7 @@ export default function useQuillCollab(docId) {
       Delta,
       onSync: (content) => {
         if (!active || !connected) return
+        abortImageUpload()
         if (content) quill.setContents(content, 'api')
         lastKnownContents = quill.getContents()
       },
@@ -86,6 +153,7 @@ export default function useQuillCollab(docId) {
       onState: (state) => {
         if (!active) return
         synced = state === 'ready'
+        if (!synced) abortImageUpload()
         updateEditable()
         setConnection({ ready: '已连接', syncing: '正在恢复编辑', offline: '正在重连', blocked: '本地内容已保留' }[state])
         if (state === 'ready') setError('')
@@ -110,6 +178,7 @@ export default function useQuillCollab(docId) {
       },
       onClose: () => {
         if (!active) return
+        abortImageUpload()
         flushComposition()
         connected = false
         synced = false
@@ -190,6 +259,7 @@ export default function useQuillCollab(docId) {
       persistDraft()
     }
     const onTextChange = (delta, _old, source) => {
+      if (imageInsertIndex !== null) imageInsertIndex = delta.transformPosition(imageInsertIndex, true)
       if (source !== 'user') return
       if (composing) {
         compositionDirty = true
@@ -295,6 +365,9 @@ export default function useQuillCollab(docId) {
       window.removeEventListener('beforeunload', onBeforeUnload)
       client.close()
       socket.close()
+      abortImageUpload()
+      imageInput.removeEventListener('change', onImageChange)
+      imageInput.removeEventListener('cancel', onImageCancel)
       draftChannel?.close()
       recoveryActionsRef.current = null
       quill.getModule('toolbar')?.container.remove()
