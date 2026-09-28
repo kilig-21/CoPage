@@ -149,6 +149,20 @@ docker compose --profile app ps
 
 容器把服务映射到本机 `8082`，避免覆盖 IDEA 的 `8080`；它在 Compose 网络内连接 MySQL、Redis、RabbitMQ、ES 和 MinIO。当前 Vite 开发代理仍连 `8080`，因此检查容器应直接访问 `http://localhost:8082/api/...`。此 Compose 为本地开发配置，会向宿主机开放数据库等端口，并保留演示默认凭据，**不可原样暴露到公网**。正式部署还需隔离内部服务、配置持久卷备份、替换所有凭据，并在入口提供 HTTPS/WSS 反向代理。
 
+首次拉取 Maven 构建镜像受网络限制时，也可用已打包的 JAR 验证容器运行阶段：
+
+```powershell
+mvn -f backend/pom.xml -DskipTests package
+docker build -f backend/Dockerfile.prebuilt --build-context artifact=backend/target -t copage-backend:prebuilt backend
+docker tag copage-backend:prebuilt collab-docs-backend:latest
+docker compose --profile app up -d --no-build backend
+$env:COPAGE_SMOKE_PORT_A='8082'
+$env:COPAGE_SMOKE_PORT_B='8081'
+node scripts/collab-smoke.mjs
+```
+
+预构建路径只验证运行时镜像，不能替代默认多阶段 Dockerfile 的源码构建验收。烟测会新建并软删除测试文档，要求 `8081` 已启动且与 `8082` 共用基础服务。
+
 ## 接口与代码导航
 
 | 接口 | 用途 |

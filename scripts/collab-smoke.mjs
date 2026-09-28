@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 
-const ports = [8080, 8081]
+const primaryPort = Number(process.env.COPAGE_SMOKE_PORT_A ?? 8080)
+const secondaryPort = Number(process.env.COPAGE_SMOKE_PORT_B ?? 8081)
+const ports = [primaryPort, secondaryPort]
+for (const port of ports) {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`无效的本地烟测端口：${port}`)
+  }
+}
 const username = process.env.COPAGE_SMOKE_USER ?? 'testA'
 const password = process.env.COPAGE_SMOKE_PASSWORD ?? '123456'
 const clients = []
@@ -98,7 +105,7 @@ async function submit(client, clientId, opId, baseRevision, op) {
 }
 
 async function detail() {
-  return request(8080, `/doc/${docId}`)
+  return request(primaryPort, `/doc/${docId}`)
 }
 
 function text(content) {
@@ -106,15 +113,15 @@ function text(content) {
 }
 
 async function run() {
-  const login = await request(8080, '/auth/login', 'POST', { username, password })
+  const login = await request(primaryPort, '/auth/login', 'POST', { username, password })
   token = login.token
-  const created = await request(8080, '/doc', 'POST', { title: `CODI-90 smoke ${randomUUID()}` })
+  const created = await request(primaryPort, '/doc', 'POST', { title: `CoPage smoke ${randomUUID()}` })
   docId = created.id
 
   const aId = randomUUID()
   const bId = randomUUID()
-  const a = await openSocket(8080)
-  const b = await openSocket(8081)
+  const a = await openSocket(primaryPort)
+  const b = await openSocket(secondaryPort)
   assert.equal((await join(a, aId, 0)).revision, 0)
   assert.equal((await join(b, bId, 0)).revision, 0)
   assert.equal((await submit(a, aId, randomUUID(), 0, { ops: [{ insert: 'A' }] })).revision, 1)
@@ -127,12 +134,12 @@ async function run() {
   const cId = randomUUID()
   const cOpId = randomUUID()
   const cOp = { ops: [{ retain: 2 }, { insert: 'C' }] }
-  const c = await openSocket(8080)
+  const c = await openSocket(primaryPort)
   assert.equal((await join(c, cId, 2)).revision, 2)
   c.send({ type: 'op', docId, clientId: cId, opId: cOpId, baseRevision: 2, op: cOp })
   assert.equal((await c.waitFor(message => message.type === 'ack' && message.opId === cOpId)).revision, 3)
   c.close() // 模拟客户端没有处理已送达的 ack，保留原 pending 后重连另一实例。
-  const cRecovered = await openSocket(8081)
+  const cRecovered = await openSocket(secondaryPort)
   const cSync = await join(cRecovered, cId, 2, { opId: cOpId, baseRevision: 2, op: cOp })
   assert.equal(cSync.historyComplete, true)
   assert.equal(cSync.pendingCommittedRevision, 3)
@@ -143,10 +150,10 @@ async function run() {
   const dId = randomUUID()
   const dOpId = randomUUID()
   const dOp = { ops: [{ retain: 3 }, { insert: 'D' }] }
-  const d = await openSocket(8080)
+  const d = await openSocket(primaryPort)
   await join(d, dId, 3)
   d.close() // 此操作尚未发送；服务端应返回 null 收据。
-  const dRecovered = await openSocket(8081)
+  const dRecovered = await openSocket(secondaryPort)
   const dSync = await join(dRecovered, dId, 3, { opId: dOpId, baseRevision: 3, op: dOp })
   assert.equal(dSync.pendingCommittedRevision, null)
   assert.equal(dSync.historyComplete, true)
@@ -183,7 +190,7 @@ try {
   for (const client of clients) client.close()
   if (docId && token) {
     try {
-      await request(8080, `/doc/${docId}`, 'DELETE')
+      await request(primaryPort, `/doc/${docId}`, 'DELETE')
       console.log(`Test document ${docId} soft-deleted`)
     } catch (error) {
       console.error(`Test document ${docId} cleanup failed:`, error)
