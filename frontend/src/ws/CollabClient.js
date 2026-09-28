@@ -3,13 +3,14 @@
  * pending 是已发送未确认的操作；buffer 是 pending 期间继续输入积累的操作。
  */
 export default class CollabClient {
-  constructor({ docId, clientId, Delta, onSync, onRemote, onUsers, onError, onState }) {
+  constructor({ docId, clientId, Delta, onSync, onRemote, onUsers, onCursor, onError, onState }) {
     this.docId = docId
     this.clientId = clientId
     this.Delta = Delta
     this.onSync = onSync
     this.onRemote = onRemote
     this.onUsers = onUsers
+    this.onCursor = onCursor
     this.onError = onError
     this.onState = onState
     this.revision = 0
@@ -81,7 +82,21 @@ export default class CollabClient {
         }
         break
       case 'cursor':
-        // 远端光标渲染层会在 Day 3 消费该消息；此处不改变 OT 状态。
+        if (this.state !== 'ready' || message.clientId === this.clientId ||
+            typeof message.clientId !== 'string' || !message.clientId ||
+            !Number.isSafeInteger(message.index) || message.index < 0 ||
+            !Number.isSafeInteger(message.length) || message.length < 0 ||
+            (message.visible !== undefined && typeof message.visible !== 'boolean') ||
+            typeof message.color !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(message.color)) break
+        this.onCursor?.({
+          clientId: message.clientId,
+          index: message.index,
+          length: message.length,
+          visible: message.visible !== false,
+          color: message.color,
+          nickname: typeof message.nickname === 'string' && message.nickname.trim()
+            ? message.nickname.trim().slice(0, 50) : '协作者',
+        })
         break
       case 'presence':
         this.onUsers?.(message.users ?? [])

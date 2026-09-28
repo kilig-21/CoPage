@@ -6,6 +6,7 @@ import CollabClient from './CollabClient.js'
 function harness(clientId) {
   const sent = []
   const errors = []
+  const cursors = []
   let document = new Delta().insert('\n')
   const client = new CollabClient({
     docId: 1,
@@ -14,6 +15,7 @@ function harness(clientId) {
     onSync: (content) => { if (content) document = content },
     onRemote: (operation) => { document = document.compose(operation) },
     onError: (message) => errors.push(message),
+    onCursor: (cursor) => cursors.push(cursor),
   })
   client.attachSocket({ send: (message) => { sent.push(message); return true } })
   client.join()
@@ -25,6 +27,7 @@ function harness(clientId) {
     client,
     sent,
     errors,
+    cursors,
     get document() { return document },
     local(operation) {
       document = document.compose(operation)
@@ -41,6 +44,23 @@ function harness(clientId) {
     },
   }
 }
+
+test('远端光标仅在同步就绪时转交绘制层，忽略自身与非法坐标', () => {
+  const editor = harness('self')
+  const valid = { type: 'cursor', docId: 1, clientId: 'peer', index: 2, length: 0,
+    visible: true, nickname: '同学', color: '#2563eb' }
+  editor.client.receive(valid)
+  editor.client.receive({ ...valid, clientId: 'self' })
+  editor.client.receive({ ...valid, index: -1 })
+  editor.client.receive({ ...valid, visible: 'false' })
+  editor.client.receive({ ...valid, color: 'red;display:none' })
+  assert.deepEqual(editor.cursors, [{ clientId: 'peer', index: 2, length: 0,
+    visible: true, nickname: '同学', color: '#2563eb' }])
+  editor.client.disconnect()
+  editor.client.receive({ ...valid, visible: false })
+  assert.equal(editor.cursors.length, 1)
+  editor.client.close()
+})
 
 test('pending 被确认后发送 buffer，且使用最新 revision', () => {
   const editor = harness('one')

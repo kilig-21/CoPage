@@ -5,6 +5,7 @@ import CollabSocket from '../ws/CollabSocket'
 import CollabClient from '../ws/CollabClient'
 import request from '../api/request'
 import { IMAGE_ACCEPT, imageValidationError, uploadEditorImage } from './imageUpload'
+import RemoteCursorLayer from './RemoteCursorLayer'
 
 function createClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `client-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -61,6 +62,7 @@ export default function useQuillCollab(docId) {
     host.appendChild(imageInput)
     quill.enable(false)
     quillRef.current = quill
+    const cursorLayer = new RemoteCursorLayer(quill)
     const Delta = Quill.import('delta')
     const token = localStorage.getItem('collab-token')
     const username = localStorage.getItem('collab-user')
@@ -78,6 +80,37 @@ export default function useQuillCollab(docId) {
     let imageInsertIndex = null
     let uploadController = null
     const updateEditable = () => quill.enable(canEdit && connected && synced)
+    let cursorSendTimer = null
+    let lastSentCursor = null
+
+    const sendCursor = (force = false) => {
+      if (!active || !connected || !synced) return
+      const selection = quill.hasFocus() ? quill.getSelection() : null
+      const next = {
+        type: 'cursor', docId,
+        index: selection?.index ?? 0,
+        length: selection?.length ?? 0,
+        visible: Boolean(selection),
+      }
+      if (!force && lastSentCursor && next.index === lastSentCursor.index &&
+          next.length === lastSentCursor.length && next.visible === lastSentCursor.visible) return
+      if (socket.send(next)) lastSentCursor = next
+    }
+    const scheduleCursor = () => {
+      if (cursorSendTimer !== null) return
+      cursorSendTimer = window.setTimeout(() => {
+        cursorSendTimer = null
+        sendCursor()
+      }, 50)
+    }
+    const hideCursor = () => {
+      if (cursorSendTimer !== null) window.clearTimeout(cursorSendTimer)
+      cursorSendTimer = null
+      if (connected && lastSentCursor?.visible) {
+        socket.send({ type: 'cursor', docId, index: 0, length: 0, visible: false })
+      }
+      lastSentCursor = null
+    }
 
     const abortImageUpload = () => {
       uploadController?.abort()
@@ -135,6 +168,8 @@ export default function useQuillCollab(docId) {
       onSync: (content) => {
         if (!active || !connected) return
         abortImageUpload()
+        cursorLayer.clear()
+        lastSentCursor = null
         if (content) quill.setContents(content, 'api')
         lastKnownContents = quill.getContents()
       },
@@ -148,15 +183,26 @@ export default function useQuillCollab(docId) {
         }
         lastKnownContents = quill.getContents()
       },
-      onUsers: setUsers,
+      onUsers: (onlineUsers) => {
+        setUsers(onlineUsers)
+        if (lastSentCursor?.visible) sendCursor(true)
+      },
+      onCursor: (cursor) => cursorLayer.update(cursor),
       onError: setError,
       onState: (state) => {
         if (!active) return
+        if (state !== 'ready') {
+          hideCursor()
+          cursorLayer.clear()
+        }
         synced = state === 'ready'
         if (!synced) abortImageUpload()
         updateEditable()
         setConnection({ ready: '已连接', syncing: '正在恢复编辑', offline: '正在重连', blocked: '本地内容已保留' }[state])
-        if (state === 'ready') setError('')
+        if (state === 'ready') {
+          setError('')
+          scheduleCursor()
+        }
       },
     })
 
@@ -178,6 +224,8 @@ export default function useQuillCollab(docId) {
       },
       onClose: () => {
         if (!active) return
+        hideCursor()
+        cursorLayer.clear()
         abortImageUpload()
         flushComposition()
         connected = false
@@ -260,7 +308,9 @@ export default function useQuillCollab(docId) {
     }
     const onTextChange = (delta, _old, source) => {
       if (imageInsertIndex !== null) imageInsertIndex = delta.transformPosition(imageInsertIndex, true)
+      cursorLayer.transform(delta)
       if (source !== 'user') return
+      scheduleCursor()
       if (composing) {
         compositionDirty = true
         return
@@ -277,6 +327,10 @@ export default function useQuillCollab(docId) {
       composing = false
       flushComposition()
     }
+    const onSelectionChange = (range, _old, source) => {
+      if (source === 'user' || range === null) scheduleCursor()
+    }
+    const renderRemoteCursors = () => cursorLayer.render()
     const onBeforeUnload = (event) => {
       flushComposition()
       persistDraft()
@@ -286,9 +340,16 @@ export default function useQuillCollab(docId) {
     }
 
     quill.on('text-change', onTextChange)
+    quill.on('selection-change', onSelectionChange)
     quill.root.addEventListener('compositionstart', onCompositionStart)
     quill.root.addEventListener('compositionend', onCompositionEnd)
+    quill.root.addEventListener('scroll', renderRemoteCursors)
+    window.addEventListener('resize', renderRemoteCursors)
     window.addEventListener('beforeunload', onBeforeUnload)
+    const cursorKeepaliveTimer = window.setInterval(() => {
+      cursorLayer.expire()
+      if (lastSentCursor?.visible) sendCursor(true)
+    }, 20_000)
 
     request.get('/doc/' + docId)
       .then(async (response) => {
@@ -356,12 +417,17 @@ export default function useQuillCollab(docId) {
       })
 
     return () => {
+      hideCursor()
       flushComposition()
       persistDraft()
       active = false
+      window.clearInterval(cursorKeepaliveTimer)
       quill.off('text-change', onTextChange)
+      quill.off('selection-change', onSelectionChange)
       quill.root.removeEventListener('compositionstart', onCompositionStart)
       quill.root.removeEventListener('compositionend', onCompositionEnd)
+      quill.root.removeEventListener('scroll', renderRemoteCursors)
+      window.removeEventListener('resize', renderRemoteCursors)
       window.removeEventListener('beforeunload', onBeforeUnload)
       client.close()
       socket.close()
@@ -369,6 +435,7 @@ export default function useQuillCollab(docId) {
       imageInput.removeEventListener('change', onImageChange)
       imageInput.removeEventListener('cancel', onImageCancel)
       draftChannel?.close()
+      cursorLayer.destroy()
       recoveryActionsRef.current = null
       quill.getModule('toolbar')?.container.remove()
       host.replaceChildren()

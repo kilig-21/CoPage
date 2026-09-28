@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.CloseStatus;
 
 import java.util.Map;
 import java.util.List;
@@ -128,5 +129,42 @@ class CollabWebSocketHandlerTest {
         assertEquals("op-1", response.getValue().get("opId").asText());
         assertEquals(3, response.getValue().get("revision").asInt());
         verifyNoInteractions(eventBus);
+    }
+
+    @Test
+    void cursorUsesAuthenticatedNicknameAndSupportsHide() throws Exception {
+        WebSocketSession session = mock(WebSocketSession.class);
+        WsSessionRegistry.SessionInfo info = new WsSessionRegistry.SessionInfo(
+                "session-1", session, 5L, "test-client", 2L, "测试用户 B");
+        when(registry.require(session)).thenReturn(info);
+
+        handler.handleTextMessage(session, new TextMessage("""
+                {"type":"cursor","docId":5,"index":3,"length":1,"visible":false}
+                """));
+
+        ArgumentCaptor<JsonNode> message = ArgumentCaptor.forClass(JsonNode.class);
+        verify(eventBus).publish(eq(5L), eq("session-1"), message.capture());
+        assertEquals("test-client", message.getValue().path("clientId").asText());
+        assertEquals("测试用户 B", message.getValue().path("nickname").asText());
+        assertEquals(false, message.getValue().path("visible").asBoolean());
+        assertEquals(3, message.getValue().path("index").asInt());
+        assertEquals(1, message.getValue().path("length").asInt());
+    }
+
+    @Test
+    void leavingSessionBroadcastsCursorHide() {
+        WebSocketSession session = mock(WebSocketSession.class);
+        WsSessionRegistry.SessionInfo info = new WsSessionRegistry.SessionInfo(
+                "session-1", session, 5L, "test-client", 2L, "测试用户 B");
+        when(registry.current(session)).thenReturn(info);
+
+        handler.afterConnectionClosed(session, CloseStatus.NORMAL);
+
+        ArgumentCaptor<JsonNode> messages = ArgumentCaptor.forClass(JsonNode.class);
+        verify(eventBus).publish(eq(5L), eq("session-1"), messages.capture());
+        assertEquals("cursor", messages.getValue().path("type").asText());
+        assertEquals(false, messages.getValue().path("visible").asBoolean());
+        assertEquals("test-client", messages.getValue().path("clientId").asText());
+        verify(presence).leave(info, eventBus.instanceId());
     }
 }

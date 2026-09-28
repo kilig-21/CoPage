@@ -80,6 +80,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         WsSessionRegistry.SessionInfo info = registry.current(session);
         registry.unregister(session);
         if (info != null) {
+            publishHiddenCursor(info);
             presence.leave(info, eventBus.instanceId());
             publishPresence(info.docId());
         }
@@ -108,6 +109,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
             WsSessionRegistry.SessionInfo previous = registry.current(session);
             if (previous != null) {
                 registry.unregister(session);
+                publishHiddenCursor(previous);
                 presence.leave(previous, eventBus.instanceId());
                 if (previous.docId() != docId) publishPresence(previous.docId());
             }
@@ -205,12 +207,19 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
 
         int index = requiredNonNegativeInt(payload, "index");
         int length = requiredNonNegativeInt(payload, "length");
+        JsonNode visibleNode = payload.get("visible");
+        if (visibleNode != null && !visibleNode.isBoolean()) {
+            throw new CollabException(400, "visible 必须是布尔值");
+        }
+        boolean visible = visibleNode == null || visibleNode.asBoolean();
         ObjectNode cursor = objectMapper.createObjectNode()
                 .put("type", "cursor")
                 .put("docId", docId)
                 .put("clientId", source.clientId())
                 .put("index", index)
                 .put("length", length)
+                .put("visible", visible)
+                .put("nickname", source.nickname())
                 .put("color", colorFor(source.userId()));
 
         eventBus.publish(docId, source.sessionId(), cursor);
@@ -233,6 +242,23 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
                 .put("docId", docId);
         payload.set("users", objectMapper.valueToTree(presence.users(docId)));
         eventBus.publish(docId, "", payload);
+    }
+
+    private void publishHiddenCursor(WsSessionRegistry.SessionInfo info) {
+        ObjectNode cursor = objectMapper.createObjectNode()
+                .put("type", "cursor")
+                .put("docId", info.docId())
+                .put("clientId", info.clientId())
+                .put("index", 0)
+                .put("length", 0)
+                .put("visible", false)
+                .put("nickname", info.nickname())
+                .put("color", colorFor(info.userId()));
+        try {
+            eventBus.publish(info.docId(), info.sessionId(), cursor);
+        } catch (RuntimeException exception) {
+            log.debug("离开时广播光标隐藏失败, docId={}", info.docId(), exception);
+        }
     }
 
     private void sendError(WebSocketSession session, int code, String message) {
