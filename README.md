@@ -136,6 +136,17 @@ mvn -f backend/pom.xml spring-boot:run "-Dspring-boot.run.arguments=--server.por
 
 两个实例共用相同基础服务。当前 Vite 代理仍指向 `8080`；验证跨实例协同时，测试连接需要分别连到 `8080` 和 `8081`。
 
+### 可选的后端容器
+
+[backend/Dockerfile](backend/Dockerfile) 以 Java 21 构建带 `exec` 分类的可执行 JAR，再放入非 root 用户运行的 JRE 镜像。本地 `mvn -f backend/pom.xml package` 会生成普通 JAR 和 `target/collab-docs-backend-0.0.1-SNAPSHOT-exec.jar`，需要 `java -jar` 时使用后者；这样运行中的旧 JAR 不会阻碍重打包。Compose 中的 `backend` 使用 `app` profile，普通 `docker compose up -d` 不会额外启动它。在本机验证容器时运行：
+
+```powershell
+docker compose --profile app up -d --build backend
+docker compose --profile app ps
+```
+
+容器把服务映射到本机 `8082`，避免覆盖 IDEA 的 `8080`；它在 Compose 网络内连接 MySQL、Redis、RabbitMQ、ES 和 MinIO。当前 Vite 开发代理仍连 `8080`，因此检查容器应直接访问 `http://localhost:8082/api/...`。此 Compose 为本地开发配置，会向宿主机开放数据库等端口，并保留演示默认凭据，**不可原样暴露到公网**。正式部署还需隔离内部服务、配置持久卷备份、替换所有凭据，并在入口提供 HTTPS/WSS 反向代理。
+
 ## 接口与代码导航
 
 | 接口 | 用途 |
