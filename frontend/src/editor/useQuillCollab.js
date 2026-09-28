@@ -120,6 +120,31 @@ export default function useQuillCollab(docId) {
       onError: setError,
     })
     client.attachSocket(socket)
+    const draftChannel = draftPrefix && typeof BroadcastChannel !== 'undefined'
+      ? new BroadcastChannel(`copage-draft-owner:${draftPrefix}`) : null
+    draftChannel?.addEventListener('message', (event) => {
+      if (!active || event.data?.type !== 'probe' || event.data.clientId !== client.clientId) return
+      draftChannel.postMessage({ type: 'active', requestId: event.data.requestId })
+    })
+
+    const isDraftOwnerActive = (ownerClientId) => new Promise((resolve) => {
+      if (!draftChannel) {
+        resolve(false)
+        return
+      }
+      const requestId = createClientId()
+      const finish = (found) => {
+        clearTimeout(timer)
+        draftChannel.removeEventListener('message', onMessage)
+        resolve(found)
+      }
+      const onMessage = (event) => {
+        if (event.data?.type === 'active' && event.data.requestId === requestId) finish(true)
+      }
+      const timer = setTimeout(() => finish(false), 500)
+      draftChannel.addEventListener('message', onMessage)
+      draftChannel.postMessage({ type: 'probe', requestId, clientId: ownerClientId })
+    })
 
     const persistDraft = () => {
       if (!draftPrefix || recoveryActionsRef.current) return
@@ -132,8 +157,8 @@ export default function useQuillCollab(docId) {
         setError('本地草稿保存失败；离开页面前请复制当前内容')
       }
     }
-    const findDraft = () => {
-      if (!draftPrefix) return null
+    const findDrafts = () => {
+      if (!draftPrefix) return []
       const found = []
       for (let index = 0; index < localStorage.length; index++) {
         const key = localStorage.key(index)
@@ -145,9 +170,9 @@ export default function useQuillCollab(docId) {
           // 损坏的草稿保持原样，避免自动删除可能有用的本地内容。
         }
       }
-      return found.find(({ key }) => key === draftPrefix + clientId)
-        ?? found.sort((a, b) => (b.draft.savedAt ?? 0) - (a.draft.savedAt ?? 0))[0]
-        ?? null
+      return found.sort((a, b) =>
+        Number(b.key === draftPrefix + clientId) - Number(a.key === draftPrefix + clientId)
+        || (b.draft.savedAt ?? 0) - (a.draft.savedAt ?? 0))
     }
     const startSocket = () => {
       if (token) {
@@ -196,7 +221,7 @@ export default function useQuillCollab(docId) {
     window.addEventListener('beforeunload', onBeforeUnload)
 
     request.get('/doc/' + docId)
-      .then((response) => {
+      .then(async (response) => {
         if (!active) return
         const doc = response.data
         setTitle(doc.title)
@@ -205,7 +230,21 @@ export default function useQuillCollab(docId) {
         quill.setContents(new Delta(doc.content), 'api')
         lastKnownContents = quill.getContents()
         updateEditable()
-        const stored = findDraft()
+        let stored = null
+        let activeDraftFound = false
+        for (const candidate of findDrafts()) {
+          if (await isDraftOwnerActive(candidate.draft.clientId)) {
+            activeDraftFound = true
+            if (candidate.draft.clientId === client.clientId) {
+              client.clientId = createClientId()
+              sessionStorage.setItem(tabKey, client.clientId)
+            }
+          } else {
+            stored = candidate
+            break
+          }
+        }
+        if (!active) return
         if (stored) {
           setConnection('等待恢复选择')
           setRecoveryDraft({ savedAt: stored.draft.savedAt })
@@ -236,6 +275,7 @@ export default function useQuillCollab(docId) {
             },
           }
         } else {
+          if (activeDraftFound) setError('另一标签页正在编辑，未接管它的本地草稿')
           startSocket()
         }
       })
@@ -255,6 +295,7 @@ export default function useQuillCollab(docId) {
       window.removeEventListener('beforeunload', onBeforeUnload)
       client.close()
       socket.close()
+      draftChannel?.close()
       recoveryActionsRef.current = null
       quill.getModule('toolbar')?.container.remove()
       host.replaceChildren()
