@@ -1,0 +1,76 @@
+# 放在宿主机 Nginx 的 http {} include 目录（例如 /etc/nginx/conf.d）。
+# 替换域名、证书路径；端口应与 .env.production 一致。不要原样用于公网。
+map $http_upgrade $copage_connection_upgrade {
+    default upgrade;
+    '' close;
+}
+
+# 不记录 query、Authorization、Referer 或请求体；WS query 中含 JWT。
+log_format copage_safe '$time_iso8601 $remote_addr $request_method $uri '
+                       '$status $body_bytes_sent $request_time';
+
+# 未配置的域名不进入后端或图片服务。
+server {
+    listen 443 ssl default_server;
+    ssl_reject_handshake on;
+    access_log /var/log/nginx/copage-access.log copage_safe;
+}
+
+server {
+    listen 443 ssl;
+    server_name api.example.invalid;
+    access_log /var/log/nginx/copage-access.log copage_safe;
+    server_tokens off;
+    ssl_certificate /etc/letsencrypt/live/api.example.invalid/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.example.invalid/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    client_max_body_size 11m;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:18080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header Connection "";
+    }
+
+    location = /ws/collab {
+        proxy_pass http://127.0.0.1:18080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $copage_connection_upgrade;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_buffering off;
+        # Nginx 错误日志可能附完整 request/query。此位置仅保留脱敏访问日志。
+        error_log /dev/null;
+    }
+
+    location / { return 404; }
+}
+
+server {
+    listen 443 ssl;
+    server_name images.example.invalid;
+    access_log /var/log/nginx/copage-access.log copage_safe;
+    server_tokens off;
+    ssl_certificate /etc/letsencrypt/live/images.example.invalid/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/images.example.invalid/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    # 拒绝桶根目录、列举与管理路径；只代理 collab 桶中的具体对象。
+    location = /collab { return 404; }
+    location = /collab/ { return 404; }
+    location ^~ /collab/ {
+        limit_except GET { deny all; }
+        proxy_pass http://127.0.0.1:19000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+    }
+    location / { return 404; }
+}

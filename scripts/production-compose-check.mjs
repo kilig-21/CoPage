@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { runRecoveryCheck } from './production-recovery-smoke.mjs'
+import { runProxyCheck } from './production-proxy-smoke.mjs'
 
 const cwd = fileURLToPath(new URL('../', import.meta.url))
 const secret = () => randomBytes(32).toString('hex')
@@ -58,7 +59,8 @@ for (const key of Object.keys(settings).filter(key => !key.endsWith('_PORT'))) {
 console.log('PASS: 生产凭据必填、prod profile、非 root 数据库账号、回环端口、独立无演示账号的建表挂载')
 
 const recoverySmoke = process.argv.includes('--recovery-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke
+const proxySmoke = process.argv.includes('--proxy-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke
 if (process.argv.includes('--smoke') || fullSmoke) {
   // 随机项目名只属于本次验收，不触及开发或实际生产项目的数据卷。
   const project = 'copage-prod-qa-' + randomBytes(6).toString('hex')
@@ -131,6 +133,9 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       console.log(smoke.stdout.trim())
       assert.equal(sql("SELECT COUNT(*) FROM user WHERE username IN ('testA','testB');").stdout.trim(), '0')
       console.log('PASS: 两个 prod 后端均就绪，独立注册账号跨实例协同通过，未创建演示账号')
+      if (proxySmoke) {
+        await runProxyCheck({ docker, source: qaDocker, username, password })
+      }
       if (recoverySmoke) {
         await runRecoveryCheck({ docker, base, env: qaEnv, source: qaDocker, sql, port: ports[0], username, password })
       }
