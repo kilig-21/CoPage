@@ -132,7 +132,7 @@ Compose 读取根目录 `.env`；**Spring Boot 不会自动读取这份 `.env`**
 
 正式后端启动时设置 `SPRING_PROFILES_ACTIVE=prod`。此配置要求显式提供 MySQL、Redis、RabbitMQ、Elasticsearch、MinIO 的地址及凭据、`JWT_SECRET`、`FRONTEND_ORIGIN` 和 `MINIO_PUBLIC_ENDPOINT`；缺项或使用演示密钥时会拒绝启动。`FRONTEND_ORIGIN` 必须是无路径的精确 HTTPS 来源，图片公开地址必须使用 HTTPS（可带反向代理路径）。本地 Compose 的 `app` profile 默认仍为开发配置；仅设置 `prod` 不会自动让当前 Compose 具备公网隔离、TLS 和备份能力。
 
-服务器部署另用 [compose.production.yml](compose.production.yml) 与 [.env.production.example](.env.production.example)：独立项目和数据卷、必填正式凭据、非 root 数据库账号、Redis 认证、仅回环开放后端与图片接口。部署及备份步骤见[后端服务器部署说明](docs/后端服务器部署.md)。配置检查用 `node scripts/production-compose-check.mjs`；`--smoke` 验证全新数据库和 Redis，`--full-smoke` 验证完整临时栈及两个 `prod` 后端。临时验收使用独立卷，结束后自动清理；已通过本机验收，公网 TLS 和备份恢复仍待做。
+服务器部署另用 [compose.production.yml](compose.production.yml) 与 [.env.production.example](.env.production.example)：独立项目和数据卷、必填正式凭据、非 root 数据库账号、Redis 认证、仅回环开放后端与图片接口。部署及备份步骤见[后端服务器部署说明](docs/后端服务器部署.md)。配置检查用 `node scripts/production-compose-check.mjs`；`--smoke` 验证全新数据库和 Redis，`--full-smoke` 验证完整临时栈及两个 `prod` 后端，`--recovery-smoke` 备份合成文档和图片并恢复到另一组新卷。临时验收使用独立卷，结束后自动清理；公网 TLS 和真实服务器恢复仍待做。
 
 可选的第二后端实例：
 

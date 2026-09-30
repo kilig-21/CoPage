@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
+import { runRecoveryCheck } from './production-recovery-smoke.mjs'
 
 const cwd = fileURLToPath(new URL('../', import.meta.url))
 const secret = () => randomBytes(32).toString('hex')
@@ -23,8 +24,8 @@ const env = { ...process.env, ...settings }
 delete env.COMPOSE_PROJECT_NAME
 const base = ['compose', '--env-file', '.env.production.example', '-f', 'compose.production.yml']
 
-function docker(args, { input, customEnv = env, allowFailure = false } = {}) {
-  const result = spawnSync('docker', args, { cwd, env: customEnv, input, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 })
+function docker(args, { input, customEnv = env, allowFailure = false, binary = false } = {}) {
+  const result = spawnSync('docker', args, { cwd, env: customEnv, input, encoding: binary ? undefined : 'utf8', maxBuffer: 16 * 1024 * 1024 })
   if (result.error) throw result.error
   // Compose config 的 stdout 可能包含随机测试凭据，不把它写入日志。
   if (!allowFailure && result.status !== 0) {
@@ -56,7 +57,8 @@ for (const key of Object.keys(settings).filter(key => !key.endsWith('_PORT'))) {
 }
 console.log('PASS: 生产凭据必填、prod profile、非 root 数据库账号、回环端口、独立无演示账号的建表挂载')
 
-const fullSmoke = process.argv.includes('--full-smoke')
+const recoverySmoke = process.argv.includes('--recovery-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke
 if (process.argv.includes('--smoke') || fullSmoke) {
   // 随机项目名只属于本次验收，不触及开发或实际生产项目的数据卷。
   const project = 'copage-prod-qa-' + randomBytes(6).toString('hex')
@@ -129,6 +131,9 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       console.log(smoke.stdout.trim())
       assert.equal(sql("SELECT COUNT(*) FROM user WHERE username IN ('testA','testB');").stdout.trim(), '0')
       console.log('PASS: 两个 prod 后端均就绪，独立注册账号跨实例协同通过，未创建演示账号')
+      if (recoverySmoke) {
+        await runRecoveryCheck({ docker, base, env: qaEnv, source: qaDocker, sql, port: ports[0], username, password })
+      }
     } else {
       // 在临时库单独应用开发种子，核对拆分后本地演示仍可初始化。
       sql(readFileSync(new URL('../backend/src/main/resources/db/demo-users.sql', import.meta.url), 'utf8'), true)
