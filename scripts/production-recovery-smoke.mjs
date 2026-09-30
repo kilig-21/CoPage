@@ -101,7 +101,8 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
     const publicPath = new URL(publicUrl).pathname
     const clientId = randomUUID()
     const firstId = randomUUID()
-    const firstOp = { ops: [{ insert: '恢复验收 ' }, { insert: { image: publicUrl } }] }
+    const bodyMarker = 'recoverybody' + randomBytes(8).toString('hex')
+    const firstOp = { ops: [{ insert: '恢复验收 ' + bodyMarker + ' ' }, { insert: { image: publicUrl } }] }
     socket = await connect(port, docId, clientId)
     assert.equal((await socket.submit(firstId, 0, firstOp)).revision, 1)
     for (let index = 1; index < 20; index++) {
@@ -150,7 +151,13 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
     assertProject(targetMinio, restoredProject)
     docker(['run', '--rm', '-i', '--network', 'none', '--volumes-from', targetMinio,
       'redis:7.4.1-alpine', 'sh', '-ec', 'test -z "$(ls -A /data)"; tar -xzf - -C /data'], { input: readFileSync(imageFile) })
-    destination(['up', '-d', '--no-build', '--wait', '--wait-timeout', '150'])
+    // 先让基础服务就绪并确认 ES 没有业务索引，再启动应用，排除复用旧索引。
+    destination(['up', '-d', '--no-build', '--wait', '--wait-timeout', '150',
+      'mysql', 'redis', 'rabbitmq', 'elasticsearch', 'minio', 'minio-init'])
+    const emptyIndex = destination(['exec', '-T', 'elasticsearch', 'curl', '-sS',
+      '-o', '/dev/null', '-w', '%{http_code}', 'http://localhost:9200/collab_documents']).stdout.trim()
+    assert.equal(emptyIndex, '404', '恢复目标的 ES 必须从不存在的业务索引开始')
+    destination(['up', '-d', '--no-build', '--wait', '--wait-timeout', '150', 'backend'])
     const getPort = service => {
       const address = destination(['port', service, service === 'backend' ? '8080' : '9000']).stdout.trim()
       assert.match(address, /^127\.0\.0\.1:\d+$/)
@@ -175,11 +182,29 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
     assert.equal(restored.revision, original.revision)
     assert.deepEqual(restored.content, original.content)
     assert.equal(readSql(destination, query), durableHistory, '操作历史、幂等收据和快照必须完整恢复')
+    const searchPath = q => '/search?q=' + encodeURIComponent(q)
+    const assertSearchHit = result => {
+      assert.equal(result.total, 1)
+      assert.deepEqual(result.list.map(hit => hit.id), [docId])
+      assert.equal(result.list[0].title, title)
+    }
+    // 此前只读取恢复数据，没有产生编辑或索引通知；命中来自 MySQL 定时重建。
+    const searchDeadline = Date.now() + 70_000
+    let searchResult
+    while (Date.now() < searchDeadline) {
+      searchResult = await api(restoredPort, searchPath(title))
+      if (searchResult.total === 1) break
+      await new Promise(resolve => setTimeout(resolve, 500))
+    }
+    assertSearchHit(searchResult)
+    assertSearchHit(await api(restoredPort, searchPath(bodyMarker)))
     const recoveredImage = await fetch(origin(minioPort) + publicPath, { signal: AbortSignal.timeout(5000) })
     assert.equal(recoveredImage.status, 200)
     assert.equal(sha256(Buffer.from(await recoveredImage.arrayBuffer())), sha256(image))
     token = (await api(restoredPort, '/auth/login', 'POST', viewer)).token
     assert.equal((await api(restoredPort, '/doc/' + docId)).permission, 1)
+    assertSearchHit(await api(restoredPort, searchPath(title)))
+    assertSearchHit(await api(restoredPort, searchPath(bodyMarker)))
     socket = await connect(restoredPort, docId, randomUUID(), 20)
     const forbidden = await socket.submit(randomUUID(), 20, { ops: [{ insert: '不应提交' }] }, 'error')
     assert.equal(forbidden.code, 403, '恢复后的只读协作者不得提交操作')
@@ -190,6 +215,12 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
       headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(5000),
     })
     assert.equal(denied.status, 403, '恢复后无权账号仍不得访问文档')
+    for (const q of [title, bodyMarker]) {
+      const hidden = await api(restoredPort, searchPath(q))
+      assert.equal(hidden.total, 0, '无权账号不得获知搜索命中数量')
+      assert.deepEqual(hidden.list, [], '无权账号不得读取搜索摘要')
+    }
+    console.log('PASS: 空 ES 从 MySQL 自动重建标题/正文索引；所有者及只读协作者可检索，无权账号零命中且无摘要')
     token = (await api(restoredPort, '/auth/login', 'POST', { username, password })).token
     socket = await connect(restoredPort, docId, clientId, 18)
     assert.equal(socket.sync.revision, 20)

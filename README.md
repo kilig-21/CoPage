@@ -134,6 +134,8 @@ Compose 读取根目录 `.env`；**Spring Boot 不会自动读取这份 `.env`**
 
 服务器部署另用 [compose.production.yml](compose.production.yml) 与 [.env.production.example](.env.production.example)：独立项目和数据卷、必填正式凭据、非 root 数据库账号、Redis 认证、仅回环开放后端与图片接口。部署及备份步骤见[后端服务器部署说明](docs/后端服务器部署.md)。配置检查用 `node scripts/production-compose-check.mjs`；`--smoke` 验证全新数据库和 Redis，`--full-smoke` 验证完整临时栈及两个 `prod` 后端，`--recovery-smoke` 备份合成文档和图片并恢复到另一组新卷。临时验收使用独立卷，结束后自动清理；公网 TLS 和真实服务器恢复仍待做。
 
+2026-09-30 恢复烟测还验证了空 ES 从 MySQL 自动重建标题/正文索引：所有者与只读协作者可检索，无权账号零命中且不返回摘要；恢复后的历史/收据、快照、图片字节、去重与继续编辑均通过。
+
 可选的第二后端实例：
 
 ```powershell
