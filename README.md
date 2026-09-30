@@ -77,7 +77,7 @@ docker compose ps -a
 
 MySQL、Redis 和 RabbitMQ 的宿主机端口已避开常用默认值，避免与其他项目冲突。更改映射时，需同步修改后端连接配置。
 
-MySQL **空数据卷首次初始化**会执行 [schema.sql](backend/src/main/resources/db/schema.sql)，创建表和演示账号；演示昵称以 UTF-8 字节常量写入，避免 Windows shell 导入时乱码。已有数据卷不会重复执行整份 SQL；若旧演示账号昵称已乱码，须先核对具体记录再定点修复，不能为此删除数据卷。操作幂等收据表及其指纹字段另有应用启动补建逻辑。
+本地 MySQL **空数据卷首次初始化**会依次执行 [schema.sql](backend/src/main/resources/db/schema.sql) 建表及 [demo-users.sql](backend/src/main/resources/db/demo-users.sql) 创建演示账号；演示昵称以 UTF-8 字节常量写入，避免 Windows shell 导入时乱码。服务器配置只挂载建表脚本，不初始化演示账号。已有数据卷不会重复执行 SQL；若旧演示账号昵称已乱码，须先核对具体记录再定点修复，不能为此删除数据卷。操作幂等收据表及其指纹字段另有应用启动补建逻辑。
 
 ### 3. 启动 Java 后端
 
@@ -116,7 +116,7 @@ Compose 读取根目录 `.env`；**Spring Boot 不会自动读取这份 `.env`**
 | 后端变量 | 用途 |
 | --- | --- |
 | `MYSQL_URL`、`MYSQL_USER`、`MYSQL_PASSWORD` | JDBC 地址、数据库用户和密码 |
-| `REDIS_HOST`、`REDIS_PORT` | Redis 连接 |
+| `REDIS_HOST`、`REDIS_PORT`、`REDIS_PASSWORD` | Redis 连接；密码在 `prod` profile 必填，本地开发不要求 |
 | `RABBITMQ_HOST`、`RABBITMQ_PORT`、`RABBITMQ_USER`、`RABBITMQ_PASSWORD` | RabbitMQ 连接 |
 | `ELASTICSEARCH_URIS` | Elasticsearch 地址 |
 | `MINIO_ENDPOINT`、`MINIO_PUBLIC_ENDPOINT` | 后端访问地址、返回给浏览器的可访问地址 |
@@ -131,6 +131,8 @@ Compose 读取根目录 `.env`；**Spring Boot 不会自动读取这份 `.env`**
 本地 Compose 的 MinIO 桶 `collab` 为公共读，ES 未开启认证；默认账号、密码和 JWT 密钥只用于本地开发。对外部署前需替换凭据、配置网络访问和 HTTPS/WSS，部署验收尚未完成。
 
 正式后端启动时设置 `SPRING_PROFILES_ACTIVE=prod`。此配置要求显式提供 MySQL、Redis、RabbitMQ、Elasticsearch、MinIO 的地址及凭据、`JWT_SECRET`、`FRONTEND_ORIGIN` 和 `MINIO_PUBLIC_ENDPOINT`；缺项或使用演示密钥时会拒绝启动。`FRONTEND_ORIGIN` 必须是无路径的精确 HTTPS 来源，图片公开地址必须使用 HTTPS（可带反向代理路径）。本地 Compose 的 `app` profile 默认仍为开发配置；仅设置 `prod` 不会自动让当前 Compose 具备公网隔离、TLS 和备份能力。
+
+服务器部署另用 [compose.production.yml](compose.production.yml) 与 [.env.production.example](.env.production.example)：独立项目和数据卷、必填正式凭据、非 root 数据库账号、Redis 认证、仅回环开放后端与图片接口。部署及备份步骤见[后端服务器部署说明](docs/后端服务器部署.md)。配置检查用 `node scripts/production-compose-check.mjs`；`--smoke` 验证全新数据库和 Redis，`--full-smoke` 验证完整临时栈及两个 `prod` 后端。临时验收使用独立卷，结束后自动清理；已通过本机验收，公网 TLS 和备份恢复仍待做。
 
 可选的第二后端实例：
 
