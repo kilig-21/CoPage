@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { FileTextOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
-import { Alert, Avatar, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Space, Typography, message } from 'antd'
-import { Link, useNavigate } from 'react-router-dom'
+import { CloseCircleOutlined, FileTextOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import { Alert, Avatar, Button, Card, Empty, Input, Layout, List, Pagination, Popconfirm, Space, Typography, message } from 'antd'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
 import CollaboratorModal from '../components/CollaboratorModal'
 import ImportModal from '../components/ImportModal'
+import RenameModal from '../components/RenameModal'
 
 const PAGE_SIZE = 20
 
@@ -13,11 +14,17 @@ export default function DocList() {
   const navigate = useNavigate()
   const [docs, setDocs] = useState([])
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const keyword = (searchParams.get('keyword') || '').slice(0, 200).trim()
+  const rawPage = Number(searchParams.get('page') || 1)
+  const page = Number.isSafeInteger(rawPage) && rawPage > 0 && rawPage <= 1_000_000 ? rawPage : 1
+  const [filter, setFilter] = useState(keyword)
+  const setPage = next => setSearchParams({ ...(keyword ? { keyword } : {}), page: String(next) })
+  useEffect(() => setFilter(keyword), [keyword])
+  const applyFilter = value => setSearchParams(value.trim() ? { keyword: value.trim() } : {})
   const [refresh, setRefresh] = useState(0)
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(null)
-  const [title, setTitle] = useState('')
   const [loadError, setLoadError] = useState('')
   const [creating, setCreating] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -26,7 +33,7 @@ export default function DocList() {
     const controller = new AbortController()
     setLoading(true)
     setLoadError('')
-    request.get('/doc/list', { params: { page, size: PAGE_SIZE }, signal: controller.signal })
+    request.get('/doc/list', { params: { page, size: PAGE_SIZE, keyword }, signal: controller.signal })
       .then((response) => {
         if (controller.signal.aborted) return
         const lastPage = Math.max(1, Math.ceil(response.data.total / PAGE_SIZE))
@@ -41,7 +48,7 @@ export default function DocList() {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [page, refresh])
+  }, [page, keyword, refresh])
 
   async function createDocument() {
     if (creating) return
@@ -52,20 +59,6 @@ export default function DocList() {
     } catch (error) {
       message.error(error?.message || '创建文档失败')
     } finally { setCreating(false) }
-  }
-
-  async function renameDocument() {
-    if (!title.trim()) {
-      message.warning('请输入文档标题')
-      return
-    }
-    try {
-      await request.put('/doc/' + editing.id, { title: title.trim() })
-      setEditing(null)
-      setRefresh((value) => value + 1)
-    } catch (error) {
-      message.error(error?.message || '重命名失败')
-    }
   }
 
   async function deleteDocument(id) {
@@ -87,7 +80,7 @@ export default function DocList() {
     <Layout className="app-shell">
       <header className="topbar">
         <Typography.Title level={4}>协同文档</Typography.Title>
-        <Space>
+        <Space wrap>
           <Button icon={<SearchOutlined />} onClick={() => navigate('/search')}>搜索</Button>
           <Button onClick={() => navigate('/trash')}>回收站</Button>
           <Avatar>{(localStorage.getItem('collab-user') || 'A').slice(0, 1).toUpperCase()}</Avatar>
@@ -103,23 +96,28 @@ export default function DocList() {
             <Button type="primary" icon={<PlusOutlined />} loading={creating} onClick={createDocument}>新建文档</Button>
           </Space>
         </div>
+        <Input.Search className="search-box" aria-label="按文档标题筛选" placeholder="按标题筛选我的文档"
+          maxLength={200} value={filter} allowClear={{ clearIcon: <CloseCircleOutlined aria-label="清除标题输入" /> }} enterButton="筛选"
+          onChange={event => setFilter(event.target.value)} onSearch={applyFilter} />
+        {keyword && <div className="filter-summary"><span>标题包含“{keyword}”</span>
+          <Button type="link" onClick={() => applyFilter('')}>清除筛选</Button></div>}
         <Card className="doc-list-card">
           {loadError && <Alert type="error" showIcon message={loadError}
             action={<Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>重试</Button>} />}
           <List
             loading={loading}
             dataSource={docs}
-            locale={{ emptyText: loading ? '正在加载…' : loadError ? '列表暂不可用' : <Empty description="还没有文档，先新建一篇吧" /> }}
+            locale={{ emptyText: loading ? '正在加载…' : loadError ? '列表暂不可用' : <Empty description={keyword ? "没有匹配的标题，试试其他关键词" : "还没有文档，先新建一篇吧"} /> }}
             renderItem={(doc) => (
               <List.Item actions={[
                 <Link key="open" to={'/docs/' + doc.id}>打开</Link>,
-                doc.permission === 2 && <Button key="rename" type="link" onClick={() => { setEditing(doc); setTitle(doc.title) }}>重命名</Button>,
+                doc.permission === 2 && <Button key="rename" type="link" onClick={() => setEditing(doc)}>重命名</Button>,
                 doc.isOwner && <Button key="members" type="link" onClick={() => setManaging(doc)}>协作者管理</Button>,
                 doc.isOwner && <Popconfirm key="delete" title="将这篇文档移入回收站？" description="协作者将停止访问，你可以在回收站恢复。" onConfirm={() => deleteDocument(doc.id)}>
                   <Button type="link" danger>删除</Button>
                 </Popconfirm>,
               ].filter(Boolean)}>
-                <List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={doc.title} description={doc.ownerName + ' · ' + doc.updateTime} />
+                <List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={<Link to={'/docs/' + doc.id}>{doc.title}</Link>} description={doc.ownerName + ' · ' + doc.updateTime} />
               </List.Item>
             )}
           />
@@ -129,9 +127,8 @@ export default function DocList() {
       </main>
       {managing && <CollaboratorModal doc={managing} onClose={() => setManaging(null)} />}
       {importing && <ImportModal onClose={() => setImporting(false)} onCreated={id => navigate('/docs/' + id)} />}
-      <Modal title="重命名文档" open={Boolean(editing)} onOk={renameDocument} onCancel={() => setEditing(null)}>
-        <Input maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} onPressEnter={renameDocument} />
-      </Modal>
+      {editing && <RenameModal doc={editing} onClose={() => setEditing(null)}
+        onSaved={() => setRefresh(value => value + 1)} />}
     </Layout>
   )
 }

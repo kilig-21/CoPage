@@ -115,6 +115,11 @@ public class DocumentService {
         }
     }
 
+    public RenameView metadata(long docId) {
+        DocumentRow row = requireVisible(docId, currentUserId());
+        return new RenameView(row.id(), row.title(), format(row.updateTime()));
+    }
+
     @Transactional
     public RenameView rename(long docId, String title) {
         long userId = currentUserId();
@@ -127,6 +132,7 @@ public class DocumentService {
         }
         indexAfterCommit(docId);
         DocumentRow updated = documents.find(docId).orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
+        if (lifecycle != null) lifecycle.publishEvent(new DocumentRenamed(docId));
         return new RenameView(updated.id(), updated.title(), format(updated.updateTime()));
     }
 
@@ -166,6 +172,7 @@ public class DocumentService {
     public record TrashItem(long id,String title,String deletedAt) { }
     public record TrashView(long total,List<TrashItem> list) { }
     public record DocumentDeleted(long docId) { }
+    public record DocumentRenamed(long docId) { }
 
     public int permissionFor(long docId, long userId) {
         return permission(requireVisible(docId, userId), userId);

@@ -28,6 +28,35 @@ class DocumentServiceTest {
     }
 
     @Test
+    void metadataRequiresCurrentVisibilityAndNeverReturnsBody() throws Exception {
+        when(repository.find(5L)).thenReturn(Optional.of(row));
+        assertEquals(ErrorCode.UNAUTHORIZED, assertThrows(BizException.class, () -> service.metadata(5)).getErrorCode());
+        UserContext.set(2L, "reader");
+        assertEquals(ErrorCode.FORBIDDEN, assertThrows(BizException.class, () -> service.metadata(5)).getErrorCode());
+        when(repository.collaboratorPermission(5L, 2L)).thenReturn(1);
+        var metadata = new ObjectMapper().valueToTree(service.metadata(5));
+        assertEquals(3, metadata.size());
+        assertEquals("需求", metadata.get("title").asText());
+        assertFalse(metadata.has("content"));
+        when(repository.find(5L)).thenReturn(Optional.empty());
+        assertEquals(ErrorCode.NOT_FOUND, assertThrows(BizException.class, () -> service.metadata(5)).getErrorCode());
+    }
+
+    @Test
+    void renameEmitsInvalidationOnlyAfterSuccessfulWrite() {
+        var publisher = mock(org.springframework.context.ApplicationEventPublisher.class);
+        var withEvents = new DocumentService(repository, new ObjectMapper(), null, publisher);
+        UserContext.set(1L, "owner");
+        when(repository.find(5L)).thenReturn(Optional.of(row));
+        assertThrows(BizException.class, () -> withEvents.rename(5, ""));
+        assertThrows(BizException.class, () -> withEvents.rename(5, "新标题"));
+        verifyNoInteractions(publisher);
+        when(repository.rename(5L, "新标题")).thenReturn(true);
+        withEvents.rename(5, "新标题");
+        verify(publisher).publishEvent(new DocumentService.DocumentRenamed(5));
+    }
+
+    @Test
     void ownerReadsContentAndRevisionFromSameRow() {
         UserContext.set(1L, "owner");
         when(repository.find(5L)).thenReturn(Optional.of(row));

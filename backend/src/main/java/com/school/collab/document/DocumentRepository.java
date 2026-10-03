@@ -18,7 +18,7 @@ public class DocumentRepository {
             (d.owner_id = ? OR EXISTS (
                 SELECT 1 FROM doc_collaborator c
                 WHERE c.doc_id = d.id AND c.user_id = ?
-            )) AND (? = '' OR d.title LIKE CONCAT('%', ?, '%'))
+            )) AND (? = '' OR LOCATE(?, d.title) > 0)
             """;
     private static final RowMapper<DocumentRow> ROW_MAPPER = (rs, rowNum) -> new DocumentRow(
             rs.getLong("id"),

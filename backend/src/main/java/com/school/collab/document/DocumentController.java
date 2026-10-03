@@ -64,6 +64,11 @@ public class DocumentController {
         return Result.ok(documents.detail(id));
     }
 
+    @GetMapping("/{id}/metadata")
+    public Result<DocumentService.RenameView> metadata(@PathVariable long id) {
+        return Result.ok(documents.metadata(id));
+    }
+
     @PutMapping("/{id}")
     public Result<DocumentService.RenameView> rename(
             @PathVariable long id, @Valid @RequestBody RenameRequest request

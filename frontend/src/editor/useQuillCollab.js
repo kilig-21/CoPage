@@ -18,6 +18,9 @@ export default function useQuillCollab(docId) {
   const [users, setUsers] = useState([])
   const [error, setError] = useState('')
   const [title, setTitle] = useState('')
+  const [saveStatus, setSaveStatus] = useState('等待同步')
+  const [titleError, setTitleError] = useState('')
+  const refreshTitleRef = useRef(null)
   const [permission, setPermission] = useState(0)
   const [isOwner, setIsOwner] = useState(false)
   const [recoveryDraft, setRecoveryDraft] = useState(null)
@@ -30,6 +33,11 @@ export default function useQuillCollab(docId) {
     if (!host || !Number.isSafeInteger(docId) || docId <= 0) return undefined
     let active = true
     setConnection('加载中')
+    setTitle('')
+    setTitleError('')
+    setSaveStatus('等待同步')
+    setRecoveryDraft(null)
+    setUsers([])
     setError('')
     setPermission(0)
     setIsOwner(false)
@@ -66,6 +74,9 @@ export default function useQuillCollab(docId) {
     })
     host.appendChild(imageInput)
     quill.enable(false)
+    quill.root.setAttribute('role', 'textbox')
+    quill.root.setAttribute('aria-label', '文档正文')
+    quill.root.setAttribute('aria-multiline', 'true')
     quillRef.current = quill
     const cursorLayer = new RemoteCursorLayer(quill)
     const Delta = Quill.import('delta')
@@ -84,6 +95,29 @@ export default function useQuillCollab(docId) {
     let uploading = false
     let imageInsertIndex = null
     let uploadController = null
+    let titleController = null
+    const refreshTitle = async () => {
+      titleController?.abort()
+      const controller = new AbortController()
+      titleController = controller
+      try {
+        const response = await request.get('/doc/' + docId + '/metadata', { signal: controller.signal })
+        if (active && !controller.signal.aborted) { setTitle(response.data.title); setTitleError('') }
+      } catch {
+        if (active && !controller.signal.aborted) setTitleError('标题暂未更新，请重试')
+      }
+    }
+    refreshTitleRef.current = refreshTitle
+    const updateSaveStatus = () => {
+      if (!active) return
+      const pending = client.hasUnconfirmedChanges()
+      setSaveStatus(recoveryActionsRef.current ? '等待恢复本地草稿'
+        : !connected || !synced ? (pending ? '有修改尚未同步' : '等待同步')
+        : uploading ? '正在上传图片'
+        : composing ? '正在输入'
+        : pending ? '正在保存…'
+        : canEdit ? '所有修改已保存' : '只读 · 内容已同步')
+    }
     const updateEditable = () => quill.enable(canEdit && connected && synced)
     let cursorSendTimer = null
     let lastSentCursor = null
@@ -141,6 +175,7 @@ export default function useQuillCollab(docId) {
         return
       }
       uploading = true
+      updateSaveStatus()
       const controller = new AbortController()
       uploadController = controller
       try {
@@ -158,6 +193,7 @@ export default function useQuillCollab(docId) {
         if (active && !controller.signal.aborted) setError(uploadError?.message || '图片上传失败')
       } finally {
         uploading = false
+        updateSaveStatus()
         uploadController = null
         imageInsertIndex = null
       }
@@ -204,7 +240,9 @@ export default function useQuillCollab(docId) {
         if (!synced) abortImageUpload()
         updateEditable()
         setConnection({ ready: '已连接', syncing: '正在恢复编辑', offline: '正在重连', blocked: client.hasUnconfirmedChanges() ? '本地内容已保留' : '已暂停' }[state])
+        updateSaveStatus()
         if (state === 'ready') {
+          refreshTitle()
           setError('')
           scheduleCursor()
         }
@@ -223,6 +261,7 @@ export default function useQuillCollab(docId) {
       },
       onMessage: (message) => {
         if (!active) return
+        if (message.type === 'metadata' && message.docId === docId) { refreshTitle(); return }
         flushComposition()
         if (message.docId === docId && [0, 1, 2].includes(message.permission)) {
           setPermission(message.permission)
@@ -285,6 +324,7 @@ export default function useQuillCollab(docId) {
     })
 
     const persistDraft = () => {
+      updateSaveStatus()
       if (!draftPrefix || recoveryActionsRef.current) return
       const key = draftPrefix + client.clientId
       try {
@@ -338,7 +378,7 @@ export default function useQuillCollab(docId) {
       }
       submit(delta)
     }
-    const onCompositionStart = () => { composing = true }
+    const onCompositionStart = () => { composing = true; updateSaveStatus() }
     const flushComposition = () => {
       if (!compositionDirty) return
       compositionDirty = false
@@ -347,6 +387,7 @@ export default function useQuillCollab(docId) {
     const onCompositionEnd = () => {
       composing = false
       flushComposition()
+      updateSaveStatus()
     }
     const onSelectionChange = (range, _old, source) => {
       if (source === 'user' || range === null) scheduleCursor()
@@ -400,6 +441,7 @@ export default function useQuillCollab(docId) {
         if (!active) return
         if (stored) {
           setConnection('等待恢复选择')
+          setSaveStatus('等待恢复本地草稿')
           setRecoveryDraft({ savedAt: stored.draft.savedAt })
           recoveryActionsRef.current = {
             recover: () => {
@@ -443,6 +485,8 @@ export default function useQuillCollab(docId) {
       flushComposition()
       persistDraft()
       active = false
+      titleController?.abort()
+      refreshTitleRef.current = null
       window.clearInterval(cursorKeepaliveTimer)
       quill.off('text-change', onTextChange)
       quill.off('selection-change', onSelectionChange)
@@ -468,7 +512,8 @@ export default function useQuillCollab(docId) {
   }, [docId])
 
   return {
-    editorHostRef, connection, users, error, title, permission, isOwner, recoveryDraft,
+    editorHostRef, connection, users, error, title, permission, isOwner, recoveryDraft, saveStatus, titleError,
+    refreshTitle: () => refreshTitleRef.current?.(),
     recoverDraft: () => recoveryActionsRef.current?.recover(),
     discardDraft: () => recoveryActionsRef.current?.discard(),
     canRestoreHistory: () => Boolean(historyReadyRef.current?.()),

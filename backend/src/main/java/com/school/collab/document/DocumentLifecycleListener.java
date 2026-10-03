@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-/** 删除事务提交后通知所有实例逐次查权限，不在消息中携带正文。 */
+/** 事务提交后通知所有实例；仅发送失效通知，接收方按当前权限重新读取。 */
 @Component
 public class DocumentLifecycleListener {
     private static final Logger log=LoggerFactory.getLogger(DocumentLifecycleListener.class);
@@ -19,5 +19,11 @@ public class DocumentLifecycleListener {
     public void deleted(DocumentService.DocumentDeleted event) {
         try { events.publish(event.docId(),"",mapper.createObjectNode().put("type","permission").put("docId",event.docId())); }
         catch(RuntimeException ex) {log.warn("文档已移入回收站，连接通知暂时失败，将由心跳补偿, docId={}",event.docId());}
+    }
+
+    @TransactionalEventListener
+    public void renamed(DocumentService.DocumentRenamed event) {
+        try { events.publish(event.docId(), "", mapper.createObjectNode().put("type", "metadata").put("docId", event.docId())); }
+        catch (RuntimeException ex) { log.warn("文档标题已保存，通知暂时失败，重连时将重新读取, docId={}", event.docId()); }
     }
 }
