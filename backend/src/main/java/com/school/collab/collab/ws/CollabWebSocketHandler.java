@@ -59,6 +59,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
             switch (type) {
                 case "join" -> join(session, payload);
                 case "op" -> commit(session, payload);
+                case "history_request" -> historyPage(session, payload);
                 case "cursor" -> cursor(session, payload);
                 case "ping" -> ping(session);
                 default -> throw new CollabException(400, "不支持的消息类型: " + type);
@@ -120,6 +121,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
                     .put("permission", documents.permissionFor(docId, userId))
                     .put("fromRevision", lastRevision).put("revision", state.revision())
                     .put("historyComplete", state.historyComplete());
+            sync.put("historyPaged", state.historyPaged());
             if (syncId != null) sync.put("syncId", syncId);
             sync.set("content", objectMapper.valueToTree(state.content()));
             sync.set("pendingCommittedRevision", objectMapper.valueToTree(state.pendingCommittedRevision()));
@@ -130,6 +132,25 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
             send(info.session(), sync);
         });
         publishPresence(docId);
+    }
+
+    private void historyPage(WebSocketSession session, JsonNode payload) {
+        var info = registry.require(session);
+        long docId = requiredPositiveLong(payload, "docId");
+        if (info.docId() != docId) throw new CollabException(403, "未加入该文档");
+        String syncId = requiredText(payload, "syncId");
+        if (syncId.length() > 128) throw new CollabException(400, "syncId 过长");
+        documents.permissionFor(docId, info.userId());
+        var page = docRevService.historyPage(docId, requiredNonNegativeLong(payload, "afterRevision"),
+                requiredNonNegativeLong(payload, "throughRevision"));
+        var response = objectMapper.createObjectNode().put("type", "history_page").put("docId", docId)
+                .put("syncId", syncId).put("fromRevision", page.fromRevision()).put("toRevision", page.toRevision())
+                .put("revision", page.revision()).put("permission", documents.permissionFor(docId, info.userId()));
+        // VersionedOperation 字段名为 operation，协议仍使用 op。
+        var history = response.putArray("history");
+        page.history().forEach(entry -> history.addObject().put("revision", entry.revision())
+                .set("op", objectMapper.valueToTree(entry.operation())));
+        send(info.session(), response);
     }
 
     private void commit(WebSocketSession session, JsonNode payload) {

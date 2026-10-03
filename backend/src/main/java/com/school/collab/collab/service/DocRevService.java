@@ -99,6 +99,10 @@ public class DocRevService {
             }
             boolean complete = lastRevision <= snapshot.revision()
                     && snapshot.revision() - lastRevision <= HISTORY_LIMIT;
+            long minimum = persistence == null ? store.minimumAvailableBaseRevision(docId) : persistence.minimumRevision(docId);
+            complete = complete && lastRevision >= minimum;
+            boolean paged = persistence != null && lastRevision >= minimum && lastRevision <= snapshot.revision()
+                    && snapshot.revision() - lastRevision > HISTORY_LIMIT;
             List<VersionedOperation> history = List.of();
             if (complete) {
                 history = persistence == null
@@ -118,8 +122,25 @@ public class DocRevService {
                 history = List.of();
             }
             onJoined.accept(new JoinState(snapshot.revision(), snapshot.content(), complete,
-                    history, committedRevision));
+                    history, committedRevision, paged));
             return null;
+        });
+    }
+
+    /** 固定 throughRevision，每页有界读取；前后页之间可提交新版本但不会改变追赶边界。 */
+    public HistoryPage historyPage(long docId, long after, long through) {
+        if (after < 0 || through < after) throw new CollabException(400, "追赶版本范围无效");
+        return inspect(docId, current -> {
+            if (through > current.revision()) throw new CollabException(40902, "追赶版本超前");
+            long minimum = persistence == null ? store.minimumAvailableBaseRevision(docId) : persistence.minimumRevision(docId);
+            if (after < minimum) throw new CollabException(40903, "历史已超出保留范围，本地内容仍应保留");
+            List<VersionedOperation> history = persistence == null
+                    ? store.operationsAfter(docId, after).stream().filter(op -> op.revision() <= through).limit(256).toList()
+                    : persistence.operationsPage(docId, after, through, 256);
+            long expected = after;
+            for (var op : history) if (op.revision() != ++expected) throw new CollabException(40903, "追赶历史有缺口");
+            if (after < through && history.isEmpty()) throw new CollabException(40903, "追赶历史缺失");
+            return new HistoryPage(after, expected, through, history);
         });
     }
 
@@ -194,6 +215,11 @@ public class DocRevService {
         });
     }
 
+    public <T> T maintenanceLock(long docId, Supplier<T> action) {
+        validateDocId(docId);
+        return store.withDocumentLock(docId, action);
+    }
+
     private CommitResult commitLocked(long docId, long baseRevision,
             Function<CollabDocumentSnapshot, Delta> operationFactory, Long userId,
             String clientId, String opId, String requestHash, boolean strict,
@@ -218,6 +244,9 @@ public class DocRevService {
             }
             if (baseRevision > current.revision()) {
                 throw new CollabException(40902, "客户端版本超前");
+            }
+            if (persistence != null && baseRevision < persistence.minimumRevision(docId)) {
+                throw new CollabException(40903, "操作基线超出保留范围，拒绝重放过期操作");
             }
             Delta transformed = operationFactory.apply(current).copy();
             var history = persistence == null
@@ -321,8 +350,14 @@ public class DocRevService {
     }
 
     public record JoinState(long revision, Delta content, boolean historyComplete,
-                            List<VersionedOperation> history, Long pendingCommittedRevision) {
+                            List<VersionedOperation> history, Long pendingCommittedRevision, boolean historyPaged) {
+        public JoinState(long revision, Delta content, boolean historyComplete,
+                         List<VersionedOperation> history, Long pendingCommittedRevision) {
+            this(revision, content, historyComplete, history, pendingCommittedRevision, false);
+        }
     }
+
+    public record HistoryPage(long fromRevision, long toRevision, long revision, List<VersionedOperation> history) { }
 
     public record CommitResult(long revision, Delta operation, boolean applied) {
         public CommitResult(long revision, Delta operation) {

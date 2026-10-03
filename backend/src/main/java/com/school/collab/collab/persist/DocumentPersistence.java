@@ -111,6 +111,23 @@ public class DocumentPersistence {
         return revisions.getFirst();
     }
 
+    public long minimumRevision(long docId) {
+        var rows = jdbc.query("SELECT revision FROM doc_history_boundary WHERE doc_id = ?",
+                (rs, n) -> rs.getLong(1), docId);
+        return rows.isEmpty() ? 0 : rows.getFirst();
+    }
+
+    public List<VersionedOperation> operationsPage(long docId, long after, long through, int limit) {
+        return jdbc.query("""
+                SELECT revision, op FROM (
+                    SELECT revision, op, SUM(OCTET_LENGTH(op)) OVER(ORDER BY revision) AS bytes FROM (
+                        SELECT revision, op FROM doc_operation WHERE doc_id = ? AND revision > ? AND revision <= ?
+                        ORDER BY revision LIMIT ?
+                    ) candidates
+                ) sized WHERE bytes <= 1048576 OR revision = ? ORDER BY revision
+                """, (rs, n) -> new VersionedOperation(rs.getLong(1), read(rs.getString(2))), docId, after, through, limit, after + 1);
+    }
+
     public boolean operationExists(long docId, long revision) {
         Integer count = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM doc_operation WHERE doc_id = ? AND revision = ?",
@@ -170,16 +187,22 @@ public class DocumentPersistence {
 
     private void persistOperation(long docId, long expectedRevision, Delta content,
                                   Delta operation, Long userId) {
+        String contentJson = write(content);
+        String operationJson = write(operation);
+        if (contentJson.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 2 * 1024 * 1024
+                || operationJson.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 4 * 1024 * 1024) {
+            throw new CollabException(400, "文档正文最多 2 MiB，单次修改最多 4 MiB；图片使用上传地址保存");
+        }
         int updated = jdbc.update("""
                 UPDATE document SET content = ?, revision = revision + 1,
                        update_time = CURRENT_TIMESTAMP
                 WHERE id = ? AND revision = ? AND is_deleted = 0
-                """, write(content), docId, expectedRevision);
+                """, contentJson, docId, expectedRevision);
         if (updated != 1) {
             throw new CollabException(40902, "文档版本已变化，请重新同步");
         }
         jdbc.update("INSERT INTO doc_operation (doc_id, revision, op, user_id) VALUES (?, ?, ?, ?)",
-                docId, expectedRevision + 1, write(operation), userId);
+                docId, expectedRevision + 1, operationJson, userId);
     }
 
     private Delta read(String json) {

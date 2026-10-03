@@ -21,11 +21,12 @@ class HistoryServiceTest {
         var revisions = mock(DocRevService.class);
         when(permissions.permissionFor(1, 2)).thenReturn(2);
         when(documents.find(1)).thenReturn(Optional.of(new DocumentRepository.DocumentRow(1, "文档", "{}", 3, 1, "所有者", 0, LocalDateTime.now())));
-        var service = new HistoryService(history, documents, permissions, revisions, mock(CollabEventBus.class), new ObjectMapper());
+        var service = new HistoryService(history, documents, permissions, revisions, mock(CollabEventBus.class), new ObjectMapper(),mock(HistoryMaintenance.class));
         UserContext.set(2L, "member");
         assertThrows(BizException.class, () -> service.restore(1, 1, 3, "request"));
         assertThrows(BizException.class, () -> service.name(1, 1, "重要"));
         assertThrows(BizException.class, () -> service.unname(1, 1));
+        assertThrows(BizException.class, () -> service.compact(1, 3, 2));
         verifyNoInteractions(revisions, history);
     }
 }

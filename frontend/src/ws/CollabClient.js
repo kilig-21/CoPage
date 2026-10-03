@@ -23,6 +23,8 @@ export default class CollabClient {
     this.syncId = null
     this.deferred = []
     this.deferredOverflow = false
+    this.pagedRecovery = null
+    this.historyRetryTimer = null
   }
 
   attachSocket(socket) {
@@ -32,6 +34,8 @@ export default class CollabClient {
   join() {
     if (this.state === 'blocked') return
     this.clearBusyRetry()
+    this.clearHistoryRetry()
+    this.pagedRecovery = null
     this.setState('syncing')
     this.syncId = this.newId()
     const message = {
@@ -76,6 +80,9 @@ export default class CollabClient {
       case 'sync':
         this.synchronize(message)
         break
+      case 'history_page':
+        this.receiveHistoryPage(message)
+        break
       case 'ack':
         if (message.clientId === this.clientId) this.acknowledge(message)
         break
@@ -108,6 +115,7 @@ export default class CollabClient {
         this.onUsers?.(message.users ?? [])
         break
       case 'pong':
+        if (this.pagedRecovery) break
         if (this.state === 'syncing' || message.revision > this.revision) this.join()
         else this.sendPending()
         break
@@ -133,6 +141,23 @@ export default class CollabClient {
       return
     }
     const hasLocalChanges = this.hasUnconfirmedChanges()
+    if (hasLocalChanges && message.historyPaged === true && message.historyComplete !== true) {
+      if (message.fromRevision !== this.revision || message.revision <= this.revision) {
+        this.block('分批恢复的版本边界无效，已保留本地内容'); return
+      }
+      const own = message.pendingCommittedRevision
+      if (own != null && (!this.pending || !Number.isSafeInteger(own) || own <= this.revision || own > message.revision)) {
+        this.block('分批恢复的操作收据无效，已保留本地内容'); return
+      }
+      this.pagedRecovery = {
+        message, revision: this.revision,
+        pending: this.pending ? { ...this.pending, delta: this.copy(this.pending.delta) } : null,
+        buffer: this.buffer ? this.copy(this.buffer) : null,
+        editorChange: new this.Delta(),
+      }
+      this.requestHistoryPage()
+      return
+    }
     if (hasLocalChanges) {
       const history = message.history
       const ownRevision = message.pendingCommittedRevision
@@ -191,6 +216,58 @@ export default class CollabClient {
       this.promoteBuffer()
       this.sendPending()
     }
+  }
+
+  requestHistoryPage() {
+    if (!this.pagedRecovery || this.state !== 'syncing') return
+    this.clearHistoryRetry()
+    this.socket?.send({ type: 'history_request', docId: this.docId, syncId: this.syncId,
+      afterRevision: this.pagedRecovery.revision, throughRevision: this.pagedRecovery.message.revision })
+    // 保留已验证的工作副本，只重试同一页；重复页不会重复应用。
+    this.historyRetryTimer = globalThis.setTimeout(() => this.requestHistoryPage(), 5000)
+  }
+
+  receiveHistoryPage(message) {
+    const work = this.pagedRecovery
+    if (!work || this.state !== 'syncing' || message.syncId !== this.syncId) return
+    if (message.fromRevision < work.revision) return
+    const history = message.history
+    if (message.fromRevision !== work.revision || message.revision !== work.message.revision
+      || !Number.isSafeInteger(message.toRevision) || message.toRevision <= work.revision
+      || message.toRevision > message.revision || !Array.isArray(history) || history.length > 256
+      || history.length !== message.toRevision - work.revision
+      || !history.every((entry, index) => entry.revision === work.revision + index + 1 && Array.isArray(entry.op?.ops))) {
+      this.block('分批恢复历史有缺口，已保留本地内容'); return
+    }
+    try {
+      for (const entry of history) {
+        if (entry.revision === work.message.pendingCommittedRevision) work.pending = null
+        else {
+          const result = this.transformRemote(new this.Delta(entry.op), work.pending, work.buffer)
+          work.pending = result.pending; work.buffer = result.buffer
+          work.editorChange = work.editorChange.compose(result.operation)
+        }
+      }
+    } catch { this.block('分批恢复操作异常，已保留本地内容'); return }
+    work.revision = message.toRevision
+    if (work.revision < message.revision) { this.requestHistoryPage(); return }
+    this.clearHistoryRetry()
+    this.pending = work.pending; this.buffer = work.buffer; this.revision = work.revision
+    if (work.editorChange.ops.length) this.onRemote?.(work.editorChange)
+    this.onSync?.(null, work.message)
+    this.pagedRecovery = null
+    this.clearBusyRetry(); this.busyRetryDelay = 100; this.syncId = null
+    this.onUsers?.(work.message.users ?? []); this.setState('ready')
+    const deferred = this.deferred; const overflow = this.deferredOverflow
+    this.deferred = []; this.deferredOverflow = false
+    if (overflow) { this.join(); return }
+    for (const entry of deferred) this.receive(entry)
+    if (this.state === 'ready') { this.promoteBuffer(); this.sendPending() }
+  }
+
+  clearHistoryRetry() {
+    if (this.historyRetryTimer !== null) globalThis.clearTimeout(this.historyRetryTimer)
+    this.historyRetryTimer = null
   }
 
   acknowledge(message) {
@@ -270,6 +347,8 @@ export default class CollabClient {
 
   disconnect() {
     this.clearBusyRetry()
+    this.clearHistoryRetry()
+    this.pagedRecovery = null
     this.syncId = null
     this.deferred = []
     this.deferredOverflow = false
@@ -357,6 +436,8 @@ export default class CollabClient {
 
   block(message) {
     this.clearBusyRetry()
+    this.clearHistoryRetry()
+    this.pagedRecovery = null
     this.setState('blocked')
     this.onError?.(message)
   }

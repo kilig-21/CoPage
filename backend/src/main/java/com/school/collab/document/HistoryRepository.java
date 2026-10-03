@@ -124,6 +124,78 @@ public class HistoryRepository {
         jdbc.update("DELETE FROM doc_named_version WHERE doc_id = ? AND revision = ?", docId, revision);
     }
 
+    public long retentionFloor(long docId, long current, int days, int maxOperations, long maxBytes, int currentBytes) {
+        Long byAge = jdbc.queryForObject("""
+                SELECT COALESCE(MAX(revision),0) FROM doc_operation
+                WHERE doc_id = ? AND create_time < DATE_SUB(CURRENT_TIMESTAMP, INTERVAL ? DAY)
+                """, Long.class, docId, days);
+        // 为新基准快照预留正文空间；配额统计逻辑内容与收据，数据库页/索引开销另计。
+        Long byBytes = jdbc.queryForObject("""
+                SELECT COALESCE(MIN(revision)-1, ?) FROM (
+                  SELECT revision, SUM(bytes) OVER(ORDER BY revision DESC) AS accumulated FROM (
+                    SELECT revision, SUM(bytes) AS bytes FROM (
+                      SELECT revision, OCTET_LENGTH(op) AS bytes FROM doc_operation WHERE doc_id = ?
+                      UNION ALL SELECT revision, OCTET_LENGTH(content) FROM doc_snapshot WHERE doc_id = ?
+                      UNION ALL SELECT revision,
+                        OCTET_LENGTH(client_id)+OCTET_LENGTH(op_id)+COALESCE(OCTET_LENGTH(request_hash),0)+32
+                        FROM doc_operation_receipt WHERE doc_id = ?
+                    ) payloads GROUP BY revision
+                  ) revisions
+                ) retained WHERE accumulated <= ?
+                """, Long.class, current, docId, docId, docId,
+                Math.max(0, maxBytes - Math.max(currentBytes, 2 * 1024 * 1024)));
+        return Math.min(current, Math.max(floor(docId), Math.max(Math.max(0, current - maxOperations),
+                Math.max(byAge == null ? 0 : byAge, byBytes == null ? current : byBytes))));
+    }
+
+    /** 调用者持 Redis 文档锁；基准写入、日志/收据裁剪与保留起点在同一事务完成。 */
+    @Transactional
+    public void compact(long docId, long revision, Delta baseline) {
+        // 文档行锁也与删除/成员管理事务串行；清理绝不改变当前正文或 revision。
+        var rows = jdbc.query("SELECT revision FROM document WHERE id = ? AND is_deleted = 0 FOR UPDATE",
+                (rs, n) -> rs.getLong(1), docId);
+        if (rows.isEmpty()) return;
+        jdbc.update("INSERT INTO doc_snapshot(doc_id,revision,content) VALUES(?,?,?)", docId, revision, encode(baseline));
+        Long keepId = jdbc.queryForObject("SELECT MAX(id) FROM doc_snapshot WHERE doc_id = ? AND revision = ?", Long.class, docId, revision);
+        jdbc.update("DELETE FROM doc_snapshot WHERE doc_id = ? AND (revision < ? OR (revision = ? AND id <> ?))",
+                docId, revision, revision, keepId);
+        jdbc.update("DELETE FROM doc_operation WHERE doc_id = ? AND revision <= ?", docId, revision);
+        jdbc.update("DELETE FROM doc_operation_receipt WHERE doc_id = ? AND revision <= ?", docId, revision);
+        jdbc.update("""
+                INSERT INTO doc_history_boundary(doc_id,revision) VALUES(?,?)
+                ON DUPLICATE KEY UPDATE revision=GREATEST(revision,VALUES(revision))
+                """, docId, revision);
+    }
+
+    public List<Long> maintenanceCandidates(long after, int limit) {
+        return jdbc.query("SELECT id FROM document WHERE is_deleted = 0 AND id > ? ORDER BY id LIMIT ?",
+                (rs, n) -> rs.getLong(1), after, limit);
+    }
+
+    public List<Long> expiredDeletedCandidates(int days) {
+        return jdbc.query("""
+                SELECT id FROM document WHERE is_deleted=1 AND update_time < DATE_SUB(NOW(),INTERVAL ? DAY)
+                  AND EXISTS(SELECT 1 FROM doc_operation o WHERE o.doc_id=document.id)
+                ORDER BY id LIMIT 50
+                """, (rs,n)->rs.getLong(1),days);
+    }
+
+    /** 软删除满保留期限后也压缩历史；文档行、正文和重要版本继续保留。 */
+    @Transactional
+    public void compactDeleted(long docId,int days) {
+        var rows=jdbc.query("""
+                SELECT revision,content FROM document WHERE id=? AND is_deleted=1
+                  AND update_time < DATE_SUB(NOW(),INTERVAL ? DAY) FOR UPDATE
+                """,(rs,n)->new CollabDocumentSnapshot(rs.getLong(1),decode(rs.getString(2))),docId,days);
+        if(rows.isEmpty()) return;
+        var current=rows.getFirst();
+        jdbc.update("DELETE FROM doc_snapshot WHERE doc_id=?",docId);
+        jdbc.update("INSERT INTO doc_snapshot(doc_id,revision,content) VALUES(?,?,?)",docId,current.revision(),encode(current.content()));
+        jdbc.update("DELETE FROM doc_operation WHERE doc_id=?",docId);
+        jdbc.update("DELETE FROM doc_operation_receipt WHERE doc_id=?",docId);
+        jdbc.update("INSERT INTO doc_history_boundary(doc_id,revision) VALUES(?,?) ON DUPLICATE KEY UPDATE revision=VALUES(revision)",docId,current.revision());
+    }
+
     private Delta decode(String json) {
         try { return mapper.readValue(json, Delta.class); }
         catch (JsonProcessingException ex) { throw new IllegalStateException("历史版本内容损坏", ex); }

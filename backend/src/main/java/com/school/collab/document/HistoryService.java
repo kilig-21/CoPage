@@ -23,11 +23,13 @@ public class HistoryService {
     private final DocRevService revisions;
     private final CollabEventBus events;
     private final ObjectMapper mapper;
+    private final HistoryMaintenance maintenance;
 
     public HistoryService(HistoryRepository history, DocumentRepository documents, DocumentService permissions,
-                          DocRevService revisions, CollabEventBus events, ObjectMapper mapper) {
+                          DocRevService revisions, CollabEventBus events, ObjectMapper mapper, HistoryMaintenance maintenance) {
         this.history = history; this.documents = documents; this.permissions = permissions;
         this.revisions = revisions; this.events = events; this.mapper = mapper;
+        this.maintenance = maintenance;
     }
 
     public HistoryView list(long docId, long before, int limit) {
@@ -93,6 +95,23 @@ public class HistoryService {
 
     private Delta at(long docId, long revision, DocRevService.Snapshot current) {
         return history.contentAt(docId, revision, new CollabDocumentSnapshot(current.revision(), current.content()));
+    }
+
+    public HistoryMaintenance.RetentionView retention(long docId) {
+        owner(docId);
+        return maintenance.preview(docId);
+    }
+
+    public long compact(long docId, long expectedRevision, long beforeRevision) {
+        owner(docId);
+        if (maintenance.isProtected(docId)) throw new BizException(ErrorCode.FORBIDDEN, "该文档已排除在历史清理范围外");
+        return revisions.inspect(docId, current -> {
+            owner(docId);
+            if (current.revision() != expectedRevision) throw new com.school.collab.collab.CollabException(40902, "文档已有新编辑，请重新预览清理范围");
+            if (beforeRevision <= history.floor(docId) || beforeRevision > current.revision()) throw new BizException(ErrorCode.PARAM_ERROR);
+            history.compact(docId, beforeRevision, at(docId, beforeRevision, current));
+            return beforeRevision;
+        });
     }
 
     private long owner(long docId) {

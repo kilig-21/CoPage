@@ -26,6 +26,7 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [retention, setRetention] = useState(null)
   const alive = useRef(true)
   const selectionRequest = useRef(0)
   const restoreRequest = useRef(null)
@@ -37,7 +38,11 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
       if (!alive.current) return
       setHistory(response.data)
       setVersions(old => before == null ? response.data.list : [...old, ...response.data.list])
-      setError('')
+      if (isOwner) {
+        const policy = await request.get(base + '/retention')
+        if (alive.current) setRetention(policy.data)
+      }
+      if (alive.current) setError('')
     } catch (ex) { if (alive.current) setError(ex.message || '历史加载失败') }
     finally { if (alive.current) setLoading(false) }
   }
@@ -78,11 +83,20 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
     } finally { if (alive.current) setBusy(false) }
   }
   const named = history?.namedVersions || []
-  const rows = [...new Map([...named, ...versions,
+  const compact = async () => {
+    setBusy(true)
+    try {
+      await request.post(base + '/compact', {expectedRevision:retention.currentRevision,beforeRevision:retention.proposedMinimumRevision})
+      if (alive.current) { setSelected(null); setPreview(null); setNotice('历史已清理，重要版本继续保留'); await load() }
+    } catch (ex) { if (alive.current) setError(ex.message || '历史清理失败，请刷新预览后重试') }
+    finally { if (alive.current) setBusy(false) }
+  }
+  const rows = [...new Map([
     ...(history && !versions.some(v => v.revision === history.minimumRevision)
       ? [{ revision: history.minimumRevision, name: history.minimumRevision === 0 ? '初始版本' : '保留范围起点' }] : []),
     ...(history && !versions.some(v => v.revision === history.currentRevision)
       ? [{ revision: history.currentRevision, name: '当前版本' }] : []),
+    ...versions, ...named,
   ].map(v => [v.revision, v])).values()].sort((a, b) => b.revision - a.revision)
   return <Drawer title="历史版本" open width={720} onClose={onClose} maskClosable={!busy} closable={!busy}>
     {contextHolder}
@@ -90,6 +104,12 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
     {error && <Alert type="warning" showIcon message={error} />}
     {notice && <Alert type="success" showIcon message={notice} />}
     {history && <Typography.Paragraph type="secondary">当前版本：{history.currentRevision}；连续历史从版本 {history.minimumRevision} 开始。</Typography.Paragraph>}
+    {retention && <Alert type="info" showIcon message={retention.protectedDocument ? '该文档受保护，不清理历史' :
+      `普通历史保留 ${retention.days} 天，最多 ${retention.maxOperations} 次操作、${Math.round(retention.maxBytes/1024/1024)} MiB。自动清理${retention.enabled?'已开启':'未开启'}。`} />}
+    {retention && retention.proposedMinimumRevision > retention.minimumRevision && <Button danger disabled={busy} onClick={() => modal.confirm({
+      title:'清理超过保留范围的普通历史？',content:`版本 ${retention.proposedMinimumRevision} 之前的普通历史将不可恢复；重要版本和当前正文保留。`,
+      okText:'确认清理',cancelText:'取消',onOk:compact,
+    })}>清理过期历史</Button>}
     <Spin spinning={loading}>
       <List dataSource={rows} renderItem={v => <List.Item actions={[
         <Button key="view" disabled={busy} onClick={() => choose(v.revision)}>查看版本 {v.revision}</Button>,

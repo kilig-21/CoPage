@@ -3,6 +3,62 @@ import test from 'node:test'
 import Delta from 'quill-delta'
 import CollabClient from './CollabClient.js'
 
+test('超过2000条的分批历史保留pending和buffer，直到完整验证才更新编辑器', () => {
+  const editor = harness('long-offline')
+  editor.local(new Delta().insert('A'))
+  editor.local(new Delta().retain(1).insert('B'))
+  const originalId = editor.client.pending.opId
+  editor.client.disconnect(); editor.client.join()
+  const syncId = editor.client.syncId
+  editor.client.receive({ type: 'sync', docId: 1, syncId, fromRevision: 0, revision: 3001,
+    content: {ops:[{insert:'R'.repeat(3001)+'\n'}]}, historyComplete:false, historyPaged:true,
+    pendingCommittedRevision:null })
+  assert.equal(editor.sent.at(-1).type, 'history_request')
+  for (let from = 0; from < 3001; from += 256) {
+    const to = Math.min(3001, from + 256)
+    editor.client.receive({type:'history_page', docId:1, syncId, fromRevision:from, toRevision:to, revision:3001,
+      history:Array.from({length:to-from}, (_,i)=>({revision:from+i+1,op:{ops:[{insert:'R'}]}}))})
+    if (to < 3001) {
+      assert.equal(editor.client.revision, 0)
+      assert.equal(editor.document.ops[0].insert, 'AB\n')
+    }
+  }
+  assert.equal(editor.client.state, 'ready')
+  assert.equal(editor.client.revision, 3001)
+  assert.equal(editor.client.pending.opId, originalId)
+  assert.equal(editor.document.ops[0].insert, 'R'.repeat(3001)+'AB\n')
+  assert.equal(editor.sent.at(-1).baseRevision, 0)
+  editor.client.close()
+})
+
+test('分批恢复跳过已提交pending；重复页不重复应用，缺口保留原草稿', () => {
+  const editor = harness('lost-ack')
+  editor.local(new Delta().insert('A'))
+  editor.local(new Delta().retain(1).insert('B'))
+  editor.client.disconnect(); editor.client.join()
+  const syncId = editor.client.syncId
+  editor.client.receive({type:'sync',docId:1,syncId,fromRevision:0,revision:3,historyComplete:false,historyPaged:true,pendingCommittedRevision:1})
+  const first = {type:'history_page',docId:1,syncId,fromRevision:0,toRevision:1,revision:3,
+    history:[{revision:1,op:{ops:[{insert:'A'}]}}]}
+  editor.client.receive(first); editor.client.receive(first)
+  assert.equal(editor.client.pagedRecovery.revision, 1)
+  editor.client.receive({type:'history_page',docId:1,syncId,fromRevision:1,toRevision:3,revision:3,
+    history:[{revision:2,op:{ops:[{insert:'R'}]}},{revision:3,op:{ops:[{insert:'S'}]}}]})
+  assert.equal(editor.document.ops[0].insert, 'SRAB\n')
+  assert.equal(editor.client.pending.baseRevision, 3)
+  editor.client.close()
+  const broken = harness('broken')
+  broken.local(new Delta().insert('本地'))
+  broken.client.disconnect(); broken.client.join()
+  const id = broken.client.syncId
+  broken.client.receive({type:'sync',docId:1,syncId:id,fromRevision:0,revision:3000,historyComplete:false,historyPaged:true})
+  broken.client.receive({type:'history_page',docId:1,syncId:id,fromRevision:0,toRevision:2,revision:3000,
+    history:[{revision:2,op:{ops:[{insert:'R'}]}}]})
+  assert.equal(broken.client.state, 'blocked')
+  assert.equal(broken.document.ops[0].insert, '本地\n')
+  assert.ok(broken.client.exportDraft(broken.document))
+})
+
 function harness(clientId) {
   const sent = []
   const errors = []

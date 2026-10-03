@@ -92,7 +92,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
     assert.ok(redisNoAuth.includes('NOAUTH'), 'Redis 无凭据请求必须拒绝')
     const redisAuth = qaDocker(['exec', '-T', 'redis', 'sh', '-ec', 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping']).stdout.trim()
     assert.equal(redisAuth, 'PONG')
-    console.log('PASS: 全新 MySQL 无演示账号、六张表齐全、数据库权限隔离、Redis 认证')
+    console.log('PASS: 全新 MySQL 无演示账号、八张表齐全、数据库权限隔离、Redis 认证')
     if (fullSmoke) {
       const ports = [1, 2].map(index => {
         const address = qaDocker(['port', '--index', String(index), 'backend', '8080']).stdout.trim()

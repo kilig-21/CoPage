@@ -46,6 +46,13 @@ mybatis-plus:
       logic-not-delete-value: 0
 
 collab:
+  history:
+    retention-enabled: ${HISTORY_RETENTION_ENABLED:false}
+    retention-days: ${HISTORY_RETENTION_DAYS:30}
+    max-operations: ${HISTORY_MAX_OPERATIONS:10000}
+    max-bytes: ${HISTORY_MAX_BYTES:67108864}
+    # 负责人要求保留的验收文档，生产环境可显式覆盖为空。
+    protected-doc-ids: ${HISTORY_PROTECTED_DOC_IDS:26}
   frontend-origin: ${FRONTEND_ORIGIN:http://localhost:5173}
   jwt:
     # 仅本地开发默认值；部署时必须通过环境变量覆盖，并至少 32 字节。

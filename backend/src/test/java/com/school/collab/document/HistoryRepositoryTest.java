@@ -18,6 +18,12 @@ class HistoryRepositoryTest {
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
     private final DocumentPersistence persistence = mock(DocumentPersistence.class);
     private final HistoryRepository repository = new HistoryRepository(jdbc, new ObjectMapper(), persistence);
+    @Test void namedByteBudgetPreventsUnboundedFullCopies() {
+        doReturn(16L).when(jdbc).queryForObject(contains("COUNT(*)"),eq(Long.class),eq(1L),eq(3L));
+        doReturn(32L*1024*1024-10).when(jdbc).queryForObject(contains("SUM(OCTET_LENGTH(content))"),eq(Long.class),eq(1L),eq(3L));
+        assertEquals(400,assertThrows(CollabException.class,()->repository.name(1,3,"里程碑",7,new Delta().insert("超过剩余容量\n"))).getCode());
+        verify(jdbc,never()).update(contains("INSERT INTO doc_named_version"),any(Object[].class));
+    }
     @Test void rebuildsFromNearestSnapshotAndContinuousOperations() {
         doReturn(List.of()).when(jdbc).query(contains("doc_named_version"), any(RowMapper.class), eq(1L), eq(3L));
         doReturn(List.of(2L)).when(jdbc).query(contains("doc_history_boundary"), any(RowMapper.class), eq(1L));

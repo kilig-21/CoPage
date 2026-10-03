@@ -38,5 +38,14 @@ public class HistoryController {
         return Result.ok(history.restore(id, revision, body.expectedRevision(), body.requestId()));
     }
     public record NameBody(@NotBlank @Size(max=100) String name) { }
+    @GetMapping("/retention")
+    public Result<HistoryMaintenance.RetentionView> retention(@PathVariable long id) {
+        return Result.ok(history.retention(id));
+    }
+    @PostMapping("/compact")
+    public Result<Long> compact(@PathVariable long id,@Valid @RequestBody CompactBody body) {
+        return Result.ok(history.compact(id,body.expectedRevision(),body.beforeRevision()));
+    }
+    public record CompactBody(@NotNull @PositiveOrZero Long expectedRevision,@NotNull @PositiveOrZero Long beforeRevision) { }
     public record RestoreBody(@NotNull @PositiveOrZero Long expectedRevision, @NotBlank @Size(max=128) String requestId) { }
 }
