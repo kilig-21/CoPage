@@ -4,19 +4,22 @@ import { Alert, Avatar, Button, Layout, Modal, Space, Tag, Tooltip, Typography }
 import { Link, useParams } from 'react-router-dom'
 import useQuillCollab from '../editor/useQuillCollab'
 import CollaboratorModal from '../components/CollaboratorModal'
+import HistoryDrawer from '../components/HistoryDrawer'
 
 export default function Editor() {
   const { id } = useParams()
   const docId = Number(id)
   const [managing, setManaging] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
   const { editorHostRef, connection, users, error, title, permission, isOwner,
-    recoveryDraft, recoverDraft, discardDraft } = useQuillCollab(docId)
+    recoveryDraft, recoverDraft, discardDraft, canRestoreHistory } = useQuillCollab(docId)
   const isConnected = connection === '已连接'
 
   return (
     <Layout className="app-shell">
       <header className="topbar">
         <Space>
+          {permission > 0 && <Button onClick={() => setShowHistory(true)}>历史版本</Button>}
           <Link to="/docs"><Button type="text" icon={<ArrowLeftOutlined />} /></Link>
           <Typography.Text strong>{title || '协同文档 #' + id}</Typography.Text>
         </Space>
@@ -41,6 +44,8 @@ export default function Editor() {
         </section>
       </main>
       {managing && <CollaboratorModal doc={{ id: docId, title }} onClose={() => setManaging(false)} />}
+      {showHistory && <HistoryDrawer docId={docId} isOwner={isOwner && permission === 2}
+        canRestore={canRestoreHistory} onClose={() => setShowHistory(false)} />}
       <Modal title="发现未确认的本地编辑" open={Boolean(recoveryDraft)} closable={false}
         maskClosable={false} keyboard={false} onCancel={() => undefined}
         footer={[

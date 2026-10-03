@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * 单实例文档版本服务。
@@ -160,7 +162,42 @@ public class DocRevService {
 
         validateDocId(docId);
         String requestHash = opId == null ? null : OperationFingerprint.of(baseRevision, operation);
+        return store.withDocumentLock(docId, () -> commitLocked(docId, baseRevision,
+                ignored -> operation, userId, clientId, opId, requestHash, false, afterCommit));
+    }
+
+    /** 历史恢复也是新操作；版本变化时拒绝覆盖，重复请求只返回原收据。 */
+    public CommitResult restore(long docId, long expectedRevision, long targetRevision,
+                                long userId, String requestId, Supplier<Delta> target,
+                                Consumer<CommitResult> afterCommit) {
+        validateDocId(docId);
+        if (expectedRevision < 0 || targetRevision < 0 || requestId == null
+                || requestId.isBlank() || requestId.length() > 128) {
+            throw new CollabException(400, "恢复请求不完整");
+        }
+        String hash = OperationFingerprint.of(expectedRevision,
+                new Delta().insert("restore:" + targetRevision));
+        return store.withDocumentLock(docId, () -> commitLocked(docId, expectedRevision,
+                current -> {
+                    Delta replacement = target.get().copy();
+                    if (current.content().length() > 0) replacement.delete(current.content().length());
+                    return replacement;
+                }, userId, "history-api", requestId, hash, true, afterCommit));
+    }
+
+    /** 读历史、分页追赶和维护共用提交锁，避免读取或清理跨过一次提交。 */
+    public <T> T inspect(long docId, Function<Snapshot, T> action) {
+        validateDocId(docId);
         return store.withDocumentLock(docId, () -> {
+            var current = persistence == null ? store.snapshot(docId) : reconcileLegacy(docId);
+            return action.apply(new Snapshot(docId, current.revision(), current.content()));
+        });
+    }
+
+    private CommitResult commitLocked(long docId, long baseRevision,
+            Function<CollabDocumentSnapshot, Delta> operationFactory, Long userId,
+            String clientId, String opId, String requestHash, boolean strict,
+            Consumer<CommitResult> afterCommit) {
             OperationKey key = opId == null ? null : new OperationKey(docId, userId, clientId, opId);
             if (key != null) {
                 DocumentPersistence.Receipt prior = persistence == null
@@ -176,10 +213,13 @@ public class DocRevService {
             }
             CollabDocumentSnapshot current = persistence == null
                     ? store.snapshot(docId) : reconcileLegacy(docId);
+            if (strict && baseRevision != current.revision()) {
+                throw new CollabException(40902, "文档已被继续编辑，请查看最新版本后再恢复");
+            }
             if (baseRevision > current.revision()) {
                 throw new CollabException(40902, "客户端版本超前");
             }
-            Delta transformed = operation.copy();
+            Delta transformed = operationFactory.apply(current).copy();
             var history = persistence == null
                     ? store.operationsAfter(docId, baseRevision)
                     : persistence.operationsAfter(docId, baseRevision);
@@ -194,6 +234,9 @@ public class DocRevService {
                 }
                 // 已提交历史优先；新到的操作转换到历史已执行后的坐标系。
                 transformed = DeltaTransform.transform(entry.operation(), transformed, true);
+            }
+            if (expectedRevision - 1 != current.revision()) {
+                throw new CollabException(40903, "版本历史不完整，请重新同步文档");
             }
 
             long revision = current.revision() + 1;
@@ -236,7 +279,6 @@ public class DocRevService {
                 }
             }
             return result;
-        });
     }
 
     /** 升级前仅写 Redis 的文档逐条补进 MySQL；缺失历史时绝不静默覆盖。 */

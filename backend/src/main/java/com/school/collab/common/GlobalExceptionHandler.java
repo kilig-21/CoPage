@@ -16,6 +16,13 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    @ExceptionHandler(com.school.collab.collab.CollabException.class)
+    public ResponseEntity<Result<Void>> handleCollabException(com.school.collab.collab.CollabException exception) {
+        int code = exception.getCode();
+        int status = code >= 40900 && code < 41000 ? 409 : code;
+        return ResponseEntity.status(status).body(new Result<>(code, exception.getMessage(), null));
+    }
+
     @ExceptionHandler(BizException.class)
     public ResponseEntity<Result<Void>> handleBizException(BizException exception) {
         ErrorCode errorCode = exception.getErrorCode();
@@ -56,6 +63,7 @@ public class GlobalExceptionHandler {
             case FORBIDDEN -> HttpStatus.FORBIDDEN;
             case NOT_FOUND -> HttpStatus.NOT_FOUND;
             case PARAM_ERROR -> HttpStatus.BAD_REQUEST;
+            case INTERNAL_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
             default -> HttpStatus.CONFLICT;
         };
     }

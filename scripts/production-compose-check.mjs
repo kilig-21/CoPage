@@ -84,7 +84,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
     const initial = sql('SELECT COUNT(*) FROM user; SELECT CURRENT_USER(); SHOW TABLES;').stdout.trim().split(/\r?\n/)
     assert.equal(initial[0], '0', '生产初始化不得创建演示账号')
     assert.ok(initial[1].startsWith('copage@'), '应用必须使用独立数据库账号')
-    for (const table of ['user', 'document', 'doc_operation', 'doc_operation_receipt', 'doc_snapshot', 'doc_collaborator']) {
+    for (const table of ['user', 'document', 'doc_operation', 'doc_operation_receipt', 'doc_snapshot', 'doc_collaborator', 'doc_history_boundary', 'doc_named_version']) {
       assert.ok(initial.slice(2).includes(table), `缺少表 ${table}`)
     }
     assert.notEqual(sql('SELECT * FROM mysql.user;', false, true).status, 0, '应用账号不应读取系统账号表')

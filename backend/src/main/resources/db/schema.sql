@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS `doc_operation` (
   `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
   `doc_id` BIGINT NOT NULL,
   `revision` BIGINT NOT NULL,
-  `op` TEXT NOT NULL,
+  `op` LONGTEXT NOT NULL,
   `user_id` BIGINT,
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY `uk_doc_operation_doc_revision` (`doc_id`, `revision`),
@@ -63,4 +63,20 @@ CREATE TABLE IF NOT EXISTS `doc_collaborator` (
   `permission` TINYINT NOT NULL DEFAULT 2 COMMENT '1=只读，2=可编辑',
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY `uk_doc_collaborator_doc_user` (`doc_id`, `user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `doc_history_boundary` (
+  `doc_id` BIGINT PRIMARY KEY,
+  `revision` BIGINT NOT NULL,
+  `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `doc_named_version` (
+  `doc_id` BIGINT NOT NULL,
+  `revision` BIGINT NOT NULL,
+  `name` VARCHAR(100) NOT NULL,
+  `content` LONGTEXT NOT NULL,
+  `user_id` BIGINT NOT NULL,
+  `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`doc_id`, `revision`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
