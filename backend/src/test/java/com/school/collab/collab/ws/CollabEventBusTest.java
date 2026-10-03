@@ -78,6 +78,36 @@ class CollabEventBusTest {
         verify(sender).send(eq(member), argThat(node -> node.path("permission").asInt() == 1));
     }
 
+    @Test
+    void deletionEventClosesBothOwnerAndMemberSessions() throws Exception {
+        WebSocketSession owner = mock(WebSocketSession.class);
+        WebSocketSession member = mock(WebSocketSession.class);
+        when(registry.sessionsOf(9L)).thenReturn(List.of(
+                new WsSessionRegistry.SessionInfo("owner", owner, 9L, "a", 1L, "owner"),
+                new WsSessionRegistry.SessionInfo("member", member, 9L, "b", 2L, "member")));
+        when(documents.permissionFor(eq(9L), anyLong())).thenThrow(new BizException(ErrorCode.NOT_FOUND));
+
+        deliver(objectMapper.readTree("{\"type\":\"permission\",\"docId\":9}"));
+
+        for (WebSocketSession session : List.of(owner, member)) {
+            verify(sender).send(eq(session), argThat(node -> node.path("permission").asInt() == 0));
+            verify(session).close(org.springframework.web.socket.CloseStatus.POLICY_VIOLATION);
+        }
+    }
+
+    @Test
+    void delayedDeletionNotificationDoesNotRevokeRestoredDocument() throws Exception {
+        WebSocketSession restored = mock(WebSocketSession.class);
+        when(registry.sessionsOf(9L)).thenReturn(List.of(
+                new WsSessionRegistry.SessionInfo("restored", restored, 9L, "b", 2L, "member")));
+        when(documents.permissionFor(9L, 2L)).thenReturn(2);
+
+        deliver(objectMapper.readTree("{\"type\":\"permission\",\"docId\":9}"));
+
+        verify(sender).send(eq(restored), argThat(node -> node.path("permission").asInt() == 2));
+        verify(restored, never()).close(any());
+    }
+
     private void deliver(JsonNode payload) {
         Message message = mock(Message.class);
         when(message.getBody()).thenReturn(objectMapper.createObjectNode().put("docId", 9)

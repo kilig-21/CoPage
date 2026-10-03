@@ -68,7 +68,7 @@ public class CollabEventBus implements MessageListener {
             String originSessionId = envelope.path("sessionId").asText();
             for (WsSessionRegistry.SessionInfo target : registry.sessionsOf(docId)) {
                 boolean permissionEvent = "permission".equals(payload.path("type").asText());
-                if (permissionEvent && payload.path("userId").asLong() != target.userId()) continue;
+                if (permissionEvent && payload.has("userId") && payload.path("userId").asLong() != target.userId()) continue;
                 if (sameInstance && target.sessionId().equals(originSessionId)) {
                     continue;
                 }

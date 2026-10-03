@@ -5,6 +5,7 @@ import DocList from './pages/DocList'
 import Editor from './pages/Editor'
 import Search from './pages/Search'
 import Templates from './pages/Templates'
+import Trash from './pages/Trash'
 import { safeReturnPath } from './auth/session'
 
 function RequireAuth({ children }) {
@@ -31,6 +32,7 @@ export default function App() {
       <Route path="/docs/:id" element={<RequireAuth><Editor /></RequireAuth>} />
       <Route path="/search" element={<RequireAuth><Search /></RequireAuth>} />
       <Route path="/templates" element={<RequireAuth><Templates /></RequireAuth>} />
+      <Route path="/trash" element={<RequireAuth><Trash /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/docs" replace />} />
     </Routes>
   )

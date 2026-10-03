@@ -6,6 +6,7 @@ test('login only returns to supported internal pages', () => {
   assert.equal(safeReturnPath('/docs/60'), '/docs/60')
   assert.equal(safeReturnPath('/search?q=meeting&page=2'), '/search?q=meeting&page=2')
   assert.equal(safeReturnPath('/templates'), '/templates')
+  assert.equal(safeReturnPath('/trash'), '/trash')
   for (const path of ['https://example.com', '//example.com', '/login', '/docs/../../login', null]) {
     assert.equal(safeReturnPath(path), '/docs')
   }

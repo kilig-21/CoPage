@@ -116,4 +116,42 @@ class DocumentServiceTest {
         assertEquals(ErrorCode.NOT_FOUND,
                 assertThrows(BizException.class, () -> service.detail(5L)).getErrorCode());
     }
+
+    @Test
+    void restoreRequiresOwnershipAndPreservesExistingContentAndRevision() {
+        UserContext.set(1L,"owner");
+        when(repository.findOwnedForUpdate(5L,1L)).thenReturn(Optional.of(new DocumentRepository.OwnedState(row,true)));
+        when(repository.restoreDeleted(5L,1L)).thenReturn(true);
+        when(repository.find(5L)).thenReturn(Optional.of(row));
+        assertEquals(5L,service.restoreDeleted(5L).id());
+        verify(repository).restoreDeleted(5L,1L);
+        verify(repository,never()).create(anyString(),anyLong(),anyLong(),anyString());
+        UserContext.set(2L,"member");
+        assertEquals(ErrorCode.NOT_FOUND,assertThrows(BizException.class,()->service.restoreDeleted(5L)).getErrorCode());
+        verify(repository,never()).restoreDeleted(5L,2L);
+    }
+
+    @Test
+    void repeatedRestoreOfActiveOwnedDocumentDoesNotMutateIt() {
+        UserContext.set(1L,"owner");
+        when(repository.findOwnedForUpdate(5L,1L)).thenReturn(Optional.of(new DocumentRepository.OwnedState(row,false)));
+        when(repository.find(5L)).thenReturn(Optional.of(row));
+        assertEquals(5L,service.restoreDeleted(5L).id());
+        verify(repository,never()).restoreDeleted(anyLong(),anyLong());
+        assertEquals(8L,service.detail(5L).revision());
+    }
+
+    @Test
+    void trashUsesOnlyCurrentOwnerAndDoesNotExposeBody() {
+        UserContext.set(2L,"member");
+        when(repository.countDeletedOwned(2L)).thenReturn(1L);
+        when(repository.listDeletedOwned(2L,1,20)).thenReturn(java.util.List.of(new DocumentRepository.TrashRow(5,"标题",row.updateTime())));
+        var trash=service.trash(1,20);
+        assertEquals(1L,trash.total());
+        assertEquals("标题",trash.list().getFirst().title());
+        assertEquals("2026-09-26 15:00:00",trash.list().getFirst().deletedAt());
+        assertFalse(trash.toString().contains("正文"));
+        verify(repository,never()).listDeletedOwned(eq(1L),anyInt(),anyInt());
+        assertThrows(BizException.class,()->service.trash(0,20));
+    }
 }

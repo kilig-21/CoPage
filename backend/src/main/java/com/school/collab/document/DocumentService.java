@@ -28,16 +28,23 @@ public class DocumentService {
     private final DocumentRepository documents;
     private final ObjectMapper objectMapper;
     private final SearchIndex searchIndex;
+    private final org.springframework.context.ApplicationEventPublisher lifecycle;
 
     public DocumentService(DocumentRepository documents, ObjectMapper objectMapper) {
         this(documents, objectMapper, null);
     }
 
-    @Autowired
     public DocumentService(DocumentRepository documents, ObjectMapper objectMapper, SearchIndex searchIndex) {
+        this(documents, objectMapper, searchIndex, null);
+    }
+
+    @Autowired
+    public DocumentService(DocumentRepository documents, ObjectMapper objectMapper, SearchIndex searchIndex,
+                           org.springframework.context.ApplicationEventPublisher lifecycle) {
         this.documents = documents;
         this.objectMapper = objectMapper;
         this.searchIndex = searchIndex;
+        this.lifecycle = lifecycle;
     }
 
     public ListView list(int page, int size, String keyword) {
@@ -118,7 +125,31 @@ public class DocumentService {
             throw new BizException(ErrorCode.NOT_FOUND);
         }
         indexAfterCommit(docId);
+        if (lifecycle != null) lifecycle.publishEvent(new DocumentDeleted(docId));
     }
+
+    public TrashView trash(int page, int size) {
+        if (page < 1 || size < 1 || size > 100) throw new BizException(ErrorCode.PARAM_ERROR);
+        long userId = currentUserId();
+        return new TrashView(documents.countDeletedOwned(userId), documents.listDeletedOwned(userId,page,size)
+            .stream().map(row->new TrashItem(row.id(),row.title(),format(row.deletedAt()))).toList());
+    }
+
+    @Transactional
+    public SummaryView restoreDeleted(long docId) {
+        long userId = currentUserId();
+        if (docId <= 0) throw new BizException(ErrorCode.PARAM_ERROR);
+        var owned = documents.findOwnedForUpdate(docId,userId).orElseThrow(()->new BizException(ErrorCode.NOT_FOUND));
+        if (owned.deleted()) {
+            if (!documents.restoreDeleted(docId,userId)) throw new BizException(ErrorCode.NOT_FOUND);
+            indexAfterCommit(docId);
+        }
+        return summary(documents.find(docId).orElseThrow(()->new BizException(ErrorCode.NOT_FOUND)));
+    }
+
+    public record TrashItem(long id,String title,String deletedAt) { }
+    public record TrashView(long total,List<TrashItem> list) { }
+    public record DocumentDeleted(long docId) { }
 
     public int permissionFor(long docId, long userId) {
         return permission(requireVisible(docId, userId), userId);

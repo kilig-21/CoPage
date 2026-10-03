@@ -164,6 +164,34 @@ public class DocumentRepository {
                 docId) == 1;
     }
 
+    public long countDeletedOwned(long userId) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM document WHERE owner_id=? AND is_deleted=1", Long.class, userId);
+    }
+
+    public List<TrashRow> listDeletedOwned(long userId, int page, int size) {
+        return jdbc.query("""
+            SELECT id,title,update_time FROM document WHERE owner_id=? AND is_deleted=1
+            ORDER BY update_time DESC,id DESC LIMIT ? OFFSET ?
+            """, (rs,n) -> new TrashRow(rs.getLong("id"),rs.getString("title"),rs.getTimestamp("update_time").toLocalDateTime()),
+            userId,size,((long)page-1)*size);
+    }
+
+    /** 只锁当前所有者自己的文档，包含已删除行；并发/重试恢复不会改写正文。 */
+    public Optional<OwnedState> findOwnedForUpdate(long docId, long userId) {
+        return jdbc.query("""
+            SELECT d.id,d.title,d.content,d.revision,d.owner_id,u.nickname AS owner_name,d.parent_id,d.update_time,d.is_deleted
+            FROM document d JOIN user u ON u.id=d.owner_id WHERE d.id=? AND d.owner_id=? FOR UPDATE
+            """, (rs,n)->new OwnedState(ROW_MAPPER.mapRow(rs,n),rs.getBoolean("is_deleted")),docId,userId).stream().findFirst();
+    }
+
+    public boolean restoreDeleted(long docId, long ownerId) {
+        return jdbc.update("UPDATE document SET is_deleted=0,update_time=CURRENT_TIMESTAMP WHERE id=? AND owner_id=? AND is_deleted=1",
+            docId,ownerId)==1;
+    }
+
+    public record TrashRow(long id,String title,LocalDateTime deletedAt) { }
+    public record OwnedState(DocumentRow document,boolean deleted) { }
+
     public record DocumentRow(
             long id, String title, String content, long revision,
             long ownerId, String ownerName, long parentId, LocalDateTime updateTime

@@ -1,5 +1,5 @@
 export function safeReturnPath(path) {
-  return typeof path === 'string' && /^\/(?:docs(?:\/\d+)?|templates|search)(?:[?#].*)?$/.test(path) ? path : '/docs'
+  return typeof path === 'string' && /^\/(?:docs(?:\/\d+)?|templates|trash|search)(?:[?#].*)?$/.test(path) ? path : '/docs'
 }
 
 // 只处理当前请求所属的会话，避免迟到的 401 退出刚登录的新账号；草稿键保持原样。
