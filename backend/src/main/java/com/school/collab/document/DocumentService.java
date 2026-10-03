@@ -99,6 +99,22 @@ public class DocumentService {
                 row.ownerId(), permission, format(row.updateTime()), row.ownerId() == userId);
     }
 
+    /** 已验证的导入正文作为独立文档及版本0同事务保存，不复制来源权限或历史。 */
+    @Transactional
+    public SummaryView createImported(String title, JsonNode content) {
+        long userId = currentUserId();
+        String normalizedTitle = normalizeTitle(title, true);
+        try {
+            String serialized = objectMapper.writeValueAsString(content);
+            long id = documents.create(normalizedTitle, userId, 0L, serialized);
+            documents.saveInitialSnapshot(id, serialized);
+            indexAfterCommit(id);
+            return summary(documents.find(id).orElseThrow(() -> new BizException(ErrorCode.INTERNAL_ERROR)));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("导入内容无法序列化", exception);
+        }
+    }
+
     @Transactional
     public RenameView rename(long docId, String title) {
         long userId = currentUserId();

@@ -4,6 +4,7 @@ import { Alert, Avatar, Button, Card, Empty, Input, Layout, List, Modal, Paginat
 import { Link, useNavigate } from 'react-router-dom'
 import request from '../api/request'
 import CollaboratorModal from '../components/CollaboratorModal'
+import ImportModal from '../components/ImportModal'
 
 const PAGE_SIZE = 20
 
@@ -19,6 +20,7 @@ export default function DocList() {
   const [title, setTitle] = useState('')
   const [loadError, setLoadError] = useState('')
   const [creating, setCreating] = useState(false)
+  const [importing, setImporting] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -96,6 +98,7 @@ export default function DocList() {
         <div className="page-heading">
           <div><Typography.Title level={2}>我的文档</Typography.Title><Typography.Text type="secondary">编辑时可查看连接与保存状态，删除的文档可从回收站找回</Typography.Text></div>
           <Space wrap>
+            <Button onClick={() => setImporting(true)}>导入文档</Button>
             <Button onClick={() => navigate('/templates')}>从模板新建</Button>
             <Button type="primary" icon={<PlusOutlined />} loading={creating} onClick={createDocument}>新建文档</Button>
           </Space>
@@ -125,6 +128,7 @@ export default function DocList() {
         </Card>
       </main>
       {managing && <CollaboratorModal doc={managing} onClose={() => setManaging(null)} />}
+      {importing && <ImportModal onClose={() => setImporting(false)} onCreated={id => navigate('/docs/' + id)} />}
       <Modal title="重命名文档" open={Boolean(editing)} onOk={renameDocument} onCancel={() => setEditing(null)}>
         <Input maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} onPressEnter={renameDocument} />
       </Modal>

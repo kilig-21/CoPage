@@ -66,6 +66,17 @@ class DocumentServiceTest {
     }
 
     @Test
+    void importedBodyAndBaselineUseSameContentWithoutCopyingPermissions() throws Exception {
+        UserContext.set(1L, "owner");
+        when(repository.create(anyString(), eq(1L), eq(0L), anyString())).thenReturn(5L);
+        when(repository.find(5L)).thenReturn(Optional.of(row));
+        service.createImported(" 导入正文 ", new ObjectMapper().readTree(row.content()));
+        verify(repository).create("导入正文", 1L, 0L, row.content());
+        verify(repository).saveInitialSnapshot(5L, row.content());
+        verify(repository, never()).addCollaborator(anyLong(), anyLong(), anyInt());
+    }
+
+    @Test
     void blankDocumentCreationStillUsesEmptyDelta() {
         UserContext.set(1L, "owner");
         when(repository.create(anyString(), eq(1L), eq(0L), anyString())).thenReturn(5L);

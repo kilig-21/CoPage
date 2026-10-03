@@ -23,6 +23,7 @@ export default function useQuillCollab(docId) {
   const [recoveryDraft, setRecoveryDraft] = useState(null)
   const recoveryActionsRef = useRef(null)
   const historyReadyRef = useRef(null)
+  const exportReadyRef = useRef(null)
 
   useEffect(() => {
     const host = editorHostRef.current
@@ -255,6 +256,8 @@ export default function useQuillCollab(docId) {
     client.attachSocket(socket)
     historyReadyRef.current = () => connected && synced && canEdit && !uploading
       && !composing && !client.hasUnconfirmedChanges()
+    exportReadyRef.current = () => connected && synced && !uploading
+      && !composing && !client.hasUnconfirmedChanges()
     const draftChannel = draftPrefix && typeof BroadcastChannel !== 'undefined'
       ? new BroadcastChannel(`copage-draft-owner:${draftPrefix}`) : null
     draftChannel?.addEventListener('message', (event) => {
@@ -457,6 +460,7 @@ export default function useQuillCollab(docId) {
       cursorLayer.destroy()
       recoveryActionsRef.current = null
       historyReadyRef.current = null
+      exportReadyRef.current = null
       quill.getModule('toolbar')?.container.remove()
       host.replaceChildren()
       quillRef.current = null
@@ -468,5 +472,6 @@ export default function useQuillCollab(docId) {
     recoverDraft: () => recoveryActionsRef.current?.recover(),
     discardDraft: () => recoveryActionsRef.current?.discard(),
     canRestoreHistory: () => Boolean(historyReadyRef.current?.()),
+    canExportDocument: () => Boolean(exportReadyRef.current?.()),
   }
 }

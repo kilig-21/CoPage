@@ -35,6 +35,8 @@ public class GlobalExceptionHandler {
             ConstraintViolationException.class,
             HttpMessageNotReadableException.class,
             org.springframework.web.bind.MissingServletRequestParameterException.class,
+            org.springframework.web.multipart.support.MissingServletRequestPartException.class,
+            org.springframework.web.multipart.MaxUploadSizeExceededException.class,
             MethodArgumentTypeMismatchException.class
     })
     public ResponseEntity<Result<Void>> handleValidationException(Exception exception) {
