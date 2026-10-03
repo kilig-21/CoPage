@@ -59,4 +59,18 @@ class SearchServiceTest {
                 + "{\"insert\":\"\\n\"}]}";
         assertEquals("正文\n", SearchIndex.plainText(delta));
     }
+
+    @Test
+    void ES返回旧候选时仍剔除已撤权和已删除文档() {
+        UserContext.set(2L, "formerMember");
+        when(documents.visibleIds(2)).thenReturn(List.of(5L, 6L));
+        when(index.search("正文", List.of(5L, 6L), 1, 20))
+                .thenReturn(new SearchIndex.SearchPage(2, List.of(5L, 6L)));
+        when(documents.find(5L)).thenReturn(Optional.of(new DocumentRow(
+                5, "旧标题", "{\"ops\":[{\"insert\":\"正文\\n\"}]}", 1,
+                1, "owner", 0, LocalDateTime.now())));
+        when(documents.collaboratorPermission(5L, 2L)).thenReturn(0);
+        when(documents.find(6L)).thenReturn(Optional.empty());
+        assertTrue(service.search("正文", 1, 20).list().isEmpty());
+    }
 }
