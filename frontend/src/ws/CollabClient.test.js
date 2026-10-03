@@ -45,6 +45,29 @@ function harness(clientId) {
   }
 }
 
+test('撤销权限阻止后续内容应用；降为只读保留未确认正文与原请求', () => {
+  const revoked = harness('revoked')
+  revoked.client.receive({ type: 'permission', docId: 1, permission: 0 })
+  revoked.client.receive({ type: 'op', docId: 1, revision: 1, op: { ops: [{ insert: '秘密' }] } })
+  assert.equal(revoked.client.state, 'blocked')
+  assert.deepEqual(revoked.document.ops, [{ insert: '\n' }])
+
+  const pending = harness('pending')
+  pending.local(new Delta().insert('本地'))
+  const opId = pending.client.pending.opId
+  pending.client.receive({ type: 'permission', docId: 1, permission: 1 })
+  assert.equal(pending.client.state, 'blocked')
+  assert.equal(pending.client.pending.opId, opId)
+  assert.deepEqual(pending.document.ops, [{ insert: '本地\n' }])
+  assert.ok(pending.client.exportDraft(pending.document))
+
+  const reader = harness('reader')
+  reader.client.receive({ type: 'permission', docId: 1, permission: 1 })
+  reader.client.receive({ type: 'op', docId: 1, revision: 1, op: { ops: [{ insert: '可见' }] } })
+  assert.equal(reader.client.state, 'ready')
+  assert.deepEqual(reader.document.ops, [{ insert: '可见\n' }])
+})
+
 test('远端光标仅在同步就绪时转交绘制层，忽略自身与非法坐标', () => {
   const editor = harness('self')
   const valid = { type: 'cursor', docId: 1, clientId: 'peer', index: 2, length: 0,

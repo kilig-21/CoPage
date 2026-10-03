@@ -117,6 +117,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
             presence.join(info, eventBus.instanceId());
             ObjectNode sync = objectMapper.createObjectNode()
                     .put("type", "sync").put("docId", docId)
+                    .put("permission", documents.permissionFor(docId, userId))
                     .put("fromRevision", lastRevision).put("revision", state.revision())
                     .put("historyComplete", state.historyComplete());
             if (syncId != null) sync.put("syncId", syncId);
@@ -229,7 +230,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         WsSessionRegistry.SessionInfo info = registry.current(session);
         ObjectNode pong = objectMapper.createObjectNode().put("type", "pong");
         if (info != null) {
-            documents.permissionFor(info.docId(), info.userId());
+            pong.put("permission", documents.permissionFor(info.docId(), info.userId()));
             presence.heartbeat(info, eventBus.instanceId());
             pong.put("docId", info.docId()).put("revision", docRevService.currentRevision(info.docId()));
         }

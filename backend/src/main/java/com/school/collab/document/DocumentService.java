@@ -77,7 +77,7 @@ public class DocumentService {
         int permission = permission(row, userId);
         return new DetailView(
                 row.id(), row.title(), parseContent(row.content()), row.revision(),
-                row.ownerId(), permission, format(row.updateTime()));
+                row.ownerId(), permission, format(row.updateTime()), row.ownerId() == userId);
     }
 
     @Transactional
@@ -152,7 +152,8 @@ public class DocumentService {
 
     private SummaryView summary(DocumentRow row) {
         return new SummaryView(row.id(), row.title(), row.ownerId(), row.ownerName(),
-                row.parentId(), format(row.updateTime()));
+                row.parentId(), format(row.updateTime()), permission(row, currentUserId()),
+                row.ownerId() == currentUserId());
     }
 
     private static long currentUserId() {
@@ -179,7 +180,8 @@ public class DocumentService {
     }
 
     public record SummaryView(
-            long id, String title, long ownerId, String ownerName, long parentId, String updateTime
+            long id, String title, long ownerId, String ownerName, long parentId, String updateTime,
+            int permission, boolean isOwner
     ) {
     }
 
@@ -188,7 +190,7 @@ public class DocumentService {
 
     public record DetailView(
             long id, String title, JsonNode content, long revision,
-            long ownerId, int permission, String updateTime
+            long ownerId, int permission, String updateTime, boolean isOwner
     ) {
     }
 

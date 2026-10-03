@@ -19,6 +19,7 @@ export default function useQuillCollab(docId) {
   const [error, setError] = useState('')
   const [title, setTitle] = useState('')
   const [permission, setPermission] = useState(0)
+  const [isOwner, setIsOwner] = useState(false)
   const [recoveryDraft, setRecoveryDraft] = useState(null)
   const recoveryActionsRef = useRef(null)
 
@@ -28,6 +29,8 @@ export default function useQuillCollab(docId) {
     let active = true
     setConnection('加载中')
     setError('')
+    setPermission(0)
+    setIsOwner(false)
 
     const imageInput = document.createElement('input')
     imageInput.type = 'file'
@@ -198,7 +201,7 @@ export default function useQuillCollab(docId) {
         synced = state === 'ready'
         if (!synced) abortImageUpload()
         updateEditable()
-        setConnection({ ready: '已连接', syncing: '正在恢复编辑', offline: '正在重连', blocked: '本地内容已保留' }[state])
+        setConnection({ ready: '已连接', syncing: '正在恢复编辑', offline: '正在重连', blocked: client.hasUnconfirmedChanges() ? '本地内容已保留' : '已暂停' }[state])
         if (state === 'ready') {
           setError('')
           scheduleCursor()
@@ -219,6 +222,18 @@ export default function useQuillCollab(docId) {
       onMessage: (message) => {
         if (!active) return
         flushComposition()
+        if (message.docId === docId && [0, 1, 2].includes(message.permission)) {
+          setPermission(message.permission)
+          canEdit = message.permission === 2
+          if (!canEdit) abortImageUpload()
+          updateEditable()
+          client.receive({ type: 'permission', docId, permission: message.permission })
+          if (message.permission === 0) {
+            persistDraft()
+            socket.close()
+            return
+          }
+        }
         client.receive(message)
         persistDraft()
       },
@@ -357,6 +372,7 @@ export default function useQuillCollab(docId) {
         const doc = response.data
         setTitle(doc.title)
         setPermission(doc.permission)
+        setIsOwner(doc.isOwner === true)
         canEdit = doc.permission === 2
         quill.setContents(new Delta(doc.content), 'api')
         lastKnownContents = quill.getContents()
@@ -444,7 +460,7 @@ export default function useQuillCollab(docId) {
   }, [docId])
 
   return {
-    editorHostRef, connection, users, error, title, permission, recoveryDraft,
+    editorHostRef, connection, users, error, title, permission, isOwner, recoveryDraft,
     recoverDraft: () => recoveryActionsRef.current?.recover(),
     discardDraft: () => recoveryActionsRef.current?.discard(),
   }

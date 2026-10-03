@@ -2,6 +2,9 @@ package com.school.collab.collab.ws;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.school.collab.common.BizException;
+import com.school.collab.common.ErrorCode;
+import com.school.collab.document.DocumentService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.redis.connection.Message;
@@ -20,7 +23,8 @@ class CollabEventBusTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final WsSessionRegistry registry = mock(WsSessionRegistry.class);
     private final WsSender sender = mock(WsSender.class);
-    private final CollabEventBus bus = new CollabEventBus(redis, objectMapper, registry, sender);
+    private final DocumentService documents = mock(DocumentService.class);
+    private final CollabEventBus bus = new CollabEventBus(redis, objectMapper, registry, sender, documents);
 
     @Test
     void localOriginIsSkippedButOtherLocalSessionsReceiveBroadcast() throws Exception {
@@ -29,6 +33,7 @@ class CollabEventBusTest {
         when(registry.sessionsOf(9L)).thenReturn(List.of(
                 new WsSessionRegistry.SessionInfo("origin", origin, 9L, "a", 1L, "testA"),
                 new WsSessionRegistry.SessionInfo("other", other, 9L, "b", 2L, "testB")));
+        when(documents.permissionFor(9L, 2L)).thenReturn(2);
         JsonNode operation = objectMapper.readTree(
                 "{\"type\":\"op\",\"docId\":9,\"revision\":1,\"op\":{\"ops\":[{\"insert\":\"X\"}]}}");
 
@@ -44,5 +49,39 @@ class CollabEventBusTest {
         verify(sender, never()).send(eq(origin), eq(operation));
         verify(sender).send(eq(other), eq(operation));
         assertEquals(9L, objectMapper.readTree(published.getValue().toString()).get("docId").asLong());
+    }
+
+    @Test
+    void revokedSessionNeverReceivesDocumentBroadcastEvenWhenPermissionNotificationWasLost() throws Exception {
+        WebSocketSession revoked = mock(WebSocketSession.class);
+        when(registry.sessionsOf(9L)).thenReturn(List.of(
+                new WsSessionRegistry.SessionInfo("revoked", revoked, 9L, "b", 2L, "testB")));
+        when(documents.permissionFor(9L, 2L)).thenThrow(new BizException(ErrorCode.FORBIDDEN));
+        JsonNode payload = objectMapper.readTree("{\"type\":\"op\",\"docId\":9,\"revision\":2}");
+        deliver(payload);
+        verify(sender, never()).send(revoked, payload);
+        verify(sender).send(eq(revoked), argThat(node -> node.path("type").asText().equals("permission")
+                && node.path("permission").asInt() == 0));
+        verify(revoked).close(org.springframework.web.socket.CloseStatus.POLICY_VIOLATION);
+    }
+
+    @Test
+    void permissionEventOnlyTargetsMemberAndRechecksDatabaseInsteadOfTrustingStalePayload() throws Exception {
+        WebSocketSession owner = mock(WebSocketSession.class);
+        WebSocketSession member = mock(WebSocketSession.class);
+        when(registry.sessionsOf(9L)).thenReturn(List.of(
+                new WsSessionRegistry.SessionInfo("owner", owner, 9L, "a", 1L, "owner"),
+                new WsSessionRegistry.SessionInfo("member", member, 9L, "b", 2L, "member")));
+        when(documents.permissionFor(9L, 2L)).thenReturn(1);
+        deliver(objectMapper.readTree("{\"type\":\"permission\",\"docId\":9,\"userId\":2,\"permission\":2}"));
+        verify(sender, never()).send(eq(owner), any());
+        verify(sender).send(eq(member), argThat(node -> node.path("permission").asInt() == 1));
+    }
+
+    private void deliver(JsonNode payload) {
+        Message message = mock(Message.class);
+        when(message.getBody()).thenReturn(objectMapper.createObjectNode().put("docId", 9)
+                .put("instanceId", "remote").set("payload", payload).toString().getBytes(StandardCharsets.UTF_8));
+        bus.onMessage(message, null);
     }
 }

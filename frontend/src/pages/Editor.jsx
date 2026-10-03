@@ -1,12 +1,15 @@
-import { ArrowLeftOutlined, CloudOutlined } from '@ant-design/icons'
+import { useState } from 'react'
+import { ArrowLeftOutlined, CloudOutlined, TeamOutlined } from '@ant-design/icons'
 import { Alert, Avatar, Button, Layout, Modal, Space, Tag, Tooltip, Typography } from 'antd'
 import { Link, useParams } from 'react-router-dom'
 import useQuillCollab from '../editor/useQuillCollab'
+import CollaboratorModal from '../components/CollaboratorModal'
 
 export default function Editor() {
   const { id } = useParams()
   const docId = Number(id)
-  const { editorHostRef, connection, users, error, title, permission,
+  const [managing, setManaging] = useState(false)
+  const { editorHostRef, connection, users, error, title, permission, isOwner,
     recoveryDraft, recoverDraft, discardDraft } = useQuillCollab(docId)
   const isConnected = connection === '已连接'
 
@@ -18,6 +21,7 @@ export default function Editor() {
           <Typography.Text strong>{title || '协同文档 #' + id}</Typography.Text>
         </Space>
         <Space>
+          {isOwner && <Button icon={<TeamOutlined />} onClick={() => setManaging(true)}>协作者管理</Button>}
           <Tag color={isConnected ? 'green' : 'gold'} icon={<CloudOutlined />}>{connection}</Tag>
           <Avatar.Group max={{ count: 4 }}>
             {users.map((user) => (
@@ -36,6 +40,7 @@ export default function Editor() {
           <div ref={editorHostRef} className="editor-host" aria-label="协同编辑器" />
         </section>
       </main>
+      {managing && <CollaboratorModal doc={{ id: docId, title }} onClose={() => setManaging(false)} />}
       <Modal title="发现未确认的本地编辑" open={Boolean(recoveryDraft)} closable={false}
         maskClosable={false} keyboard={false} onCancel={() => undefined}
         footer={[

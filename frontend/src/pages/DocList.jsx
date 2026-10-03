@@ -3,10 +3,12 @@ import { FileTextOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icon
 import { Avatar, Button, Card, Empty, Input, Layout, List, Modal, Popconfirm, Space, Typography, message } from 'antd'
 import { Link, useNavigate } from 'react-router-dom'
 import request from '../api/request'
+import CollaboratorModal from '../components/CollaboratorModal'
 
 const PAGE_SIZE = 20
 
 export default function DocList() {
+  const [managing, setManaging] = useState(null)
   const navigate = useNavigate()
   const [docs, setDocs] = useState([])
   const [total, setTotal] = useState(0)
@@ -96,17 +98,19 @@ export default function DocList() {
             renderItem={(doc) => (
               <List.Item actions={[
                 <Link key="open" to={'/docs/' + doc.id}>打开</Link>,
-                <Button key="rename" type="link" onClick={() => { setEditing(doc); setTitle(doc.title) }}>重命名</Button>,
-                <Popconfirm key="delete" title="确定删除这篇文档吗？" onConfirm={() => deleteDocument(doc.id)}>
+                doc.permission === 2 && <Button key="rename" type="link" onClick={() => { setEditing(doc); setTitle(doc.title) }}>重命名</Button>,
+                doc.isOwner && <Button key="members" type="link" onClick={() => setManaging(doc)}>协作者管理</Button>,
+                doc.isOwner && <Popconfirm key="delete" title="确定删除这篇文档吗？" onConfirm={() => deleteDocument(doc.id)}>
                   <Button type="link" danger>删除</Button>
                 </Popconfirm>,
-              ]}>
+              ].filter(Boolean)}>
                 <List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={doc.title} description={doc.ownerName + ' · ' + doc.updateTime} />
               </List.Item>
             )}
           />
         </Card>
       </main>
+      {managing && <CollaboratorModal doc={managing} onClose={() => setManaging(null)} />}
       <Modal title="重命名文档" open={Boolean(editing)} onOk={renameDocument} onCancel={() => setEditing(null)}>
         <Input maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} onPressEnter={renameDocument} />
       </Modal>

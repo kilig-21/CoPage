@@ -69,6 +69,48 @@ public class DocumentRepository {
         return permissions.isEmpty() ? 0 : permissions.get(0);
     }
 
+    public Optional<DocumentRow> findForUpdate(long docId) {
+        return jdbc.query("""
+                SELECT d.id, d.title, d.content, d.revision, d.owner_id,
+                       u.nickname AS owner_name, d.parent_id, d.update_time
+                FROM document d JOIN user u ON u.id = d.owner_id
+                WHERE d.id = ? AND d.is_deleted = 0 FOR UPDATE
+                """, ROW_MAPPER, docId).stream().findFirst();
+    }
+
+    public Optional<AccountView> accountByUsername(String username) {
+        return jdbc.query("SELECT id, username, nickname FROM user WHERE username = ?",
+                (rs, index) -> new AccountView(rs.getLong("id"), rs.getString("username"),
+                        rs.getString("nickname")), username).stream().findFirst();
+    }
+
+    public List<CollaboratorView> collaborators(long docId) {
+        return jdbc.query("""
+                SELECT c.user_id, u.username, u.nickname, c.permission
+                FROM doc_collaborator c JOIN user u ON u.id = c.user_id
+                WHERE c.doc_id = ? ORDER BY c.id
+                """, (rs, index) -> new CollaboratorView(rs.getLong("user_id"),
+                rs.getString("username"), rs.getString("nickname"), rs.getInt("permission")), docId);
+    }
+
+    public void addCollaborator(long docId, long userId, int permission) {
+        jdbc.update("INSERT INTO doc_collaborator (doc_id, user_id, permission) VALUES (?, ?, ?)",
+                docId, userId, permission);
+    }
+
+    public void changeCollaborator(long docId, long userId, int permission) {
+        jdbc.update("UPDATE doc_collaborator SET permission = ? WHERE doc_id = ? AND user_id = ?",
+                permission, docId, userId);
+    }
+
+    public void removeCollaborator(long docId, long userId) {
+        jdbc.update("DELETE FROM doc_collaborator WHERE doc_id = ? AND user_id = ?", docId, userId);
+    }
+
+    public record AccountView(long id, String username, String nickname) { }
+
+    public record CollaboratorView(long userId, String username, String nickname, int permission) { }
+
     public long countVisible(long userId, String keyword) {
         return jdbc.queryForObject(
                 "SELECT COUNT(*) FROM document d WHERE " + VISIBLE_FILTER,
