@@ -34,8 +34,9 @@ public class AuthService {
     public UserView register(String username, String password, String nickname) {
         String normalizedUsername = username.trim();
         if (normalizedUsername.length() < 3 || normalizedUsername.length() > 50
-                || password.length() < 6 || password.length() > 64) {
-            throw new BizException(ErrorCode.PARAM_ERROR);
+                || password.length() < 6 || password.length() > 64
+                || password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "用户名需要 3～50 个字符；密码需要 6～64 个字符且 UTF-8 长度不超过 72 字节");
         }
         String normalizedNickname = nickname == null || nickname.isBlank()
                 ? normalizedUsername : nickname.trim();
@@ -59,7 +60,10 @@ public class AuthService {
     }
 
     public LoginView login(String username, String password) {
-        UserAccount user = findByUsername(username);
+        UserAccount user = findByUsername(username.trim());
+        if (password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72) {
+            throw new BizException(ErrorCode.UNAUTHORIZED, "用户名或密码错误");
+        }
         if (user == null || !passwordEncoder.matches(password, user.getPassword())) {
             throw new BizException(ErrorCode.UNAUTHORIZED, "用户名或密码错误");
         }

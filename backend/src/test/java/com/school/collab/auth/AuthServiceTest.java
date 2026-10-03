@@ -67,4 +67,21 @@ class AuthServiceTest {
         assertEquals(ErrorCode.PARAM_ERROR, rejected.getErrorCode());
         verify(mapper, never()).insert(any(UserAccount.class));
     }
+
+    @Test
+    void registrationRejectsPasswordsBeyondBcryptByteLimitBeforeWriting() {
+        UserAccountMapper mapper = mock(UserAccountMapper.class);
+        AuthService service = new AuthService(mapper, SECRET, 24);
+        var error = assertThrows(BizException.class, () -> service.register("newuser", "密".repeat(25), null));
+        assertEquals(ErrorCode.PARAM_ERROR, error.getErrorCode());
+        verifyNoInteractions(mapper);
+    }
+
+    @Test
+    void loginRejectsOversizedPasswordWithAuthenticationError() {
+        UserAccountMapper mapper = mock(UserAccountMapper.class);
+        AuthService service = new AuthService(mapper, SECRET, 24);
+        var error = assertThrows(BizException.class, () -> service.login("testA", "密".repeat(25)));
+        assertEquals(ErrorCode.UNAUTHORIZED, error.getErrorCode());
+    }
 }

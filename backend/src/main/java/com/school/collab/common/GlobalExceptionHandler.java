@@ -34,6 +34,7 @@ public class GlobalExceptionHandler {
             MethodArgumentNotValidException.class,
             ConstraintViolationException.class,
             HttpMessageNotReadableException.class,
+            org.springframework.web.bind.MissingServletRequestParameterException.class,
             MethodArgumentTypeMismatchException.class
     })
     public ResponseEntity<Result<Void>> handleValidationException(Exception exception) {
@@ -55,6 +56,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result<Void>> handleUnexpectedException(Exception exception) {
         log.error("未处理的服务器异常", exception);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Result.fail(ErrorCode.INTERNAL_ERROR));
+    }
+
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Result<Void>> handleUnsupportedMethod(org.springframework.web.HttpRequestMethodNotSupportedException exception) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+            .body(new Result<>(405, "该接口不支持此请求方法", null));
     }
 
     private HttpStatus httpStatus(ErrorCode errorCode) {
