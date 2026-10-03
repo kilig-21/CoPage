@@ -87,7 +87,10 @@ export default function DocList() {
       <main className="content-wrap">
         <div className="page-heading">
           <div><Typography.Title level={2}>我的文档</Typography.Title><Typography.Text type="secondary">所有修改都会自动保存</Typography.Text></div>
-          <Button type="primary" icon={<PlusOutlined />} onClick={createDocument}>新建文档</Button>
+          <Space wrap>
+            <Button onClick={() => navigate('/templates')}>从模板新建</Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={createDocument}>新建文档</Button>
+          </Space>
         </div>
         <Card className="doc-list-card">
           <List

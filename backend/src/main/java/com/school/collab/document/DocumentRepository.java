@@ -62,6 +62,11 @@ public class DocumentRepository {
         return rows.stream().findFirst();
     }
 
+    /** 与新建文档同事务保存，保证模板初始版本可被历史恢复。 */
+    public void saveInitialSnapshot(long docId, String content) {
+        jdbc.update("INSERT INTO doc_snapshot(doc_id,revision,content) VALUES(?,0,?)", docId, content);
+    }
+
     public int collaboratorPermission(long docId, long userId) {
         List<Integer> permissions = jdbc.query(
                 "SELECT permission FROM doc_collaborator WHERE doc_id = ? AND user_id = ?",

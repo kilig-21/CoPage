@@ -36,7 +36,16 @@ public class DocumentController {
     public Result<DocumentService.SummaryView> create(@RequestBody(required = false) CreateRequest request) {
         return Result.ok(documents.create(
                 request == null ? null : request.title(),
-                request == null || request.parentId() == null ? 0 : request.parentId()));
+                request == null || request.parentId() == null ? 0 : request.parentId(),
+                request == null ? null : request.templateId()));
+    }
+
+    @GetMapping("/templates")
+    public Result<java.util.List<DocumentTemplates.TemplateView>> templates() {
+        if (com.school.collab.common.UserContext.getUserId() == null) {
+            throw new com.school.collab.common.BizException(com.school.collab.common.ErrorCode.UNAUTHORIZED);
+        }
+        return Result.ok(DocumentTemplates.list());
     }
 
     @GetMapping("/{id}")
@@ -57,7 +66,7 @@ public class DocumentController {
         return Result.ok();
     }
 
-    public record CreateRequest(String title, Long parentId) {
+    public record CreateRequest(String title, Long parentId, String templateId) {
     }
 
     public record RenameRequest(@NotBlank @Size(max = 200) String title) {

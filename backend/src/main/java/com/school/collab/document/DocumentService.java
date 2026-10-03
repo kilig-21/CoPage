@@ -54,6 +54,11 @@ public class DocumentService {
 
     @Transactional
     public SummaryView create(String title, long parentId) {
+        return create(title, parentId, null);
+    }
+
+    @Transactional
+    public SummaryView create(String title, long parentId, String templateId) {
         if (parentId < 0) {
             throw new BizException(ErrorCode.PARAM_ERROR);
         }
@@ -64,8 +69,15 @@ public class DocumentService {
                 throw new BizException(ErrorCode.FORBIDDEN);
             }
         }
-        String normalizedTitle = normalizeTitle(title, true);
-        long id = documents.create(normalizedTitle, userId, parentId, EMPTY_CONTENT);
+        var template = templateId == null ? null : DocumentTemplates.require(templateId);
+        String normalizedTitle = normalizeTitle(title == null && template != null ? template.title() : title, true);
+        String content = EMPTY_CONTENT;
+        if (template != null) {
+            try { content = objectMapper.writeValueAsString(template.content()); }
+            catch (JsonProcessingException ex) { throw new IllegalStateException("模板内容无法序列化", ex); }
+        }
+        long id = documents.create(normalizedTitle, userId, parentId, content);
+        if (template != null) documents.saveInitialSnapshot(id, content);
         indexAfterCommit(id);
         DocumentRow row = documents.find(id).orElseThrow(() -> new BizException(ErrorCode.INTERNAL_ERROR));
         return summary(row);

@@ -1,19 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Drawer, Input, List, Modal, Space, Spin, Tag, Typography } from 'antd'
-import Quill from 'quill'
 import request from '../api/request'
-
-function VersionPreview({ content }) {
-  const host = useRef(null)
-  useEffect(() => {
-    if (!host.current || !content) return undefined
-    const node = host.current
-    const preview = new Quill(node, { readOnly: true, theme: 'snow', modules: { toolbar: false } })
-    preview.setContents(content, 'api')
-    return () => { node.replaceChildren(); node.className = '' }
-  }, [content])
-  return <div ref={host} aria-label="历史版本内容" />
-}
+import DocumentPreview from './DocumentPreview'
 
 export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
   const [modal, contextHolder] = Modal.useModal()
@@ -126,7 +114,7 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
     </Space>
     {selected != null && <>
       <Typography.Title level={5}>版本 {selected}</Typography.Title>
-      {!preview ? <Spin /> : <VersionPreview content={preview} />}
+      {!preview ? <Spin /> : <DocumentPreview content={preview} label="历史版本内容" />}
       {isOwner && preview && <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
         <Input value={name} maxLength={100} disabled={busy} onChange={e => setName(e.target.value)} placeholder="重要版本名称" aria-label="重要版本名称" />
         <Space wrap>

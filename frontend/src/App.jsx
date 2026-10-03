@@ -3,6 +3,7 @@ import Login from './pages/Login'
 import DocList from './pages/DocList'
 import Editor from './pages/Editor'
 import Search from './pages/Search'
+import Templates from './pages/Templates'
 
 function RequireAuth({ children }) {
   return localStorage.getItem('collab-token')
@@ -17,6 +18,7 @@ export default function App() {
       <Route path="/docs" element={<RequireAuth><DocList /></RequireAuth>} />
       <Route path="/docs/:id" element={<RequireAuth><Editor /></RequireAuth>} />
       <Route path="/search" element={<RequireAuth><Search /></RequireAuth>} />
+      <Route path="/templates" element={<RequireAuth><Templates /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/docs" replace />} />
     </Routes>
   )

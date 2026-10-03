@@ -41,6 +41,41 @@ class DocumentServiceTest {
     }
 
     @Test
+    void templateCreationStoresMatchingRevisionZeroSnapshot() throws Exception {
+        UserContext.set(1L, "owner");
+        when(repository.create(anyString(), eq(1L), eq(0L), anyString())).thenReturn(5L);
+        when(repository.find(5L)).thenReturn(Optional.of(row));
+        service.create(null, 0L, "meeting");
+        var content = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(repository).create(eq("会议纪要"), eq(1L), eq(0L), content.capture());
+        verify(repository).saveInitialSnapshot(5L, content.getValue());
+        var delta = new ObjectMapper().readTree(content.getValue());
+        assertEquals("会议纪要", delta.get("ops").get(0).get("insert").asText());
+        assertEquals(1, delta.get("ops").get(1).get("attributes").get("header").asInt());
+    }
+
+    @Test
+    void invalidTemplateAndMissingLoginNeverCreateDocument() {
+        UserContext.set(1L, "owner");
+        assertEquals(ErrorCode.PARAM_ERROR, assertThrows(BizException.class,
+            () -> service.create("test", 0, "unknown")).getErrorCode());
+        UserContext.clear();
+        assertEquals(ErrorCode.UNAUTHORIZED, assertThrows(BizException.class,
+            () -> service.create("test", 0, "meeting")).getErrorCode());
+        verify(repository, never()).create(anyString(), anyLong(), anyLong(), anyString());
+    }
+
+    @Test
+    void blankDocumentCreationStillUsesEmptyDelta() {
+        UserContext.set(1L, "owner");
+        when(repository.create(anyString(), eq(1L), eq(0L), anyString())).thenReturn(5L);
+        when(repository.find(5L)).thenReturn(Optional.of(row));
+        service.create(null, 0);
+        verify(repository).create("未命名文档", 1L, 0L, "{\"ops\":[{\"insert\":\"\\n\"}]}");
+        verify(repository, never()).saveInitialSnapshot(anyLong(), anyString());
+    }
+
+    @Test
     void readOnlyCollaboratorCanReadButCannotRenameOrDelete() {
         UserContext.set(2L, "reader");
         when(repository.find(5L)).thenReturn(Optional.of(row));
