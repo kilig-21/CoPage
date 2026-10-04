@@ -5,7 +5,7 @@ import CollabSocket from '../ws/CollabSocket'
 import CollabClient from '../ws/CollabClient'
 import request from '../api/request'
 import { createReconnectSessionCheck, expireSession } from '../auth/session'
-import { IMAGE_ACCEPT, imageValidationError, uploadEditorImage } from './imageUpload'
+import { IMAGE_ACCEPT, createImageInsertion, finishImageInsertion, imageValidationError, uploadEditorImage } from './imageUpload'
 import RemoteCursorLayer from './RemoteCursorLayer'
 import { DOCUMENT_FORMATS } from './formats'
 import { configureEditorToolbar } from './toolbar'
@@ -58,6 +58,10 @@ export default function useQuillCollab(docId) {
       placeholder: '开始协同编辑…',
       modules: {
         history: { userOnly: true },
+        uploader: {
+          mimetypes: IMAGE_ACCEPT.split(','),
+          handler: (range, files) => { void uploadImageFiles(range, files) },
+        },
         toolbar: {
           container: [
             ['undo', 'redo'],
@@ -109,6 +113,7 @@ export default function useQuillCollab(docId) {
     let synced = false
     let uploading = false
     let imageInsertIndex = null
+    let pendingImageOperation = null
     let uploadController = null
     let titleController = null
     const refreshTitle = async () => {
@@ -172,16 +177,13 @@ export default function useQuillCollab(docId) {
     const abortImageUpload = () => {
       uploadController?.abort()
       imageInsertIndex = null
+      pendingImageOperation = null
     }
 
-    const onImageChange = async () => {
-      const file = imageInput.files?.[0]
-      imageInput.value = ''
-      if (!file) {
-        imageInsertIndex = null
-        return
-      }
-      const validationError = imageValidationError(file)
+    const uploadImageFiles = async (range, files) => {
+      if (!files.length) return
+      const validationError = files.length > 10 ? '一次最多上传10张图片，请分批添加'
+        : files.map(imageValidationError).find(Boolean)
       if (validationError) {
         imageInsertIndex = null
         setError(validationError)
@@ -193,19 +195,22 @@ export default function useQuillCollab(docId) {
         return
       }
       uploading = true
+      pendingImageOperation = createImageInsertion(range, files.length, Delta)
       updateSaveStatus()
       const controller = new AbortController()
       uploadController = controller
       try {
-        const url = await uploadEditorImage(request, file, controller.signal)
-        if (!active || !canEdit || !connected || !synced) {
+        const urls = []
+        for (const file of files) urls.push(await uploadEditorImage(request, file, controller.signal))
+        if (!active || controller.signal.aborted || !pendingImageOperation || !canEdit || !connected || !synced) {
           if (active) setError('上传期间协同连接中断，请重连后重新选择图片')
           return
         }
-        const index = Math.min(imageInsertIndex ?? quill.getLength() - 1, quill.getLength() - 1)
+        const { delta, insertionEnd } = finishImageInsertion(pendingImageOperation, urls, Delta)
+        pendingImageOperation = null
         imageInsertIndex = null
-        quill.insertEmbed(index, 'image', url, 'user')
-        quill.setSelection(index + 1, 0, 'silent')
+        quill.updateContents(delta, 'user')
+        quill.setSelection(insertionEnd, 0, 'silent')
         setError('')
       } catch (uploadError) {
         if (active && !controller.signal.aborted) setError(uploadError?.message || '图片上传失败')
@@ -214,7 +219,15 @@ export default function useQuillCollab(docId) {
         updateSaveStatus()
         uploadController = null
         imageInsertIndex = null
+        pendingImageOperation = null
       }
+    }
+    const onImageChange = async () => {
+      const file = imageInput.files?.[0]
+      imageInput.value = ''
+      if (!file) { imageInsertIndex = null; return }
+      const index = imageInsertIndex ?? Math.max(0, quill.getLength() - 1)
+      await uploadImageFiles({ index, length: 0 }, [file])
     }
     const onImageCancel = () => { imageInsertIndex = null }
     imageInput.addEventListener('change', onImageChange)
@@ -409,6 +422,7 @@ export default function useQuillCollab(docId) {
     const onTextChange = (delta, _old, source) => {
       updateToolbar()
       linkEditor.transform(delta)
+      if (pendingImageOperation) pendingImageOperation = delta.transform(pendingImageOperation, true)
       if (imageInsertIndex !== null) imageInsertIndex = delta.transformPosition(imageInsertIndex, true)
       cursorLayer.transform(delta)
       if (source !== 'user') return

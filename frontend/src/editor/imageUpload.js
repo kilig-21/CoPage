@@ -1,5 +1,28 @@
 export const IMAGE_ACCEPT = 'image/jpeg,image/png,image/gif,image/webp'
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+const IMAGE_PLACEHOLDER = 'copage-upload-image:'
+
+export function createImageInsertion(range, count, Delta) {
+  const operation = new Delta().retain(range.index).delete(range.length)
+  for (let index = 0; index < count; index++) operation.insert({ image: IMAGE_PLACEHOLDER + index })
+  return operation
+}
+
+export function finishImageInsertion(operation, urls, Delta) {
+  let position = 0
+  let insertionEnd = 0
+  const ops = operation.ops.map(op => {
+    if (op.retain) position += op.retain
+    if (op.insert?.image?.startsWith(IMAGE_PLACEHOLDER)) {
+      const index = Number(op.insert.image.slice(IMAGE_PLACEHOLDER.length))
+      if (!urls[index]) throw new Error('图片上传结果不完整，请重新选择文件')
+      insertionEnd = ++position
+      return { ...op, insert: { image: urls[index] } }
+    }
+    return op
+  })
+  return { delta: new Delta(ops), insertionEnd }
+}
 
 export function imageValidationError(file) {
   if (!file || file.size === 0) return '请选择非空图片'
