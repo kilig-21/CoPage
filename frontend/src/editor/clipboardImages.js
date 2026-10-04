@@ -4,6 +4,24 @@ import { normalizeDocumentLink } from './links.js'
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 const OMITTED_IMAGE = '[图片无法粘贴，请使用上传图片]'
 
+export function normalizeClipboardContent(delta) {
+  const result = new delta.constructor()
+  let changed = false
+  for (const op of delta.ops) {
+    const insert = typeof op.insert === 'string' ? op.insert.replace(/\u0000/g, '') : op.insert
+    const attributes = { ...op.attributes }
+    if (insert !== op.insert) changed = true
+    for (const key of ['color', 'background']) {
+      if (Object.hasOwn(attributes, key) && (typeof attributes[key] !== 'string' || !/^(?:#[a-fA-F0-9]{3,8}|[a-zA-Z]{1,20}|rgba?\([0-9., %]{1,40}\))$/.test(attributes[key]))) {
+        delete attributes[key]
+        changed = true
+      }
+    }
+    if (insert !== '') result.insert(insert, attributes)
+  }
+  return { delta: result, changed }
+}
+
 export function normalizeImageAttributes(attributes = {}) {
   const result = { ...attributes }
   for (const key of ['width', 'height']) {
@@ -58,8 +76,17 @@ export function configureClipboardImages(quill, uploadFiles, notify) {
     let pasted
     try { pasted = quill.clipboard.convert({ text, html }, quill.getFormat(range.index)) }
     finally { conversion = null }
+    const normalized = normalizeClipboardContent(pasted)
+    pasted = normalized.delta
+    const notice = [
+      context.omitted ? '部分图片地址不可共享或格式不支持，已保留文字占位，请另行上传图片' : '',
+      normalized.changed ? '已移除不支持的颜色格式或空字符，文字与其他格式保留' : '',
+    ].filter(Boolean).join('；')
+    if (!pasted.length()) {
+      if (notice) notify(notice)
+      return
+    }
     const operation = new Delta().retain(range.index).delete(range.length).concat(pasted)
-    const notice = context.omitted ? '部分图片地址不可共享或格式不支持，已保留文字占位，请另行上传图片' : ''
     if (context.files.length) {
       void uploadFiles(range, context.files, operation, notice)
     } else {

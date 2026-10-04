@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import Delta from 'quill-delta'
-import { embeddedImageFile, normalizeImageAttributes, normalizeImageUrl } from './clipboardImages.js'
+import { configureClipboardImages, embeddedImageFile, normalizeClipboardContent, normalizeImageAttributes, normalizeImageUrl } from './clipboardImages.js'
 import { finishImageInsertion, IMAGE_PLACEHOLDER } from './imageUpload.js'
 
 test('粘贴图片只保留可共享地址，拒绝私有 blob、相对地址、用户信息及不合法域名', () => {
@@ -35,4 +35,35 @@ test('混合 HTML 上传后保留前后文字与格式，光标在全部粘贴�
     { insert: { image: 'https://example.com/a.png' }, attributes: { alt: '图' } }, { insert: '末尾协作后\n' },
   ])
   assert.equal(result.insertionEnd, 6)
+})
+
+test('广色域颜色不发送至后端，保留正文和其他格式，普通颜色不改变', () => {
+  const source = new Delta()
+    .insert('广色域', { color: 'color(display-p3 1 0 0)', background: 'lab(50% 0 0)', bold: true })
+    .insert('正常', { color: '#ff0000', background: 'rgba(0, 0, 0, 0.5)', italic: true })
+  const result = normalizeClipboardContent(source)
+  assert.equal(result.changed, true)
+  assert.deepEqual(result.delta.ops, [
+    { insert: '广色域', attributes: { bold: true } },
+    { insert: '正常', attributes: { color: '#ff0000', background: 'rgba(0, 0, 0, 0.5)', italic: true } },
+  ])
+  assert.equal(source.ops[0].attributes.color, 'color(display-p3 1 0 0)')
+  assert.equal(normalizeClipboardContent(new Delta().insert('正文', { color: 'red' })).changed, false)
+})
+
+test('纯文本空字符过滤后全部为空时，不删除当前选区或产生编辑', () => {
+  const notices = []
+  const quill = {
+    constructor: { import: () => Delta },
+    clipboard: { addMatcher() {}, convert: () => new Delta().insert('\u0000\u0000') },
+    getFormat: () => ({}),
+    updateContents() { assert.fail('空内容不得替换选区') },
+    setSelection() { assert.fail('空内容不得移动光标') },
+  }
+  configureClipboardImages(quill, () => assert.fail('不应上传'), notice => notices.push(notice))
+  quill.clipboard.onPaste({ index: 3, length: 5 }, { text: '\u0000\u0000' })
+  assert.equal(notices.length, 1)
+  assert.match(notices[0], /空字符/)
+  const result = normalizeClipboardContent(new Delta().insert('甲\u0000乙\n', { bold: true }))
+  assert.deepEqual(result.delta.ops, [{ insert: '甲乙\n', attributes: { bold: true } }])
 })
