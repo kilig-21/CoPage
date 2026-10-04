@@ -54,6 +54,7 @@ export default function useQuillCollab(docId) {
       theme: 'snow',
       placeholder: '开始协同编辑…',
       modules: {
+        history: { userOnly: true },
         toolbar: {
           container: [
             [{ header: [1, 2, false] }],
@@ -215,7 +216,8 @@ export default function useQuillCollab(docId) {
         abortImageUpload()
         cursorLayer.clear()
         lastSentCursor = null
-        if (content) quill.setContents(content, 'api')
+        // 仅应用服务端差异，避免重连全文替换抹掉本标签的撤销记录。
+        if (content) quill.updateContents(quill.getContents().diff(content), 'api')
         lastKnownContents = quill.getContents()
       },
       onRemote: (operation) => {
