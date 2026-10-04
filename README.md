@@ -38,7 +38,7 @@ CoPage 是一个以 **Java 后端和实时协同算法**为核心的课程实训
 | --- | --- |
 | 后端 | Java 21、Spring Boot 3.3.5、Spring WebSocket、MyBatis-Plus / JDBC、JWT |
 | 协同核心 | Java 实现的 Delta、操作变换、服务端 revision 全序、客户端 pending/buffer 状态机 |
-| 前端 | React 18.3、Vite 5.4、Quill 2.0、Ant Design 5、Axios |
+| 前端 | React 18.3、Vite 7.3、Quill 2.0、Ant Design 5、Axios |
 | 数据与基础设施 | MySQL 8.4、Redis 7.4、RabbitMQ 3.13、Elasticsearch 8.15、MinIO、Docker Compose |
 | 测试 | JUnit 5、Mockito、Node.js 内置测试运行器 |
 
@@ -64,7 +64,7 @@ Redis 是热状态和协调层，Elasticsearch 是可重建的检索副本；Rab
 
 ### 1. 环境与代码
 
-准备 JDK 21、Maven 3.9+、Node.js 20+ 和 Docker Compose v2。Windows 可使用 Docker Desktop；执行 Compose 命令前先启动 Docker。
+准备 JDK 21、Maven 3.9+、Node.js 22.12+ 和 Docker Compose v2。Windows 可使用 Docker Desktop；执行 Compose 命令前先启动 Docker。
 
 ```powershell
 git clone --branch feat/collab-core https://github.com/kilig-21/CoPage.git
