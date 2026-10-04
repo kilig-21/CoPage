@@ -9,6 +9,7 @@ import { IMAGE_ACCEPT, imageValidationError, uploadEditorImage } from './imageUp
 import RemoteCursorLayer from './RemoteCursorLayer'
 import { DOCUMENT_FORMATS } from './formats'
 import { configureEditorToolbar } from './toolbar'
+import { configureLinkEditor, normalizePastedLinks } from './links'
 
 function createClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `client-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -51,6 +52,7 @@ export default function useQuillCollab(docId) {
     imageInput.hidden = true
 
     const quill = new Quill(host, {
+      bounds: host,
       formats: DOCUMENT_FORMATS,
       theme: 'snow',
       placeholder: '开始协同编辑…',
@@ -84,6 +86,8 @@ export default function useQuillCollab(docId) {
     quill.enable(false)
     const updateToolbar = configureEditorToolbar(quill)
     updateToolbar()
+    const disposeLinkEditor = configureLinkEditor(quill)
+    quill.clipboard.addMatcher('A', normalizePastedLinks)
     quill.root.setAttribute('role', 'textbox')
     quill.root.setAttribute('aria-label', '文档正文')
     quill.root.setAttribute('aria-multiline', 'true')
@@ -523,6 +527,7 @@ export default function useQuillCollab(docId) {
       active = false
       sessionCheckController.abort()
       titleController?.abort()
+      disposeLinkEditor()
       refreshTitleRef.current = null
       window.clearInterval(cursorKeepaliveTimer)
       quill.off('text-change', onTextChange)

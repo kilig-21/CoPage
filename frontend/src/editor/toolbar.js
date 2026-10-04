@@ -11,7 +11,7 @@ export function configureEditorToolbar(quill) {
     strike: ['删除线'],
     blockquote: ['引用'],
     'code-block': ['代码块'],
-    link: ['添加或编辑链接'],
+    link: ['添加或移除链接', '选中文字后添加链接；已有链接可在预览中编辑'],
     image: ['上传图片'],
     clean: ['清除格式'],
   }

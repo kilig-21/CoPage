@@ -26,6 +26,17 @@ body { margin: 0; min-width: 0; }
 .editor-canvas .ql-toolbar button:focus-visible,
 .editor-canvas .ql-toolbar .ql-picker-label:focus-visible,
 .editor-canvas .ql-toolbar .ql-picker-item:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.editor-host.ql-snow .ql-tooltip { max-width: 100%; white-space: normal; }
+.editor-host .ql-tooltip:not(.ql-hidden) { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.editor-host.ql-snow .ql-tooltip::before { content: '链接：'; }
+.editor-host .ql-tooltip.ql-editing[data-mode=link]::before { content: '链接地址：'; }
+.editor-host .ql-tooltip input[type=text] { width: 220px; max-width: 100%; min-width: 0; }
+.editor-host.ql-snow .ql-tooltip a.ql-action::after { content: '编辑'; margin: 0; padding: 0; border: 0; }
+.editor-host.ql-snow .ql-tooltip.ql-editing a.ql-action::after { content: '保存'; }
+.editor-host.ql-snow .ql-tooltip a.ql-remove::before { content: '移除'; margin: 0; }
+.editor-host .ql-tooltip [role=button] { padding: 4px 8px; line-height: 20px; }
+.editor-host .ql-tooltip [role=button]:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.editor-link-error { flex-basis: 100%; min-width: 0; white-space: normal; color: #b42318; font-size: 12px; overflow-wrap: anywhere; }
 .editor-host.ql-container.ql-snow { min-height: 500px; border: 0; font-family: inherit; font-size: 16px; line-height: 1.8; }
 .editor-host .ql-editor { min-height: 500px; padding: 28px 0 0; }
 .editor-host.ql-container { position: relative; }
