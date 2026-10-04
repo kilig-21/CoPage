@@ -9,6 +9,9 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
   const [versions, setVersions] = useState([])
   const [selected, setSelected] = useState(null)
   const [preview, setPreview] = useState(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewError, setPreviewError] = useState('')
+  const previewRegion = useRef(null)
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -37,14 +40,24 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
   useEffect(() => { alive.current = true; load(); return () => { alive.current = false } }, [docId])
   const choose = async (revision) => {
     const ticket = ++selectionRequest.current
-    setSelected(revision); setPreview(null); setName(''); restoreRequest.current = null
+    setSelected(revision); setPreview(null); setPreviewLoading(true); setPreviewError(''); setName(''); restoreRequest.current = null
     try {
       const response = await request.get(`${base}/${revision}`)
       if (alive.current && ticket === selectionRequest.current) {
         setPreview(response.data.content); setError('')
         setName(history?.namedVersions.find(version => version.revision === revision)?.name || '')
       }
-    } catch (ex) { if (alive.current && ticket === selectionRequest.current) setError(ex.message || '版本读取失败') }
+    } catch (ex) { if (alive.current && ticket === selectionRequest.current) setPreviewError(ex.message || '版本读取失败') }
+    finally {
+      if (alive.current && ticket === selectionRequest.current) {
+        setPreviewLoading(false)
+        requestAnimationFrame(() => {
+          if (!alive.current || ticket !== selectionRequest.current) return
+          previewRegion.current?.focus({ preventScroll: true })
+          previewRegion.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+        })
+      }
+    }
   }
   const mark = async (remove = false) => {
     setBusy(true)
@@ -86,7 +99,7 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
       ? [{ revision: history.currentRevision, name: '当前版本' }] : []),
     ...versions, ...named,
   ].map(v => [v.revision, v])).values()].sort((a, b) => b.revision - a.revision)
-  return <Drawer title="历史版本" open width={720} onClose={onClose} maskClosable={!busy} closable={!busy}>
+  return <Drawer title="历史版本" aria-label="历史版本" open width={720} onClose={onClose} maskClosable={!busy} closable={!busy}>
     {contextHolder}
     <Typography.Paragraph>查看已保存的版本。恢复会生成新版本，旧记录仍保留；重要版本会在普通历史清理后继续保留。</Typography.Paragraph>
     {error && <Alert type="warning" showIcon message={error} />}
@@ -98,7 +111,7 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
       title:'清理超过保留范围的普通历史？',content:`版本 ${retention.proposedMinimumRevision} 之前的普通历史将不可恢复；重要版本和当前正文保留。`,
       okText:'确认清理',cancelText:'取消',onOk:compact,
     })}>清理过期历史</Button>}
-    <Spin spinning={loading}>
+    <div className="history-version-list"><Spin spinning={loading}>
       <List dataSource={rows} renderItem={v => <List.Item actions={[
         <Button key="view" disabled={busy} onClick={() => choose(v.revision)}>查看版本 {v.revision}</Button>,
       ]}>
@@ -107,14 +120,17 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
           {named.some(n => n.revision === v.revision) && <Tag color="blue">重要版本</Tag>}
         </Space>
       </List.Item>} />
-    </Spin>
-    <Space>
+    </Spin></div>
+    <Space wrap>
       <Button disabled={loading || busy} onClick={() => load()}>刷新列表</Button>
       {history?.nextBeforeRevision != null && <Button disabled={loading || busy} onClick={() => load(history.nextBeforeRevision)}>加载更早版本</Button>}
     </Space>
-    {selected != null && <>
+    {selected != null && <section ref={previewRegion} className="history-preview" tabIndex={-1} aria-label={`版本 ${selected} 预览`}>
       <Typography.Title level={5}>版本 {selected}</Typography.Title>
-      {!preview ? <Spin /> : <DocumentPreview content={preview} label="历史版本内容" />}
+      {previewLoading && <div role="status"><Spin size="small" /> 正在加载版本…</div>}
+      {previewError && <Alert type="warning" showIcon message={previewError}
+        action={<Button onClick={() => choose(selected)}>重试此版本</Button>} />}
+      {preview && <DocumentPreview content={preview} label="历史版本内容" />}
       {isOwner && preview && <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
         <Input value={name} maxLength={100} disabled={busy} onChange={e => setName(e.target.value)} placeholder="重要版本名称" aria-label="重要版本名称" />
         <Space wrap>
@@ -126,6 +142,6 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
           })}>恢复此版本</Button>
         </Space>
       </Space>}
-    </>}
+    </section>}
   </Drawer>
 }

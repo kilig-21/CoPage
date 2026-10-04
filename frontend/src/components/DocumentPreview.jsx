@@ -9,7 +9,7 @@ export default function DocumentPreview({ content, label = '文档预览' }) {
     const node = host.current
     const preview = new Quill(node, { readOnly: true, theme: 'snow', modules: { toolbar: false } })
     preview.setContents(content, 'api')
-    return () => { node.replaceChildren(); node.className = '' }
+    return () => { node.replaceChildren(); node.className = 'document-preview' }
   }, [content])
-  return <div ref={host} aria-label={label} />
+  return <div ref={host} className="document-preview" aria-label={label} />
 }

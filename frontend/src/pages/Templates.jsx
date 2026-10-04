@@ -35,7 +35,7 @@ export default function Templates() {
   }
 
   return <Layout className="app-shell">
-    <header className="topbar"><Typography.Title level={4}>文档模板</Typography.Title><Link to="/docs"><Button>返回我的文档</Button></Link></header>
+    <header className="topbar"><Typography.Title level={4}>文档模板</Typography.Title><Button onClick={() => navigate('/docs')}>返回我的文档</Button></header>
     <main className="content-wrap">
       <Typography.Title level={2}>从模板开始</Typography.Title>
       <Typography.Paragraph type="secondary">选择框架后创建自己的文档。模板不会引用其他用户的内容。</Typography.Paragraph>

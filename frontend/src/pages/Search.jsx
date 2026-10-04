@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeftOutlined, FileTextOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Empty, Input, List, Space, Typography } from 'antd'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
 import { snippetParts } from '../search/snippet'
 
 const PAGE_SIZE = 10
 
 export default function Search() {
+  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const query = (params.get('q') || '').trim()
   const rawPage = Number(params.get('page') || 1)
@@ -50,7 +51,7 @@ export default function Search() {
 
   return (
     <main className="content-wrap">
-      <Space className="search-title"><Link to="/docs"><Button type="text" aria-label="返回文档列表" icon={<ArrowLeftOutlined />} /></Link><Typography.Title level={2}>搜索文档</Typography.Title></Space>
+      <Space className="search-title"><Button type="text" aria-label="返回文档列表" icon={<ArrowLeftOutlined />} onClick={() => navigate('/docs')} /><Typography.Title level={2}>搜索文档</Typography.Title></Space>
       <Input.Search placeholder="搜索标题和正文" value={input} maxLength={100} onChange={(event) => setInput(event.target.value)} onSearch={search} loading={loading} size="large" enterButton="搜索" className="search-box" />
       {error && <Alert type="error" showIcon message={error} action={<Button size="small" onClick={() => setRetry((value) => value + 1)}>重试</Button>} />}
       <Card>

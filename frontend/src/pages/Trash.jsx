@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Empty, Layout, List, Pagination, Popconfirm, Typography } from 'antd'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import request from '../api/request'
 
 const PAGE_SIZE=20
 export default function Trash() {
+  const navigate = useNavigate()
   const [docs,setDocs]=useState([])
   const [total,setTotal]=useState(0)
   const [page,setPage]=useState(1)
@@ -34,7 +35,7 @@ export default function Trash() {
     finally {setRestoring(null)}
   }
   return <Layout className="app-shell">
-    <header className="topbar"><Typography.Title level={4}>回收站</Typography.Title><Link to="/docs"><Button>返回我的文档</Button></Link></header>
+    <header className="topbar"><Typography.Title level={4}>回收站</Typography.Title><Button onClick={() => navigate('/docs')}>返回我的文档</Button></header>
     <main className="content-wrap">
       <Typography.Title level={2}>找回删除的文档</Typography.Title>
       <Typography.Paragraph type="secondary">这里只显示你拥有的已删除文档。恢复保留正文、版本与原协作者权限；已清理的普通历史不会重建。</Typography.Paragraph>

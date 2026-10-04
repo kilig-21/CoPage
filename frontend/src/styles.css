@@ -47,3 +47,9 @@ body { margin: 0; min-width: 0; }
   .doc-list-card .ant-card-body { padding: 16px; }
   .editor-topbar { align-items: flex-start; }
 }
+
+.document-preview.ql-container { height: auto; }
+.document-preview .ql-editor { min-height: 120px; max-height: 45vh; overflow-y: auto; }
+.history-version-list { max-height: 40vh; overflow-y: auto; margin: 16px 0; }
+.history-preview { margin-top: 20px; scroll-margin-top: 16px; }
+.history-preview:focus-visible { outline: 2px solid #2563eb; outline-offset: 4px; }
