@@ -4,6 +4,7 @@ import 'quill/dist/quill.snow.css'
 import CollabSocket from '../ws/CollabSocket'
 import CollabClient from '../ws/CollabClient'
 import request from '../api/request'
+import { createReconnectSessionCheck, expireSession } from '../auth/session'
 import { IMAGE_ACCEPT, imageValidationError, uploadEditorImage } from './imageUpload'
 import RemoteCursorLayer from './RemoteCursorLayer'
 
@@ -81,6 +82,7 @@ export default function useQuillCollab(docId) {
     const cursorLayer = new RemoteCursorLayer(quill)
     const Delta = Quill.import('delta')
     const token = localStorage.getItem('collab-token')
+    const sessionCheckController = new AbortController()
     const username = localStorage.getItem('collab-user')
     const draftPrefix = username ? `copage-draft:v1:${encodeURIComponent(username)}:${docId}:` : null
     const tabKey = `copage-tab-client:${docId}`
@@ -289,8 +291,28 @@ export default function useQuillCollab(docId) {
         updateEditable()
         client.disconnect()
         persistDraft()
+        checkReconnectSession()
       },
       onError: setError,
+    })
+    const checkReconnectSession = createReconnectSessionCheck({
+      isCurrent: () => active && localStorage.getItem('collab-token') === token,
+      getStatus: async () => {
+        const origin = (import.meta.env.VITE_BACKEND_HTTP_ORIGIN ?? '').replace(/\/$/, '')
+        const response = await fetch(`${origin}/api/doc/${docId}/metadata`, {
+          headers: { Authorization: `Bearer ${token}` }, cache: 'no-store',
+          signal: AbortSignal.any([sessionCheckController.signal, AbortSignal.timeout(5000)]),
+        })
+        await response.body?.cancel()
+        return response.status
+      },
+      onExpired: () => {
+        flushComposition()
+        persistDraft()
+        socket.close()
+        expireSession(localStorage, token,
+          () => window.dispatchEvent(new Event('copage-auth-expired')))
+      },
     })
     client.attachSocket(socket)
     historyReadyRef.current = () => connected && synced && canEdit && !uploading
@@ -485,6 +507,7 @@ export default function useQuillCollab(docId) {
       flushComposition()
       persistDraft()
       active = false
+      sessionCheckController.abort()
       titleController?.abort()
       refreshTitleRef.current = null
       window.clearInterval(cursorKeepaliveTimer)
