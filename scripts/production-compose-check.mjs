@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { runRecoveryCheck } from './production-recovery-smoke.mjs'
@@ -146,6 +148,13 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       assert.deepEqual(seeded, ['testA\tE6B58BE8AF95E794A8E688B72041', 'testB\tE6B58BE8AF95E794A8E688B72042'])
       console.log('PASS: 开发种子账号及昵称正确')
     }
+  } catch (error) {
+    // 先保留本次隔离测试的诊断，再清理临时栈；日志不直接打印，避免泄露合成凭据。
+    const diagnostics = mkdtempSync(join(tmpdir(), 'copage-production-failure-'))
+    const logs = qaDocker(['logs', '--no-color', 'backend'], { allowFailure: true })
+    writeFileSync(join(diagnostics, 'backend.log'), logs.stdout + logs.stderr, { mode: 0o600 })
+    console.error(`隔离验收失败的后端诊断已保留：${diagnostics}`)
+    throw error
   } finally {
     const ids = qaDocker(['ps', '-aq']).stdout.trim().split(/\s+/).filter(Boolean)
     for (const id of ids) {

@@ -1,14 +1,19 @@
 package com.school.collab.config;
 
+import com.school.collab.collab.persist.DocPersistenceQueue.OperationCommitted;
+import com.school.collab.collab.persist.DocPersistenceQueue.SnapshotRequested;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.DefaultJackson2JavaTypeMapper;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.Map;
 
 /**
  * 已落库操作通知与异步快照通道。正文、版本和操作日志由 MySQL 事务先行提交。
@@ -76,6 +81,13 @@ public class RabbitMqConfig {
      */
     @Bean
     public MessageConverter jsonMessageConverter() {
-        return new Jackson2JsonMessageConverter();
+        var converter = new Jackson2JsonMessageConverter();
+        var types = new DefaultJackson2JavaTypeMapper();
+        // 保留既有队列的完整类名头，仅映射本系统实际发送的两种消息，避免信任任意类。
+        types.setIdClassMapping(Map.of(
+                OperationCommitted.class.getName(), OperationCommitted.class,
+                SnapshotRequested.class.getName(), SnapshotRequested.class));
+        converter.setJavaTypeMapper(types);
+        return converter;
     }
 }

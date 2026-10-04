@@ -4,7 +4,7 @@ CoPage 是一个以 **Java 后端和实时协同算法**为核心的课程实训
 
 本地核心功能已交付：文档管理、成员权限、实时协同、搜索与图片均可使用。前端沿用基础样式，视觉素材由负责人后续处理；公网部署作为可选事项。
 
-> 开发进度及最近技术验收更新于 **2026-10-04**。当前开发分支为 [`feat/collab-core`](https://github.com/kilig-21/CoPage/tree/feat/collab-core)，完整进度见[实施计划与验收记录](docs/实施计划.md)，实际使用见[本地使用指南](docs/本地使用指南.md)。
+> 开发进度及最近技术验收更新于 **2026-10-05**。当前开发分支为 [`feat/collab-core`](https://github.com/kilig-21/CoPage/tree/feat/collab-core)，完整进度见[实施计划与验收记录](docs/实施计划.md)，实际使用见[本地使用指南](docs/本地使用指南.md)。
 
 ## 当前能做什么
 
@@ -36,7 +36,7 @@ CoPage 是一个以 **Java 后端和实时协同算法**为核心的课程实训
 
 | 层次 | 仓库当前配置 |
 | --- | --- |
-| 后端 | Java 21、Spring Boot 3.3.5、Spring WebSocket、MyBatis-Plus / JDBC、JWT |
+| 后端 | Java 21、Spring Boot 3.5.16、Spring WebSocket、MyBatis-Plus / JDBC、JWT |
 | 协同核心 | Java 实现的 Delta、操作变换、服务端 revision 全序、客户端 pending/buffer 状态机 |
 | 前端 | React 18.3、Vite 7.3、Quill 2.0、Ant Design 5、Axios |
 | 数据与基础设施 | MySQL 8.4、Redis 7.4、RabbitMQ 3.13、Elasticsearch 8.15、MinIO、Docker Compose |
