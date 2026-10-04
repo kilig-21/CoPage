@@ -27,6 +27,41 @@ class CollabEventBusTest {
     private final CollabEventBus bus = new CollabEventBus(redis, objectMapper, registry, sender, documents);
 
     @Test
+    void concurrentlyClosedSessionDoesNotPreventOtherPeersReceivingOperation() throws Exception {
+        WebSocketSession closing = mock(WebSocketSession.class);
+        WebSocketSession healthy = mock(WebSocketSession.class);
+        when(registry.sessionsOf(9L)).thenReturn(List.of(
+                new WsSessionRegistry.SessionInfo("closing", closing, 9L, "a", 1L, "owner"),
+                new WsSessionRegistry.SessionInfo("healthy", healthy, 9L, "b", 2L, "member")));
+        when(documents.permissionFor(eq(9L), anyLong())).thenReturn(2);
+        doThrow(new IllegalStateException("WebSocket session has been closed"))
+                .when(sender).send(eq(closing), any());
+        JsonNode payload = objectMapper.readTree("{\"type\":\"op\",\"docId\":9,\"revision\":2}");
+
+        deliver(payload);
+
+        verify(sender).send(eq(healthy), argThat(node -> node.path("type").asText().equals("permission")));
+        verify(sender).send(healthy, payload);
+    }
+
+    @Test
+    void failureClosingOneRevokedSessionDoesNotPreventOtherRevocations() throws Exception {
+        WebSocketSession closing = mock(WebSocketSession.class);
+        WebSocketSession healthy = mock(WebSocketSession.class);
+        when(registry.sessionsOf(9L)).thenReturn(List.of(
+                new WsSessionRegistry.SessionInfo("closing", closing, 9L, "a", 1L, "owner"),
+                new WsSessionRegistry.SessionInfo("healthy", healthy, 9L, "b", 2L, "member")));
+        when(documents.permissionFor(eq(9L), anyLong())).thenReturn(0);
+        doThrow(new IllegalStateException("WebSocket session has been closed"))
+                .when(closing).close(any());
+
+        deliver(objectMapper.readTree("{\"type\":\"permission\",\"docId\":9}"));
+
+        verify(sender).send(eq(healthy), argThat(node -> node.path("permission").asInt() == 0));
+        verify(healthy).close(org.springframework.web.socket.CloseStatus.POLICY_VIOLATION);
+    }
+
+    @Test
     void localOriginIsSkippedButOtherLocalSessionsReceiveBroadcast() throws Exception {
         WebSocketSession origin = mock(WebSocketSession.class);
         WebSocketSession other = mock(WebSocketSession.class);

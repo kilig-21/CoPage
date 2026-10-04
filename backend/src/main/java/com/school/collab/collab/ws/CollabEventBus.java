@@ -82,7 +82,8 @@ public class CollabEventBus implements MessageListener {
                     } else if (!permissionEvent) {
                         sender.send(target.session(), payload);
                     }
-                } catch (IOException exception) {
+                } catch (IOException | IllegalStateException exception) {
+                    // SessionDecorator可能在isOpen与send/close之间关闭；只隔离该连接，不终止后续广播。
                     log.debug("跨实例协同消息发送失败, session={}", target.sessionId(), exception);
                 }
             }
