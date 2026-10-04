@@ -20,6 +20,12 @@ body { margin: 0; min-width: 0; }
 .editor-canvas { margin-top: 16px; min-height: 600px; padding: 64px 72px; background: #fff; border: 1px solid #e8ecf3; border-radius: 10px; box-shadow: 0 12px 32px rgb(15 23 42 / 5%); }
 .editor-alert { margin-top: 16px; }
 .editor-canvas .ql-toolbar.ql-snow { border: 0; border-bottom: 1px solid #e8ecf3; padding: 0 0 16px; }
+.editor-canvas .ql-toolbar.ql-snow button.ql-undo,
+.editor-canvas .ql-toolbar.ql-snow button.ql-redo { width: 48px; font: inherit; font-size: 13px; }
+.editor-canvas .ql-toolbar.ql-snow button:disabled { opacity: .4; cursor: not-allowed; }
+.editor-canvas .ql-toolbar button:focus-visible,
+.editor-canvas .ql-toolbar .ql-picker-label:focus-visible,
+.editor-canvas .ql-toolbar .ql-picker-item:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 .editor-host.ql-container.ql-snow { min-height: 500px; border: 0; font-family: inherit; font-size: 16px; line-height: 1.8; }
 .editor-host .ql-editor { min-height: 500px; padding: 28px 0 0; }
 .editor-host.ql-container { position: relative; }

@@ -8,6 +8,7 @@ import { createReconnectSessionCheck, expireSession } from '../auth/session'
 import { IMAGE_ACCEPT, imageValidationError, uploadEditorImage } from './imageUpload'
 import RemoteCursorLayer from './RemoteCursorLayer'
 import { DOCUMENT_FORMATS } from './formats'
+import { configureEditorToolbar } from './toolbar'
 
 function createClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `client-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -57,6 +58,7 @@ export default function useQuillCollab(docId) {
         history: { userOnly: true },
         toolbar: {
           container: [
+            ['undo', 'redo'],
             [{ header: [1, 2, false] }],
             ['bold', 'italic', 'underline', 'strike'],
             [{ list: 'ordered' }, { list: 'bullet' }],
@@ -64,6 +66,8 @@ export default function useQuillCollab(docId) {
             ['clean'],
           ],
           handlers: {
+            undo: function () { if (this.quill.isEnabled()) this.quill.getModule('history').undo() },
+            redo: function () { if (this.quill.isEnabled()) this.quill.getModule('history').redo() },
             image: () => {
               if (!canEdit || !connected || !synced || uploading) {
                 setError(uploading ? '请等待当前图片上传完成' : '文档尚未就绪，暂时不能插入图片')
@@ -78,6 +82,8 @@ export default function useQuillCollab(docId) {
     })
     host.appendChild(imageInput)
     quill.enable(false)
+    const updateToolbar = configureEditorToolbar(quill)
+    updateToolbar()
     quill.root.setAttribute('role', 'textbox')
     quill.root.setAttribute('aria-label', '文档正文')
     quill.root.setAttribute('aria-multiline', 'true')
@@ -123,7 +129,10 @@ export default function useQuillCollab(docId) {
         : pending ? '正在保存…'
         : canEdit ? '所有修改已保存' : '只读 · 内容已同步')
     }
-    const updateEditable = () => quill.enable(canEdit && connected && synced)
+    const updateEditable = () => {
+      quill.enable(canEdit && connected && synced)
+      updateToolbar()
+    }
     let cursorSendTimer = null
     let lastSentCursor = null
 
@@ -394,6 +403,7 @@ export default function useQuillCollab(docId) {
       persistDraft()
     }
     const onTextChange = (delta, _old, source) => {
+      updateToolbar()
       if (imageInsertIndex !== null) imageInsertIndex = delta.transformPosition(imageInsertIndex, true)
       cursorLayer.transform(delta)
       if (source !== 'user') return
