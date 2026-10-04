@@ -9,6 +9,7 @@ import com.school.collab.collab.presence.RedisPresenceStore;
 import com.school.collab.collab.service.DocRevService;
 import com.school.collab.common.BizException;
 import com.school.collab.document.DocumentService;
+import com.school.collab.document.DocumentFormats;
 import com.school.collab.ot.Delta;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -175,6 +176,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
 
         Delta operation;
         try {
+            DocumentFormats.validateEditorOperation(opNode);
             operation = objectMapper.treeToValue(opNode, Delta.class);
         } catch (Exception exception) {
             throw new CollabException(400, "op 不是合法的 Delta");
@@ -331,6 +333,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         JsonNode node = payload.get(field);
         if (node == null || node.isNull()) throw new CollabException(400, "缺少 " + field);
         try {
+            DocumentFormats.validateEditorOperation(node);
             return objectMapper.treeToValue(node, Delta.class);
         } catch (Exception exception) {
             throw new CollabException(400, field + " 不是合法的 Delta");

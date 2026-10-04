@@ -7,6 +7,7 @@ import request from '../api/request'
 import { createReconnectSessionCheck, expireSession } from '../auth/session'
 import { IMAGE_ACCEPT, imageValidationError, uploadEditorImage } from './imageUpload'
 import RemoteCursorLayer from './RemoteCursorLayer'
+import { DOCUMENT_FORMATS } from './formats'
 
 function createClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `client-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -49,6 +50,7 @@ export default function useQuillCollab(docId) {
     imageInput.hidden = true
 
     const quill = new Quill(host, {
+      formats: DOCUMENT_FORMATS,
       theme: 'snow',
       placeholder: '开始协同编辑…',
       modules: {

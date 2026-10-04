@@ -37,6 +37,38 @@ class CollabWebSocketHandlerTest {
                     objectMapper, revisions, documents, registry, sender, eventBus, presence);
 
     @Test
+    void unsupportedEmbedIsRejectedBeforeRevisionOrPersistence() throws Exception {
+        WebSocketSession session = mock(WebSocketSession.class);
+        when(registry.require(session)).thenReturn(new WsSessionRegistry.SessionInfo(
+                "session-1", session, 5L, "test-client", 2L, "testB"));
+        when(documents.permissionFor(5L, 2L)).thenReturn(2);
+        handler.handleTextMessage(session, new TextMessage("""
+                {"type":"op","docId":5,"clientId":"test-client","opId":"op-1","baseRevision":0,
+                 "op":{"ops":[{"insert":{"unsupported":"qa"}}]}}
+                """));
+        ArgumentCaptor<JsonNode> response = ArgumentCaptor.forClass(JsonNode.class);
+        verify(sender).send(eq(session), response.capture());
+        assertEquals(400, response.getValue().path("code").asInt());
+        verifyNoInteractions(revisions, eventBus);
+    }
+
+    @Test
+    void unsupportedPendingOperationCannotEnterReconnectRecovery() throws Exception {
+        WebSocketSession session = mock(WebSocketSession.class);
+        when(session.getAttributes()).thenReturn(Map.of(
+                WsHandshakeInterceptor.USER_ID, 2L, WsHandshakeInterceptor.NICKNAME, "testB"));
+        handler.handleTextMessage(session, new TextMessage("""
+                {"type":"join","docId":5,"clientId":"test-client","lastRevision":0,"syncId":"sync-1",
+                 "pendingOpId":"op-1","pendingBaseRevision":0,
+                 "pendingOp":{"ops":[{"insert":{"unsupported":"qa"}}]}}
+                """));
+        ArgumentCaptor<JsonNode> response = ArgumentCaptor.forClass(JsonNode.class);
+        verify(sender).send(eq(session), response.capture());
+        assertEquals(400, response.getValue().path("code").asInt());
+        verifyNoInteractions(revisions, registry, eventBus);
+    }
+
+    @Test
     void joinRegistersAndSendsCatchupInsideTheServiceCallback() throws Exception {
         WebSocketSession session = mock(WebSocketSession.class);
         when(session.getAttributes()).thenReturn(Map.of(

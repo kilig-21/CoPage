@@ -8,20 +8,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
-import java.util.Set;
 
 /** 有界的 UTF-8 文本与 CoPage 富文本副本；副本不包含身份、权限、草稿或历史。 */
 @Service
 public class DocumentTransfer {
     public static final int MAX_BYTES = 1024 * 1024;
-    private static final Set<String> FORMATS = Set.of("bold", "italic", "underline", "strike", "blockquote",
-            "code", "code-block", "header", "list", "indent", "align", "direction", "font", "size",
-            "color", "background", "link", "script");
     private final DocumentService documents;
     private final ObjectMapper mapper;
     public DocumentTransfer(DocumentService documents, ObjectMapper mapper) { this.documents = documents; this.mapper = mapper; }
@@ -92,7 +87,7 @@ public class DocumentTransfer {
             JsonNode insert = op.path("insert");
             if (insert.isTextual()) {
                 if (insert.asText().isEmpty() || insert.asText().indexOf('\0') >= 0) throw invalid("副本包含空文本或不支持的字符");
-            } else if (!insert.isObject() || insert.size() != 1 || !insert.path("image").isTextual() || !safeUrl(insert.path("image").asText(), true)) {
+            } else if (!insert.isObject() || insert.size() != 1 || !insert.path("image").isTextual() || !DocumentFormats.safeUrl(insert.path("image").asText(), true)) {
                 throw invalid("副本只支持文字和 HTTP(S) 图片地址");
             }
             JsonNode attributes = op.get("attributes");
@@ -100,7 +95,7 @@ public class DocumentTransfer {
                 if (!attributes.isObject()) throw invalid("格式属性必须是对象");
                 attributes.fields().forEachRemaining(entry -> {
                     JsonNode value = entry.getValue();
-                    if (!FORMATS.contains(entry.getKey()) || !validAttribute(entry.getKey(), value)) throw invalid("副本包含不支持的格式或链接");
+                    if (!DocumentFormats.validAttribute(entry.getKey(), value)) throw invalid("副本包含不支持的格式或链接");
                 });
             }
         }
@@ -124,32 +119,6 @@ public class DocumentTransfer {
         return mapper.createObjectNode().set("ops", normalized);
     }
 
-    private static boolean safeUrl(String value, boolean image) {
-        if (value.length() > 2048 || value.chars().anyMatch(c -> c < 32 || c == 127)) return false;
-        try {
-            URI uri = URI.create(value);
-            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
-            if (scheme.equals("http") || scheme.equals("https")) return uri.getHost() != null && uri.getUserInfo() == null;
-            return !image && (scheme.equals("mailto") || scheme.equals("tel"));
-        } catch (IllegalArgumentException ex) { return false; }
-    }
-    private static boolean validAttribute(String key, JsonNode value) {
-        return switch (key) {
-            case "bold", "italic", "underline", "strike", "blockquote", "code" -> value.isBoolean();
-            case "header" -> value.isIntegralNumber() && value.canConvertToInt() && value.asInt() >= 1 && value.asInt() <= 6;
-            case "indent" -> value.isIntegralNumber() && value.canConvertToInt() && value.asInt() >= 0 && value.asInt() <= 8;
-            case "link" -> value.isTextual() && safeUrl(value.asText(), false);
-            case "list" -> value.isTextual() && Set.of("ordered", "bullet", "checked", "unchecked").contains(value.asText());
-            case "align" -> value.isTextual() && Set.of("left", "center", "right", "justify").contains(value.asText());
-            case "direction" -> value.isTextual() && "rtl".equals(value.asText());
-            case "font" -> value.isTextual() && Set.of("serif", "monospace").contains(value.asText());
-            case "size" -> value.isTextual() && Set.of("small", "large", "huge").contains(value.asText());
-            case "script" -> value.isTextual() && Set.of("sub", "super").contains(value.asText());
-            case "code-block" -> value.isBoolean() || (value.isTextual() && value.asText().matches("[a-zA-Z0-9_-]{1,64}"));
-            case "color", "background" -> value.isTextual() && value.asText().matches("#[a-fA-F0-9]{3,8}|[a-zA-Z]{1,20}|rgba?\\([0-9., %]{1,40}\\)");
-            default -> false;
-        };
-    }
     private static String safeFilename(String title) {
         String clean = title.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_").trim().replaceAll("[. ]+$", "");
         if (clean.isEmpty()) clean = "文档";
