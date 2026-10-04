@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import Quill from 'quill'
+import 'quill/dist/quill.snow.css'
 
 export default function DocumentPreview({ content, label = '文档预览' }) {
   const host = useRef(null)

@@ -1,6 +1,9 @@
 :root { font-family: Inter, "Microsoft YaHei", sans-serif; color: #172033; background: #f5f7fb; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 0; }
+.page-load-message { max-width: 540px; margin: 15vh auto; padding: 24px; line-height: 1.7; }
+.page-load-message h1 { font-size: 22px; }
+.page-load-message button { padding: 8px 16px; border: 1px solid #2563eb; border-radius: 8px; background: #2563eb; color: #fff; font: inherit; cursor: pointer; }
 .app-shell { min-height: 100vh; background: #f5f7fb; }
 .topbar { min-height: 64px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px 5vw; background: #fff; border-bottom: 1px solid #e8ecf3; }
 .topbar .ant-typography { margin: 0; }
