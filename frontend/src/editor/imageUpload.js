@@ -1,6 +1,6 @@
 export const IMAGE_ACCEPT = 'image/jpeg,image/png,image/gif,image/webp'
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
-const IMAGE_PLACEHOLDER = 'copage-upload-image:'
+export const IMAGE_PLACEHOLDER = 'copage-upload-image:'
 
 export function createImageInsertion(range, count, Delta) {
   const operation = new Delta().retain(range.index).delete(range.length)
@@ -18,6 +18,10 @@ export function finishImageInsertion(operation, urls, Delta) {
       if (!urls[index]) throw new Error('图片上传结果不完整，请重新选择文件')
       insertionEnd = ++position
       return { ...op, insert: { image: urls[index] } }
+    }
+    if (op.insert) {
+      position += typeof op.insert === 'string' ? op.insert.length : 1
+      insertionEnd = position
     }
     return op
   })

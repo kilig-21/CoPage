@@ -10,6 +10,7 @@ import RemoteCursorLayer from './RemoteCursorLayer'
 import { DOCUMENT_FORMATS } from './formats'
 import { configureEditorToolbar } from './toolbar'
 import { configureLinkEditor, normalizePastedLinks } from './links'
+import { configureClipboardImages } from './clipboardImages'
 
 function createClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `client-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -92,6 +93,7 @@ export default function useQuillCollab(docId) {
     updateToolbar()
     const linkEditor = configureLinkEditor(quill)
     quill.clipboard.addMatcher('A', normalizePastedLinks)
+    configureClipboardImages(quill, (...args) => uploadImageFiles(...args), setError)
     quill.root.setAttribute('role', 'textbox')
     quill.root.setAttribute('aria-label', '文档正文')
     quill.root.setAttribute('aria-multiline', 'true')
@@ -180,7 +182,7 @@ export default function useQuillCollab(docId) {
       pendingImageOperation = null
     }
 
-    const uploadImageFiles = async (range, files) => {
+    const uploadImageFiles = async (range, files, operation = null, notice = '') => {
       if (!files.length) return
       const validationError = files.length > 10 ? '一次最多上传10张图片，请分批添加'
         : files.map(imageValidationError).find(Boolean)
@@ -195,7 +197,7 @@ export default function useQuillCollab(docId) {
         return
       }
       uploading = true
-      pendingImageOperation = createImageInsertion(range, files.length, Delta)
+      pendingImageOperation = operation ?? createImageInsertion(range, files.length, Delta)
       updateSaveStatus()
       const controller = new AbortController()
       uploadController = controller
@@ -211,7 +213,7 @@ export default function useQuillCollab(docId) {
         imageInsertIndex = null
         quill.updateContents(delta, 'user')
         quill.setSelection(insertionEnd, 0, 'silent')
-        setError('')
+        setError(notice)
       } catch (uploadError) {
         if (active && !controller.signal.aborted) setError(uploadError?.message || '图片上传失败')
       } finally {
