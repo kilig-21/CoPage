@@ -28,6 +28,38 @@ import static org.mockito.Mockito.when;
 class DocRevServiceTest {
 
     @Test
+    void 文档末尾换行不能被删除或变成图片且拒绝后版本和请求收据不改变() {
+        DocRevService service = new DocRevService();
+        AtomicInteger callbacks = new AtomicInteger();
+        for (Delta operation : List.of(new Delta().delete(1), new Delta().retain(1).insert("末尾文字"),
+                new Delta().push(Op.insertEmbed(new com.fasterxml.jackson.databind.ObjectMapper()
+                        .createObjectNode().put("image", "https://example.com/a.png"))).delete(1))) {
+            CollabException error = assertThrows(CollabException.class, () -> service.commit(
+                    13, 0, operation, 1L, "client-1", "request-1", ignored -> callbacks.incrementAndGet()));
+            assertEquals(400, error.getCode());
+            assertEquals(0, service.snapshot(13).revision());
+            assertEquals("\n", text(service.snapshot(13).content()));
+        }
+        assertEquals(0, callbacks.get());
+        // 被拒绝的请求没有预留opId，修正正文后可正常提交。
+        assertTrue(service.commit(13, 0, new Delta().insert("正文\n").delete(1),
+                1L, "client-1", "request-1", ignored -> callbacks.incrementAndGet()).applied());
+        assertEquals(1, callbacks.get());
+        assertEquals("正文\n", text(service.snapshot(13).content()));
+    }
+
+    @Test
+    void 全文替换与空白文档都可保留合法末尾换行() {
+        DocRevService service = new DocRevService();
+        service.commit(14, 0, new Delta().insert("旧正文"));
+        service.commit(14, 1, new Delta().insert("新正文\n").delete(4));
+        assertEquals("新正文\n", text(service.snapshot(14).content()));
+        service.commit(14, 2, new Delta().insert("\n").delete(4));
+        assertEquals("\n", text(service.snapshot(14).content()));
+        assertEquals(3, service.snapshot(14).revision());
+    }
+
+    @Test
     void 同一版本并发插入应按服务端提交顺序收敛() {
         DocRevService service = new DocRevService();
 

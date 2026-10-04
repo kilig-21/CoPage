@@ -56,9 +56,11 @@ try {
     { insert: { formula: 'x' } }, { insert: { image: 'javascript:alert(1)' } },
     { insert: 'x', attributes: { link: 'javascript:alert(1)' } },
     { insert: 'x', attributes: { unsupported: true } }, { retain: 1.5 }, { delete: '1' },
+    { delete: 1 }, [{ retain: 1 }, { insert: '越过末尾换行' }],
+    [{ delete: 1 }, { insert: { image: 'http://localhost:9000/collab/format-fixture.png' } }],
   ]
   for (const op of invalid) {
-    const reply = await send({ type: 'op', docId: doc.id, clientId, baseRevision: 0, opId: randomUUID(), op: { ops: [op] } })
+    const reply = await send({ type: 'op', docId: doc.id, clientId, baseRevision: 0, opId: randomUUID(), op: { ops: Array.isArray(op) ? op : [op] } })
     assert.equal(reply.type, 'error')
     assert.equal(reply.code, 400)
     assert.equal((await api('/doc/' + doc.id)).revision, 0, '拒绝操作不得改变正文版本')

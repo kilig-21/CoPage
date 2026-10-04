@@ -270,6 +270,11 @@ public class DocRevService {
 
             long revision = current.revision() + 1;
             Delta nextContent = DeltaApply.apply(current.content(), transformed);
+            // 在OT变换后的最终正文上检查，不能只看原请求；拒绝时尚未写入日志或收据。
+            if (nextContent.getOps().isEmpty() || !nextContent.getOps().getLast().isTextInsert()
+                    || !nextContent.getOps().getLast().text().endsWith("\n")) {
+                throw new CollabException(400, "文档正文必须保留末尾换行");
+            }
             if (persistence != null) {
                 if (key == null) {
                     persistence.persist(docId, current.revision(), nextContent, transformed, userId);
