@@ -36,9 +36,16 @@ export function normalizePastedLinks(_node, delta) {
   return delta
 }
 
+export function transformLinkSelection(range, delta) {
+  const index = delta.transformPosition(range.index, false)
+  const end = delta.transformPosition(range.index + range.length, true)
+  return { index, length: Math.max(0, end - index) }
+}
+
 export function configureLinkEditor(quill) {
   const tooltip = quill.theme.tooltip
   const input = tooltip.textbox
+  let editingRange = null
   input.setAttribute('aria-label', '链接地址')
   input.maxLength = 2048
   input.setAttribute('data-link', 'https://example.com')
@@ -51,19 +58,30 @@ export function configureLinkEditor(quill) {
   tooltip.root.appendChild(error)
   const reposition = () => {
     if (tooltip.root.classList.contains('ql-hidden')) return
-    const bounds = quill.getBounds(quill.selection.savedRange)
+    const bounds = quill.getBounds(editingRange ?? tooltip.linkRange ?? quill.selection.savedRange)
     if (bounds) tooltip.position(bounds)
   }
   const clearError = () => { error.hidden = true; error.textContent = ''; input.removeAttribute('aria-invalid') }
   input.addEventListener('input', clearError)
   const save = tooltip.save.bind(tooltip)
   const edit = tooltip.edit.bind(tooltip)
-  tooltip.edit = (...args) => { clearError(); return edit(...args) }
+  const show = tooltip.show.bind(tooltip)
+  const cancel = tooltip.cancel.bind(tooltip)
+  tooltip.show = () => { editingRange = null; clearError(); return show() }
+  tooltip.cancel = () => { editingRange = null; clearError(); return cancel() }
+  tooltip.edit = (...args) => {
+    const range = tooltip.linkRange ?? quill.getSelection() ?? quill.selection.savedRange
+    editingRange = range ? { index: range.index, length: range.length } : null
+    clearError()
+    return edit(...args)
+  }
   tooltip.save = () => {
     if (tooltip.root.getAttribute('data-mode') === 'link') {
       try {
         if (!quill.isEnabled()) throw new Error('文档尚未就绪，暂时不能保存链接')
+        if (!editingRange?.length) throw new Error('所选文字已被删除，请取消后重新选择链接文字')
         input.value = normalizeDocumentLink(input.value)
+        tooltip.linkRange = { ...editingRange }
       } catch (invalid) {
         error.textContent = invalid.message
         error.hidden = false
@@ -74,6 +92,7 @@ export function configureLinkEditor(quill) {
       }
     }
     clearError()
+    editingRange = null
     return save()
   }
   const action = tooltip.root.querySelector('.ql-action')
@@ -91,5 +110,12 @@ export function configureLinkEditor(quill) {
   observer.observe(tooltip.root, { attributes: true, attributeFilter: ['class'] })
   updateAction()
   window.addEventListener('resize', reposition)
-  return () => { observer.disconnect(); input.removeEventListener('input', clearError); window.removeEventListener('resize', reposition) }
+  return {
+    transform(delta) {
+      if (editingRange) editingRange = transformLinkSelection(editingRange, delta)
+      if (tooltip.linkRange) tooltip.linkRange = transformLinkSelection(tooltip.linkRange, delta)
+      reposition()
+    },
+    dispose() { observer.disconnect(); input.removeEventListener('input', clearError); window.removeEventListener('resize', reposition) },
+  }
 }

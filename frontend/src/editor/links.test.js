@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { normalizeDocumentLink, normalizePastedLinks } from './links.js'
+import Delta from 'quill-delta'
+import { normalizeDocumentLink, normalizePastedLinks, transformLinkSelection } from './links.js'
 
 test('链接补齐常见域名的HTTPS，规范完整网址、中文路径及协议相对地址', () => {
   assert.equal(normalizeDocumentLink(' www.example.com/path?q=1 '), 'https://www.example.com/path?q=1')
@@ -43,4 +44,24 @@ test('粘贴无效链接只移除链接属性，保留正文、图片和其他�
     { insert: { image: 'https://example.com/p.png' }, attributes: { width: '64' } },
     { insert: '\n' },
   ])
+})
+
+test('链接选区跟随前方插入，排除恰好在两端插入的外部文字', () => {
+  const range = { index: 3, length: 4 }
+  assert.deepEqual(transformLinkSelection(range, new Delta().insert('前缀|')), { index: 6, length: 4 })
+  assert.deepEqual(transformLinkSelection(range, new Delta().retain(3).insert('前缀|')), { index: 6, length: 4 })
+  assert.deepEqual(transformLinkSelection(range, new Delta().retain(7).insert('后缀|')), range)
+  assert.deepEqual(range, { index: 3, length: 4 })
+})
+
+test('链接选区内部输入和部分删除随实际正文变换，格式变动不移动选区', () => {
+  const range = { index: 3, length: 4 }
+  assert.deepEqual(transformLinkSelection(range, new Delta().retain(5).insert('字')), { index: 3, length: 5 })
+  assert.deepEqual(transformLinkSelection(range, new Delta().retain(4).delete(2)), { index: 3, length: 2 })
+  assert.deepEqual(transformLinkSelection(range, new Delta().retain(1).delete(3)), { index: 1, length: 3 })
+  assert.deepEqual(transformLinkSelection(range, new Delta().retain(7, { bold: true })), range)
+})
+
+test('链接所选文字被完全删除时选区变为零长度，保存应拒绝而不是套用到新文字', () => {
+  assert.deepEqual(transformLinkSelection({ index: 3, length: 4 }, new Delta().delete(10)), { index: 0, length: 0 })
 })

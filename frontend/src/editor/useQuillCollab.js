@@ -86,7 +86,7 @@ export default function useQuillCollab(docId) {
     quill.enable(false)
     const updateToolbar = configureEditorToolbar(quill)
     updateToolbar()
-    const disposeLinkEditor = configureLinkEditor(quill)
+    const linkEditor = configureLinkEditor(quill)
     quill.clipboard.addMatcher('A', normalizePastedLinks)
     quill.root.setAttribute('role', 'textbox')
     quill.root.setAttribute('aria-label', '文档正文')
@@ -408,6 +408,7 @@ export default function useQuillCollab(docId) {
     }
     const onTextChange = (delta, _old, source) => {
       updateToolbar()
+      linkEditor.transform(delta)
       if (imageInsertIndex !== null) imageInsertIndex = delta.transformPosition(imageInsertIndex, true)
       cursorLayer.transform(delta)
       if (source !== 'user') return
@@ -527,7 +528,7 @@ export default function useQuillCollab(docId) {
       active = false
       sessionCheckController.abort()
       titleController?.abort()
-      disposeLinkEditor()
+      linkEditor.dispose()
       refreshTitleRef.current = null
       window.clearInterval(cursorKeepaliveTimer)
       quill.off('text-change', onTextChange)
