@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import Delta from 'quill-delta'
-import { configureClipboardImages, embeddedImageFile, normalizeClipboardContent, normalizeImageAttributes, normalizeImageUrl } from './clipboardImages.js'
+import { clipboardPasteError, configureClipboardImages, embeddedImageFile, normalizeClipboardContent, normalizeImageAttributes, normalizeImageUrl } from './clipboardImages.js'
 import { finishImageInsertion, IMAGE_PLACEHOLDER } from './imageUpload.js'
 
 test('粘贴图片只保留可共享地址，拒绝私有 blob、相对地址、用户信息及不合法域名', () => {
@@ -66,4 +66,33 @@ test('纯文本空字符过滤后全部为空时，不删除当前选区或产�
   assert.match(notices[0], /空字符/)
   const result = normalizeClipboardContent(new Delta().insert('甲\u0000乙\n', { bold: true }))
   assert.deepEqual(result.delta.ops, [{ insert: '甲乙\n', attributes: { bold: true } }])
+})
+
+test('单次格式片段上限包含选区替换，常规内容仍可粘贴', () => {
+  const ops = Array.from({ length: 10000 }, (_, index) => ({ insert: '甲', attributes: index % 2 ? { italic: true } : { bold: true } }))
+  assert.equal(clipboardPasteError(new Delta(ops)), null)
+  assert.match(clipboardPasteError(new Delta([{ retain: 5 }, ...ops])), /分段粘贴/)
+  assert.equal(clipboardPasteError(new Delta().retain(5).delete(3).insert('替换文字')), null)
+})
+
+test('按UTF-8序列化大小限制粘贴，保留WS消息协议开销', () => {
+  assert.match(clipboardPasteError(new Delta().insert('中'.repeat(3 * 1024 * 1024))), /内容过大/)
+  assert.equal(clipboardPasteError(new Delta().insert('中'.repeat(1024))), null)
+})
+
+test('格式过于复杂时不修改正文或选区，不启动图片上传', () => {
+  const notices = []
+  const quill = {
+    constructor: { import: () => Delta },
+    clipboard: {
+      addMatcher() {},
+      convert: () => new Delta(Array.from({ length: 10001 }, (_, index) => ({ insert: '甲', attributes: index % 2 ? { italic: true } : { bold: true } }))),
+    },
+    getFormat: () => ({}),
+    updateContents() { assert.fail('拒绝的粘贴不产生编辑') },
+    setSelection() { assert.fail('拒绝的粘贴不改变选区') },
+  }
+  configureClipboardImages(quill, () => assert.fail('拒绝的粘贴不应上传'), notice => notices.push(notice))
+  quill.clipboard.onPaste({ index: 3, length: 2 }, { text: '复杂格式' })
+  assert.match(notices[0], /原选区已保留/)
 })
