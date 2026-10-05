@@ -14,6 +14,7 @@ import { clipboardPasteError, configureClipboardImages } from './clipboardImages
 import { createCompositionInbox } from './compositionInbox'
 import { createEditCapacityGuard } from './editCapacityGuard'
 import { createDraftBackup } from './draftBackup'
+import { readDraftRecords } from './draftRecords'
 
 function createClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `client-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -32,6 +33,7 @@ export default function useQuillCollab(docId) {
   const [permission, setPermission] = useState(0)
   const [isOwner, setIsOwner] = useState(false)
   const [recoveryDraft, setRecoveryDraft] = useState(null)
+  const [unreadableDrafts, setUnreadableDrafts] = useState([])
   const recoveryActionsRef = useRef(null)
   const historyReadyRef = useRef(null)
   const exportReadyRef = useRef(null)
@@ -49,6 +51,7 @@ export default function useQuillCollab(docId) {
     setTitleError('')
     setSaveStatus('等待同步')
     setRecoveryDraft(null)
+    setUnreadableDrafts([])
     setUsers([])
     setError('')
     setPermission(0)
@@ -430,18 +433,14 @@ export default function useQuillCollab(docId) {
     }
     const findDrafts = () => {
       if (!draftPrefix) return []
-      const found = []
-      for (let index = 0; index < localStorage.length; index++) {
-        const key = localStorage.key(index)
-        if (!key?.startsWith(draftPrefix)) continue
-        try {
-          const draft = JSON.parse(localStorage.getItem(key))
-          if (draft?.docId === docId && draft?.version === 1) found.push({ key, draft })
-        } catch {
-          // 损坏的草稿保持原样，避免自动删除可能有用的本地内容。
-        }
+      const { drafts, unreadable } = readDraftRecords({ storage: localStorage, prefix: draftPrefix, docId, Delta })
+      setUnreadableDrafts(unreadable)
+      if (unreadable.some(record => record.key === draftPrefix + client.clientId)) {
+        // 当前标签复用了无法识别的旧槽位；换用新 ID，后续 ack 不能删除旧记录。
+        client.clientId = createClientId()
+        sessionStorage.setItem(tabKey, client.clientId)
       }
-      return found.sort((a, b) =>
+      return drafts.sort((a, b) =>
         Number(b.key === draftPrefix + clientId) - Number(a.key === draftPrefix + clientId)
         || (b.draft.savedAt ?? 0) - (a.draft.savedAt ?? 0))
     }
@@ -654,7 +653,7 @@ export default function useQuillCollab(docId) {
   }, [docId, loadAttempt])
 
   return {
-    editorHostRef, connection, users, error, title, permission, isOwner, recoveryDraft, saveStatus, titleError,
+    editorHostRef, connection, users, error, title, permission, isOwner, recoveryDraft, unreadableDrafts, saveStatus, titleError,
     refreshTitle: () => refreshTitleRef.current?.(),
     retryLoad: () => { if (connection === '加载失败') setLoadAttempt(value => value + 1) },
     recoverDraft: () => recoveryActionsRef.current?.recover(),
