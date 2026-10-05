@@ -1,6 +1,7 @@
 import { Component, lazy, Suspense, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { safeReturnPath, subscribeSessionChanges } from './auth/session'
+import LocalDraftBackup from './components/LocalDraftBackup'
 
 const Login = lazy(() => import('./pages/Login'))
 const DocList = lazy(() => import('./pages/DocList'))
@@ -38,9 +39,16 @@ export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
   const [sessionEpoch, setSessionEpoch] = useState(0)
+  const [localBackup, setLocalBackup] = useState(null)
   useEffect(() => {
-    document.title = `${PAGE_TITLES[location.pathname] || '文档'} · CoPage`
-  }, [location.pathname])
+    const preserve = event => setLocalBackup(current => current || event.detail)
+    window.addEventListener('copage-draft-backup', preserve)
+    return () => window.removeEventListener('copage-draft-backup', preserve)
+  }, [])
+  useEffect(() => {
+    document.title = localBackup ? '未确认内容备份 · CoPage'
+      : `${PAGE_TITLES[location.pathname] || '文档'} · CoPage`
+  }, [location.pathname, localBackup])
   useEffect(() => {
     const expired = () => navigate('/login', { replace: true, state: {
       expired: true, from: safeReturnPath(location.pathname + location.search + location.hash),
@@ -57,6 +65,12 @@ export default function App() {
         ? location.state?.from : location.pathname + location.search + location.hash),
     } })
   }), [location, navigate])
+  if (localBackup) return <LocalDraftBackup backup={localBackup} onContinue={() => {
+    setLocalBackup(null)
+    navigate('/login', { replace: true, state: {
+      backupHandled: true, from: safeReturnPath(`/docs/${localBackup.docId}`),
+    } })
+  }} />
   return (
     <PageBoundary key={`${location.pathname}:${sessionEpoch}`}>
     <Suspense fallback={<main className="page-load-message" role="status">正在加载页面，请稍候…</main>}>

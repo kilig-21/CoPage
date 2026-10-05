@@ -13,6 +13,7 @@ import { configureLinkEditor, normalizePastedLinks } from './links'
 import { clipboardPasteError, configureClipboardImages } from './clipboardImages'
 import { createCompositionInbox } from './compositionInbox'
 import { createEditCapacityGuard } from './editCapacityGuard'
+import { createDraftBackup } from './draftBackup'
 
 function createClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `client-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -39,6 +40,8 @@ export default function useQuillCollab(docId) {
     const host = editorHostRef.current
     if (!host || !Number.isSafeInteger(docId) || docId <= 0) return undefined
     let active = true
+    let backupSent = false
+    let draftTitle = ''
     setConnection('加载中')
     setTitle('')
     setTitleError('')
@@ -126,7 +129,7 @@ export default function useQuillCollab(docId) {
       titleController = controller
       try {
         const response = await request.get('/doc/' + docId + '/metadata', { signal: controller.signal })
-        if (active && !controller.signal.aborted) { setTitle(response.data.title); setTitleError('') }
+        if (active && !controller.signal.aborted) { draftTitle = response.data.title; setTitle(response.data.title); setTitleError('') }
       } catch {
         if (active && !controller.signal.aborted) setTitleError('标题暂未更新，请重试')
       }
@@ -394,15 +397,25 @@ export default function useQuillCollab(docId) {
 
     const persistDraft = () => {
       updateSaveStatus()
-      if (!draftPrefix || recoveryActionsRef.current) return
+      if (recoveryActionsRef.current) return true
+      if (!draftPrefix) return !client.hasUnconfirmedChanges()
       const key = draftPrefix + client.clientId
       try {
         const draft = client.exportDraft(quill.getContents())
         if (draft) localStorage.setItem(key, JSON.stringify(draft))
         else localStorage.removeItem(key)
+        return true
       } catch {
         setError('本地草稿保存失败；离开页面前请复制当前内容')
+        return false
       }
+    }
+    const preserveFailedDraft = () => {
+      if (backupSent || !client.hasUnconfirmedChanges()) return
+      backupSent = true
+      window.dispatchEvent(new CustomEvent('copage-draft-backup', { detail: createDraftBackup({
+        docId, username, title: draftTitle, content: quill.getContents(),
+      }) }))
     }
     const findDrafts = () => {
       if (!draftPrefix) return []
@@ -457,7 +470,9 @@ export default function useQuillCollab(docId) {
       if (composing) {
         // Quill 延迟到 compositionend 微任务才结束 batch。断线/撤权/离开
         // 页面时须先收集 DOM 中的输入，不能只读取尚未更新的 Delta。
-        quill.scroll.batchEnd()
+        // Quill 2 的格式光标在 COMPOSITION_END 才把暂存文字移回正文。
+        if (quill.composition.isComposing) quill.composition.handleCompositionEnd()
+        else quill.scroll.batchEnd()
         quill.update('user')
       }
       if (!compositionDirty) return
@@ -484,7 +499,7 @@ export default function useQuillCollab(docId) {
       socket.close()
       abortImageUpload()
       flushComposition()
-      persistDraft()
+      if (!persistDraft()) preserveFailedDraft()
       connected = false
       synced = false
       client.disconnect()
@@ -520,6 +535,7 @@ export default function useQuillCollab(docId) {
       .then(async (response) => {
         if (!active) return
         const doc = response.data
+        draftTitle = doc.title
         setTitle(doc.title)
         setPermission(doc.permission)
         setIsOwner(doc.isOwner === true)
@@ -587,7 +603,7 @@ export default function useQuillCollab(docId) {
       onSessionChanged()
       hideCursor()
       flushComposition()
-      persistDraft()
+      if (!persistDraft()) preserveFailedDraft()
       active = false
       compositionInbox.clear()
       sessionCheckController.abort()

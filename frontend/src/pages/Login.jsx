@@ -51,6 +51,7 @@ export default function Login() {
         <Typography.Paragraph type="secondary">多人实时协作，从一篇文档开始。</Typography.Paragraph>
         {location.state?.expired && <Alert type="warning" showIcon message="登录已失效，请重新登录；未确认的本地草稿仍保留在此浏览器中" />}
         {location.state?.sessionChanged && <Alert type="info" showIcon message="登录状态已在其他页面更改，请重新登录；未确认的草稿仍保留在原账号下" />}
+        {location.state?.backupHandled && <Alert type="info" showIcon message="请重新登录；未确认内容请从已保存的本地备份恢复" />}
         {error && <Alert type="error" showIcon message={error} />}
         {notice && <Alert type="success" showIcon message={notice} />}
         <Form form={form} layout="vertical" onFinish={onFinish} disabled={submitting}>
