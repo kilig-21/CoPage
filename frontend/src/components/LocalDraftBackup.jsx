@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { draftBackupJson, draftBackupText } from '../editor/draftBackup'
+import { downloadTextFile } from '../editor/downloadTextFile'
 
 export default function LocalDraftBackup({ backup, onContinue }) {
   const [notice, setNotice] = useState('')
@@ -13,11 +14,7 @@ export default function LocalDraftBackup({ backup, onContinue }) {
   }, [])
   function download(content, extension, type) {
     try {
-      const url = URL.createObjectURL(new Blob([content], { type }))
-      const link = document.createElement('a')
-      link.href = url; link.download = `本地草稿-${backup.docId}.${extension}`
-      document.body.append(link); link.click(); link.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      downloadTextFile(content, `本地草稿-${backup.docId}.${extension}`, type)
       setNotice('已生成本地副本，请确认浏览器下载完成，再继续登录。')
     } catch { setNotice('未能下载，请选中下方文字手动复制。') }
   }

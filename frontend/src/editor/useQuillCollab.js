@@ -34,6 +34,7 @@ export default function useQuillCollab(docId) {
   const [isOwner, setIsOwner] = useState(false)
   const [recoveryDraft, setRecoveryDraft] = useState(null)
   const [unreadableDrafts, setUnreadableDrafts] = useState([])
+  const [unavailableDrafts, setUnavailableDrafts] = useState([])
   const recoveryActionsRef = useRef(null)
   const historyReadyRef = useRef(null)
   const exportReadyRef = useRef(null)
@@ -52,6 +53,7 @@ export default function useQuillCollab(docId) {
     setSaveStatus('等待同步')
     setRecoveryDraft(null)
     setUnreadableDrafts([])
+    setUnavailableDrafts([])
     setUsers([])
     setError('')
     setPermission(0)
@@ -573,7 +575,8 @@ export default function useQuillCollab(docId) {
         if (stored) {
           setConnection('等待恢复选择')
           setSaveStatus('等待恢复本地草稿')
-          setRecoveryDraft({ savedAt: stored.draft.savedAt })
+          setRecoveryDraft({ ...createDraftBackup({ docId, username, title: draftTitle, content: stored.draft.content }),
+            savedAt: stored.draft.savedAt })
           recoveryActionsRef.current = {
             recover: () => {
               if (!canEdit) {
@@ -613,6 +616,17 @@ export default function useQuillCollab(docId) {
         setConnection('加载失败')
         setSaveStatus('未能加载文档')
         setError(loadError?.message || '文档加载失败')
+        // 无权限、文档已删除或读取失败时，只提供当前账号的本地副本。
+        // 不恢复操作、不取得服务端正文，也不启动协作连接。
+        try {
+          const { drafts, unreadable } = readDraftRecords({ storage: localStorage, prefix: draftPrefix, docId, Delta })
+          setUnreadableDrafts(unreadable)
+          setUnavailableDrafts(drafts.sort((a, b) => (b.draft.savedAt ?? 0) - (a.draft.savedAt ?? 0))
+            .map(({ key, draft }) => ({ key, backup: { ...createDraftBackup({ docId, username, content: draft.content }),
+              savedAt: draft.savedAt } })))
+        } catch {
+          setError(`${loadError?.message || '文档加载失败'}；本地草稿暂时无法读取，请不要清除浏览器存储`)
+        }
       })
 
     return () => {
@@ -653,7 +667,7 @@ export default function useQuillCollab(docId) {
   }, [docId, loadAttempt])
 
   return {
-    editorHostRef, connection, users, error, title, permission, isOwner, recoveryDraft, unreadableDrafts, saveStatus, titleError,
+    editorHostRef, connection, users, error, title, permission, isOwner, recoveryDraft, unreadableDrafts, unavailableDrafts, saveStatus, titleError,
     refreshTitle: () => refreshTitleRef.current?.(),
     retryLoad: () => { if (connection === '加载失败') setLoadAttempt(value => value + 1) },
     recoverDraft: () => recoveryActionsRef.current?.recover(),
