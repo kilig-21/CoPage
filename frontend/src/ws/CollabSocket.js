@@ -11,6 +11,7 @@ export default class CollabSocket {
     this.heartbeatTimer = null
     this.pongTimer = null
     this.shouldReconnect = true
+    this.connectionRequested = false
     this.reconnectDelay = 500
     this.handleOffline = () => {
       if (!this.shouldReconnect) return
@@ -27,14 +28,18 @@ export default class CollabSocket {
     this.handleOnline = () => {
       window.clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
-      if (this.shouldReconnect) this.connect()
+      if (this.shouldReconnect && this.connectionRequested) this.connect()
     }
     window.addEventListener('offline', this.handleOffline)
     window.addEventListener('online', this.handleOnline)
   }
 
   connect() {
-    if (!this.shouldReconnect || navigator.onLine === false || !this.token ||
+    if (!this.shouldReconnect) return
+    // 只有编辑器完成正文读取和草稿选择后，才允许网络事件恢复连接。
+    // 离线时的显式启动同样记住，等待随后联网完成首次连接。
+    this.connectionRequested = true
+    if (navigator.onLine === false || !this.token ||
         this.socket?.readyState === WebSocket.OPEN || this.socket?.readyState === WebSocket.CONNECTING) {
       return
     }

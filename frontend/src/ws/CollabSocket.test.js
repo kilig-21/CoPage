@@ -40,6 +40,34 @@ function browser(t) {
     fireTimeout(id) { const fn = timers.get(id); timers.delete(id); fn() } }
 }
 
+test('未确认草稿或正文尚未加载时，联网事件不能自行开启协作连接', t => {
+  const env = browser(t)
+  const socket = new CollabSocket({ token: 'test' })
+  env.network.onLine = false
+  env.emit('offline')
+  env.network.onLine = true
+  env.emit('online')
+  env.emit('online')
+  assert.equal(env.Socket.instances.length, 0)
+  assert.equal(env.timers.size, 0)
+  socket.connect()
+  assert.equal(env.Socket.instances.length, 1)
+  socket.close()
+})
+
+test('离线时确认开始协作，联网后建立首次连接且不重复连接', t => {
+  const env = browser(t)
+  env.network.onLine = false
+  const socket = new CollabSocket({ token: 'test' })
+  socket.connect()
+  assert.equal(env.Socket.instances.length, 0)
+  env.network.onLine = true
+  env.emit('online')
+  env.emit('online')
+  assert.equal(env.Socket.instances.length, 1)
+  socket.close()
+})
+
 test('浏览器离线立即关闭旧连接，停止发送；联网创建新连接且忽略旧消息', t => {
   const env = browser(t)
   const messages = []
