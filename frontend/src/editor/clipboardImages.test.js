@@ -75,9 +75,38 @@ test('单次格式片段上限包含选区替换，常规内容仍可粘贴', ()
   assert.equal(clipboardPasteError(new Delta().retain(5).delete(3).insert('替换文字')), null)
 })
 
-test('按UTF-8序列化大小限制粘贴，保留WS消息协议开销', () => {
+test('按UTF-8序列化大小限制单次修改4 MiB，比WS上限更严格', () => {
   assert.match(clipboardPasteError(new Delta().insert('中'.repeat(3 * 1024 * 1024))), /内容过大/)
   assert.equal(clipboardPasteError(new Delta().insert('中'.repeat(1024))), null)
+})
+
+test('正文容量按替换后的完整Delta计算，包含已有正文和格式开销', () => {
+  const limit = 2 * 1024 * 1024
+  const overhead = new TextEncoder().encode(JSON.stringify(new Delta().insert('\n'))).length
+  const exact = new Delta().insert('x'.repeat(limit - overhead) + '\n')
+  assert.equal(clipboardPasteError(new Delta().delete(1).insert('y'), exact), null)
+  assert.match(clipboardPasteError(new Delta().insert('中'), exact), /正文会超过 2 MiB/)
+  assert.equal(clipboardPasteError(new Delta().delete(100).insert('中'), exact), null)
+  assert.match(clipboardPasteError(new Delta().retain(1, { bold: true }), exact), /正文会超过 2 MiB/)
+  const existing = new Delta().insert('中'.repeat(400000) + '\n')
+  const pasted = new Delta().insert('中'.repeat(400000))
+  assert.match(clipboardPasteError(pasted, existing), /正文会超过 2 MiB/)
+  assert.equal(clipboardPasteError(pasted.delete(400000), existing), null)
+})
+
+test('整篇容量超限时不插入、不改变选区，也不启动图片上传', () => {
+  const notices = []
+  const quill = {
+    constructor: { import: () => Delta },
+    clipboard: { addMatcher() {}, convert: () => new Delta().insert('中'.repeat(800000)) },
+    getFormat: () => ({}),
+    getContents: () => new Delta().insert('原正文\n'),
+    updateContents() { assert.fail('超限正文不得进入编辑器') },
+    setSelection() { assert.fail('拒绝时保留选区') },
+  }
+  configureClipboardImages(quill, () => assert.fail('超限粘贴不得上传图片'), notice => notices.push(notice))
+  quill.clipboard.onPaste({ index: 1, length: 2 }, { text: 'large' })
+  assert.match(notices[0], /正文会超过 2 MiB/)
 })
 
 test('格式过于复杂时不修改正文或选区，不启动图片上传', () => {
@@ -89,6 +118,7 @@ test('格式过于复杂时不修改正文或选区，不启动图片上传', ()
       convert: () => new Delta(Array.from({ length: 10001 }, (_, index) => ({ insert: '甲', attributes: index % 2 ? { italic: true } : { bold: true } }))),
     },
     getFormat: () => ({}),
+    getContents: () => new Delta().insert('\n'),
     updateContents() { assert.fail('拒绝的粘贴不产生编辑') },
     setSelection() { assert.fail('拒绝的粘贴不改变选区') },
   }

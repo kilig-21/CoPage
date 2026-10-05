@@ -10,7 +10,7 @@ import RemoteCursorLayer from './RemoteCursorLayer'
 import { DOCUMENT_FORMATS } from './formats'
 import { configureEditorToolbar } from './toolbar'
 import { configureLinkEditor, normalizePastedLinks } from './links'
-import { configureClipboardImages } from './clipboardImages'
+import { clipboardPasteError, configureClipboardImages } from './clipboardImages'
 import { createCompositionInbox } from './compositionInbox'
 
 function createClientId() {
@@ -210,6 +210,8 @@ export default function useQuillCollab(docId) {
           return
         }
         const { delta, insertionEnd } = finishImageInsertion(pendingImageOperation, urls, Delta)
+        const capacityError = clipboardPasteError(delta, quill.getContents())
+        if (capacityError) { setError(capacityError); return }
         pendingImageOperation = null
         imageInsertIndex = null
         quill.updateContents(delta, 'user')

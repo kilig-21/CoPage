@@ -4,11 +4,15 @@ import { normalizeDocumentLink } from './links.js'
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 const OMITTED_IMAGE = '[图片无法粘贴，请使用上传图片]'
 
-// 服务端单次Delta最多10000片段，WS文本上限8 MiB；为协议字段留出空间。
-export function clipboardPasteError(operation) {
+// 与 MySQL 持久化边界一致，比 WS 的 8 MiB 限制更严格。
+export function clipboardPasteError(operation, content) {
   if (operation.ops.length > 10000) return '粘贴格式过于复杂，请分段粘贴；原选区已保留'
-  if (new TextEncoder().encode(JSON.stringify(operation)).byteLength > 8 * 1024 * 1024 - 4096) {
-    return '本次粘贴内容过大，请分段粘贴；原选区已保留'
+  const bytes = delta => new TextEncoder().encode(JSON.stringify(delta)).byteLength
+  if (bytes(operation) > 4 * 1024 * 1024) {
+    return '本次粘贴内容过大，单次修改最多 4 MiB；原选区已保留'
+  }
+  if (content && bytes(content.compose(operation)) > 2 * 1024 * 1024) {
+    return '粘贴后正文会超过 2 MiB，请缩小内容或新建文档；原选区已保留'
   }
   return null
 }
@@ -96,7 +100,7 @@ export function configureClipboardImages(quill, uploadFiles, notify) {
       return
     }
     const operation = new Delta().retain(range.index).delete(range.length).concat(pasted)
-    const failure = clipboardPasteError(operation)
+    const failure = clipboardPasteError(operation, quill.getContents())
     if (failure) { notify(failure); return }
     if (context.files.length) {
       void uploadFiles(range, context.files, operation, notice)
