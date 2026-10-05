@@ -75,12 +75,32 @@ Set-Location CoPage
 
 已有代码时，直接在项目根目录继续。以下命令以 PowerShell 为例。
 
+### Windows 日常启动入口
+
+启动 Docker Desktop 后，在项目根目录执行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\local.ps1 start
+```
+
+需要查询或结束应用时，分别执行相应命令：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\local.ps1 status
+# 结束本入口启动的前端和后端，Docker 与数据继续保留
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\local.ps1 stop
+```
+
+`start` 检查基础服务，构建当前源码并在后台启动本机 `8080` 后端和 `5173` 前端生产预览；成功后可关闭终端并打开 [CoPage](http://localhost:5173)。首次需要下载镜像和依赖。已有同项目服务会复用，不重复创建进程；修改源码后需先停止原服务再启动。通过 IDEA 或其它终端启动的服务不会被接管或停止，端口属于其它项目时会拒绝启动。
+
+入口从 Compose 的有效配置向后端子进程传递本地地址与凭据，保留已有 `.env`；运行记录、日志和 npm 缓存在被 Git 忽略的 `.copage-local/` 中。仅支持 Windows PowerShell 5.1/PowerShell 7、本地 `default` profile 和 `http://localhost:5173`，不用于公网服务。`-ExecutionPolicy Bypass` 只作用于本次命令，不修改系统执行策略。详细使用和失败处理见[本地使用指南](docs/本地使用指南.md#windows-日常启动入口)。下方保留分窗口的开发方式。
+
 ### 2. 启动五项基础服务
 
 首次使用时复制示例配置；已有 `.env` 则保留原配置：
 
 ```powershell
-Copy-Item .env.example .env
+if (-not (Test-Path -LiteralPath .env)) { Copy-Item .env.example .env }
 docker compose up -d
 docker compose ps -a
 ```
@@ -131,7 +151,7 @@ npm --prefix frontend run dev
 
 ## 配置说明
 
-Compose 读取根目录 `.env`；**Spring Boot 不会自动读取这份 `.env`**。如果修改了容器密码或地址，还需在后端进程环境中设置相应变量，或在 IDEA 运行配置中配置它们。
+Compose 读取根目录 `.env`；**Spring Boot 不会自动读取这份 `.env`**。Windows `local.ps1` 入口会从 Compose 有效配置为新启动的后端传递连接变量；手动或 IDEA 启动时，如果修改了容器密码或地址，还需在后端进程环境中设置相应变量。
 
 | 后端变量 | 用途 |
 | --- | --- |
@@ -258,7 +278,7 @@ npm --prefix frontend run build
 
 **容器没有全部 healthy？** 首次启动先等待初始化，再用 `docker compose logs --tail=100 <服务名>` 查看对应服务；`minio-init` 成功退出不需要保持运行。
 
-**改了 `.env`，后端仍然连接失败？** 检查后端环境变量是否同步，特别是 Compose 的 `MYSQL_ROOT_PASSWORD` 对应后端的 `MYSQL_PASSWORD`；本机 MySQL 端口为 `3308`。
+**改了 `.env`，后端仍然连接失败？** 手动/IDEA 启动时检查后端环境变量是否同步，特别是 Compose 的 `MYSQL_ROOT_PASSWORD` 对应后端的 `MYSQL_PASSWORD`；本机 MySQL 端口为 `3308`。`local.ps1 start` 会传递连接变量，但不会给已有数据库改密码或替换已有服务；配置变化需先核对容器和原运行进程。
 
 **编辑器是只读的？** 首次同步和重连追赶期间会暂时只读；只读协作者始终不可编辑。历史恢复失败时会保留本地内容并提示备份。
 

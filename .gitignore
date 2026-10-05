@@ -21,3 +21,4 @@ Thumbs.db
 .env.*
 !*.example
 application-local.yml
+.copage-local/
