@@ -9,6 +9,11 @@ const Search = lazy(() => import('./pages/Search'))
 const Templates = lazy(() => import('./pages/Templates'))
 const Trash = lazy(() => import('./pages/Trash'))
 
+const PAGE_TITLES = {
+  '/login': '登录或注册', '/docs': '我的文档', '/search': '搜索文档',
+  '/templates': '文档模板', '/trash': '回收站',
+}
+
 class PageBoundary extends Component {
   state = { failed: false }
   static getDerivedStateFromError() { return { failed: true } }
@@ -32,6 +37,9 @@ function RequireAuth({ children }) {
 export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
+  useEffect(() => {
+    document.title = `${PAGE_TITLES[location.pathname] || '文档'} · CoPage`
+  }, [location.pathname])
   useEffect(() => {
     const expired = () => navigate('/login', { replace: true, state: {
       expired: true, from: safeReturnPath(location.pathname + location.search + location.hash),

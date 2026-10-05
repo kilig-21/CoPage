@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowLeftOutlined, CloudOutlined, TeamOutlined } from '@ant-design/icons'
 import { Alert, Avatar, Button, Layout, Modal, Space, Tag, Tooltip, Typography } from 'antd'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -21,6 +21,9 @@ export default function Editor() {
   const { editorHostRef, connection, users, error, title, permission, isOwner,
     saveStatus, titleError, refreshTitle, recoveryDraft, recoverDraft, discardDraft, canRestoreHistory, canExportDocument } = useQuillCollab(docId)
   const isConnected = connection === '已连接'
+  useEffect(() => {
+    document.title = permission > 0 && title ? `${title} · CoPage` : '文档 · CoPage'
+  }, [title, permission])
 
   return (
     <Layout className="app-shell">
