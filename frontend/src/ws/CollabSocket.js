@@ -11,15 +11,36 @@ export default class CollabSocket {
     this.heartbeatTimer = null
     this.shouldReconnect = true
     this.reconnectDelay = 500
+    this.handleOffline = () => {
+      if (!this.shouldReconnect) return
+      window.clearTimeout(this.reconnectTimer)
+      window.clearInterval(this.heartbeatTimer)
+      this.reconnectTimer = null
+      this.heartbeatTimer = null
+      const previous = this.socket
+      this.socket = null
+      if (previous) {
+        this.onClose?.()
+        previous.close()
+      }
+    }
+    this.handleOnline = () => {
+      window.clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+      if (this.shouldReconnect) this.connect()
+    }
+    window.addEventListener('offline', this.handleOffline)
+    window.addEventListener('online', this.handleOnline)
   }
 
   connect() {
-    if (!this.token || this.socket?.readyState === WebSocket.OPEN || this.socket?.readyState === WebSocket.CONNECTING) {
+    if (!this.shouldReconnect || navigator.onLine === false || !this.token ||
+        this.socket?.readyState === WebSocket.OPEN || this.socket?.readyState === WebSocket.CONNECTING) {
       return
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const origin = (import.meta.env.VITE_BACKEND_WS_ORIGIN || `${protocol}//${window.location.host}`).replace(/\/$/, '')
+    const origin = (import.meta.env?.VITE_BACKEND_WS_ORIGIN || `${protocol}//${window.location.host}`).replace(/\/$/, '')
     const url = `${origin}/ws/collab?token=${encodeURIComponent(this.token)}`
     const socket = new WebSocket(url)
     this.socket = socket
@@ -43,6 +64,7 @@ export default class CollabSocket {
     }
     socket.onclose = () => {
       if (this.socket !== socket || !this.shouldReconnect) return
+      this.socket = null
       window.clearInterval(this.heartbeatTimer)
       this.heartbeatTimer = null
       this.onClose?.()
@@ -51,16 +73,20 @@ export default class CollabSocket {
   }
 
   send(payload) {
-    if (this.socket?.readyState !== WebSocket.OPEN) return false
+    if (navigator.onLine === false || this.socket?.readyState !== WebSocket.OPEN) return false
     this.socket.send(JSON.stringify(payload))
     return true
   }
 
   close() {
     this.shouldReconnect = false
+    window.removeEventListener('offline', this.handleOffline)
+    window.removeEventListener('online', this.handleOnline)
     window.clearTimeout(this.reconnectTimer)
     window.clearInterval(this.heartbeatTimer)
-    this.socket?.close()
+    const previous = this.socket
+    this.socket = null
+    previous?.close()
   }
 
   scheduleReconnect() {
