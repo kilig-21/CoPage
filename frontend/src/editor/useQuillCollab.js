@@ -12,6 +12,7 @@ import { configureEditorToolbar } from './toolbar'
 import { configureLinkEditor, normalizePastedLinks } from './links'
 import { clipboardPasteError, configureClipboardImages } from './clipboardImages'
 import { createCompositionInbox } from './compositionInbox'
+import { createEditCapacityGuard } from './editCapacityGuard'
 
 function createClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `client-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -435,7 +436,9 @@ export default function useQuillCollab(docId) {
       lastKnownContents = quill.getContents()
       persistDraft()
     }
-    const onTextChange = (delta, _old, source) => {
+    const editCapacityGuard = createEditCapacityGuard(quill, setError, updateToolbar)
+    const onTextChange = (delta, old, source) => {
+      if (!editCapacityGuard.accept(delta, old, source)) { updateToolbar(); return }
       updateToolbar()
       linkEditor.transform(delta)
       if (pendingImageOperation) pendingImageOperation = delta.transform(pendingImageOperation, true)
@@ -574,6 +577,7 @@ export default function useQuillCollab(docId) {
       refreshTitleRef.current = null
       window.clearInterval(cursorKeepaliveTimer)
       quill.off('text-change', onTextChange)
+      editCapacityGuard.dispose()
       quill.off('selection-change', onSelectionChange)
       quill.root.removeEventListener('compositionstart', onCompositionStart)
       quill.root.removeEventListener('compositionend', onCompositionEnd)
