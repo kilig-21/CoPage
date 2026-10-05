@@ -11,6 +11,7 @@ import { DOCUMENT_FORMATS } from './formats'
 import { configureEditorToolbar } from './toolbar'
 import { configureLinkEditor, normalizePastedLinks } from './links'
 import { configureClipboardImages } from './clipboardImages'
+import { createCompositionInbox } from './compositionInbox'
 
 function createClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `client-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -283,6 +284,31 @@ export default function useQuillCollab(docId) {
       },
     })
 
+    const deliverMessage = (message) => {
+      if (!active) return
+      if (message.type === 'metadata' && message.docId === docId) { refreshTitle(); return }
+      // 撤权必须立即生效；先把尚未结束的组合输入收进本地草稿。
+      flushComposition()
+      if (message.docId === docId && [0, 1, 2].includes(message.permission)) {
+        setPermission(message.permission)
+        canEdit = message.permission === 2
+        if (!canEdit) abortImageUpload()
+        updateEditable()
+        client.receive({ type: 'permission', docId, permission: message.permission })
+        if (message.permission === 0) {
+          persistDraft()
+          socket.close()
+          return
+        }
+      }
+      client.receive(message)
+      persistDraft()
+    }
+    const compositionInbox = createCompositionInbox({
+      isComposing: () => composing,
+      deliver: deliverMessage,
+      resync: () => client.join(),
+    })
     const socket = new CollabSocket({
       token,
       onOpen: () => {
@@ -294,23 +320,7 @@ export default function useQuillCollab(docId) {
         client.join()
       },
       onMessage: (message) => {
-        if (!active) return
-        if (message.type === 'metadata' && message.docId === docId) { refreshTitle(); return }
-        flushComposition()
-        if (message.docId === docId && [0, 1, 2].includes(message.permission)) {
-          setPermission(message.permission)
-          canEdit = message.permission === 2
-          if (!canEdit) abortImageUpload()
-          updateEditable()
-          client.receive({ type: 'permission', docId, permission: message.permission })
-          if (message.permission === 0) {
-            persistDraft()
-            socket.close()
-            return
-          }
-        }
-        client.receive(message)
-        persistDraft()
+        if (active) compositionInbox.receive(message)
       },
       onClose: () => {
         if (!active) return
@@ -318,6 +328,8 @@ export default function useQuillCollab(docId) {
         cursorLayer.clear()
         abortImageUpload()
         flushComposition()
+        composing = false
+        compositionInbox.clear()
         connected = false
         synced = false
         updateEditable()
@@ -437,14 +449,25 @@ export default function useQuillCollab(docId) {
     }
     const onCompositionStart = () => { composing = true; updateSaveStatus() }
     const flushComposition = () => {
+      if (composing) {
+        // Quill 延迟到 compositionend 微任务才结束 batch。断线/撤权/离开
+        // 页面时须先收集 DOM 中的输入，不能只读取尚未更新的 Delta。
+        quill.scroll.batchEnd()
+        quill.update('user')
+      }
       if (!compositionDirty) return
       compositionDirty = false
       submit(lastKnownContents.diff(quill.getContents()))
     }
     const onCompositionEnd = () => {
-      composing = false
-      flushComposition()
-      updateSaveStatus()
+      // Quill 先结束自己的 batch，再提交本地输入和按序处理远端消息。
+      queueMicrotask(() => {
+        if (!active) return
+        flushComposition()
+        composing = false
+        compositionInbox.drain()
+        updateSaveStatus()
+      })
     }
     const onSelectionChange = (range, _old, source) => {
       if (source === 'user' || range === null) scheduleCursor()
@@ -542,6 +565,7 @@ export default function useQuillCollab(docId) {
       flushComposition()
       persistDraft()
       active = false
+      compositionInbox.clear()
       sessionCheckController.abort()
       titleController?.abort()
       linkEditor.dispose()
