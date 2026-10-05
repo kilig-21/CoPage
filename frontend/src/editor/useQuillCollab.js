@@ -35,13 +35,15 @@ export default function useQuillCollab(docId) {
   const recoveryActionsRef = useRef(null)
   const historyReadyRef = useRef(null)
   const exportReadyRef = useRef(null)
+  const [loadAttempt, setLoadAttempt] = useState(0)
 
   useEffect(() => {
     const host = editorHostRef.current
-    if (!host || !Number.isSafeInteger(docId) || docId <= 0) return undefined
+    if (!host) return undefined
     let active = true
     let backupSent = false
     let draftTitle = ''
+    let draftReady = false
     setConnection('加载中')
     setTitle('')
     setTitleError('')
@@ -51,6 +53,13 @@ export default function useQuillCollab(docId) {
     setError('')
     setPermission(0)
     setIsOwner(false)
+
+    if (!Number.isSafeInteger(docId) || docId <= 0) {
+      setConnection('地址无效')
+      setSaveStatus('未打开文档')
+      setError('文档地址无效，请从文档列表重新打开')
+      return undefined
+    }
 
     const imageInput = document.createElement('input')
     imageInput.type = 'file'
@@ -397,7 +406,9 @@ export default function useQuillCollab(docId) {
 
     const persistDraft = () => {
       updateSaveStatus()
-      if (recoveryActionsRef.current) return true
+      // 初始读取/草稿归属探测尚未完成时，空客户端不拥有旧草稿。
+      // 加载失败、离开或重试都不得用“没有 pending”清除原数据。
+      if (!draftReady || recoveryActionsRef.current) return true
       if (!draftPrefix) return !client.hasUnconfirmedChanges()
       const key = draftPrefix + client.clientId
       try {
@@ -531,7 +542,7 @@ export default function useQuillCollab(docId) {
       if (lastSentCursor?.visible) sendCursor(true)
     }, 20_000)
 
-    request.get('/doc/' + docId)
+    request.get('/doc/' + docId, { signal: sessionCheckController.signal })
       .then(async (response) => {
         if (!active) return
         const doc = response.data
@@ -546,7 +557,9 @@ export default function useQuillCollab(docId) {
         let stored = null
         let activeDraftFound = false
         for (const candidate of findDrafts()) {
-          if (await isDraftOwnerActive(candidate.draft.clientId)) {
+          const ownerActive = await isDraftOwnerActive(candidate.draft.clientId)
+          if (!active) return
+          if (ownerActive) {
             activeDraftFound = true
             if (candidate.draft.clientId === client.clientId) {
               client.clientId = createClientId()
@@ -575,6 +588,7 @@ export default function useQuillCollab(docId) {
                 sessionStorage.setItem(tabKey, client.clientId)
                 setRecoveryDraft(null)
                 recoveryActionsRef.current = null
+                draftReady = true
                 persistDraft()
                 startSocket()
               } catch {
@@ -585,10 +599,12 @@ export default function useQuillCollab(docId) {
               localStorage.removeItem(stored.key)
               setRecoveryDraft(null)
               recoveryActionsRef.current = null
+              draftReady = true
               startSocket()
             },
           }
         } else {
+          draftReady = true
           if (activeDraftFound) setError('另一标签页正在编辑，未接管它的本地草稿')
           startSocket()
         }
@@ -596,6 +612,7 @@ export default function useQuillCollab(docId) {
       .catch((loadError) => {
         if (!active) return
         setConnection('加载失败')
+        setSaveStatus('未能加载文档')
         setError(loadError?.message || '文档加载失败')
       })
 
@@ -634,11 +651,12 @@ export default function useQuillCollab(docId) {
       host.replaceChildren()
       quillRef.current = null
     }
-  }, [docId])
+  }, [docId, loadAttempt])
 
   return {
     editorHostRef, connection, users, error, title, permission, isOwner, recoveryDraft, saveStatus, titleError,
     refreshTitle: () => refreshTitleRef.current?.(),
+    retryLoad: () => { if (connection === '加载失败') setLoadAttempt(value => value + 1) },
     recoverDraft: () => recoveryActionsRef.current?.recover(),
     discardDraft: () => recoveryActionsRef.current?.discard(),
     canRestoreHistory: () => Boolean(historyReadyRef.current?.()),

@@ -19,7 +19,7 @@ export default function Editor() {
   const [showHistory, setShowHistory] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const { editorHostRef, connection, users, error, title, permission, isOwner,
-    saveStatus, titleError, refreshTitle, recoveryDraft, recoverDraft, discardDraft, canRestoreHistory, canExportDocument } = useQuillCollab(docId)
+    saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, recoverDraft, discardDraft, canRestoreHistory, canExportDocument } = useQuillCollab(docId)
   const isConnected = connection === '已连接'
   useEffect(() => {
     document.title = permission > 0 && title ? `${title} · CoPage` : '文档 · CoPage'
@@ -55,7 +55,8 @@ export default function Editor() {
         {titleError && <Alert className="editor-alert" type="warning" message={titleError}
           action={<Button onClick={refreshTitle}>重试标题</Button>} />}
         {permission === 1 && <Alert className="editor-alert" type="info" showIcon message="你拥有只读权限，不能修改此文档" />}
-        {error && <Alert className="editor-alert" type="warning" showIcon message={error} />}
+        {error && <Alert className="editor-alert" type="warning" showIcon message={error}
+          action={connection === '加载失败' ? <Button onClick={retryLoad}>重试加载</Button> : undefined} />}
         <section className="editor-canvas">
           <div ref={editorHostRef} className="editor-host" aria-label="协同编辑器" />
         </section>
