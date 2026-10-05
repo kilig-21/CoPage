@@ -9,14 +9,14 @@ export default class CollabSocket {
     this.socket = null
     this.reconnectTimer = null
     this.heartbeatTimer = null
+    this.pongTimer = null
     this.shouldReconnect = true
     this.reconnectDelay = 500
     this.handleOffline = () => {
       if (!this.shouldReconnect) return
       window.clearTimeout(this.reconnectTimer)
-      window.clearInterval(this.heartbeatTimer)
+      this.stopHeartbeat()
       this.reconnectTimer = null
-      this.heartbeatTimer = null
       const previous = this.socket
       this.socket = null
       if (previous) {
@@ -48,13 +48,28 @@ export default class CollabSocket {
     socket.onopen = () => {
       if (this.socket !== socket || !this.shouldReconnect) return
       this.reconnectDelay = 500
-      this.heartbeatTimer = window.setInterval(() => this.send({ type: 'ping' }), 20_000)
+      this.heartbeatTimer = window.setInterval(() => {
+        if (this.socket !== socket || !this.shouldReconnect || this.pongTimer !== null) return
+        // 先启动计时，避免极快的 pong 先到达后又留下一个超时任务。
+        this.pongTimer = window.setTimeout(() => {
+          if (this.socket !== socket || !this.shouldReconnect) return
+          this.onError?.('协同连接响应超时，正在重新连接')
+          this.handleOffline()
+          if (this.shouldReconnect && navigator.onLine !== false) this.scheduleReconnect()
+        }, 15_000)
+        this.send({ type: 'ping' })
+      }, 20_000)
       this.onOpen?.()
     }
     socket.onmessage = (event) => {
       if (this.socket !== socket || !this.shouldReconnect) return
       try {
-        this.onMessage?.(JSON.parse(event.data))
+        const message = JSON.parse(event.data)
+        if (message.type === 'pong') {
+          window.clearTimeout(this.pongTimer)
+          this.pongTimer = null
+        }
+        this.onMessage?.(message)
       } catch {
         this.onError?.('服务端返回了无法解析的协同消息')
       }
@@ -65,8 +80,7 @@ export default class CollabSocket {
     socket.onclose = () => {
       if (this.socket !== socket || !this.shouldReconnect) return
       this.socket = null
-      window.clearInterval(this.heartbeatTimer)
-      this.heartbeatTimer = null
+      this.stopHeartbeat()
       this.onClose?.()
       if (this.shouldReconnect) this.scheduleReconnect()
     }
@@ -83,7 +97,7 @@ export default class CollabSocket {
     window.removeEventListener('offline', this.handleOffline)
     window.removeEventListener('online', this.handleOnline)
     window.clearTimeout(this.reconnectTimer)
-    window.clearInterval(this.heartbeatTimer)
+    this.stopHeartbeat()
     const previous = this.socket
     this.socket = null
     previous?.close()
@@ -95,5 +109,12 @@ export default class CollabSocket {
       this.connect()
       this.reconnectDelay = Math.min(this.reconnectDelay * 2, 5_000)
     }, this.reconnectDelay)
+  }
+
+  stopHeartbeat() {
+    window.clearInterval(this.heartbeatTimer)
+    window.clearTimeout(this.pongTimer)
+    this.heartbeatTimer = null
+    this.pongTimer = null
   }
 }

@@ -36,7 +36,8 @@ function browser(t) {
       else delete globalThis[key]
     }
   })
-  return { Socket, timers, network, emit: type => events.dispatchEvent(new Event(type)) }
+  return { Socket, timers, network, emit: type => events.dispatchEvent(new Event(type)),
+    fireTimeout(id) { const fn = timers.get(id); timers.delete(id); fn() } }
 }
 
 test('浏览器离线立即关闭旧连接，停止发送；联网创建新连接且忽略旧消息', t => {
@@ -50,6 +51,7 @@ test('浏览器离线立即关闭旧连接，停止发送；联网创建新连�
   const previous = env.Socket.instances[0]
   previous.open()
   assert.equal(opens, 1)
+  env.timers.get(socket.heartbeatTimer)()
   env.network.onLine = false
   env.emit('offline')
   env.emit('offline')
@@ -79,6 +81,7 @@ test('主动关闭后移除网络监听，后续联网或 connect 不得复活�
   const socket = new CollabSocket({ token: 'test', onClose: () => closes++ })
   socket.connect()
   env.Socket.instances[0].open()
+  env.timers.get(socket.heartbeatTimer)()
   socket.close()
   env.network.onLine = false
   env.emit('offline')
@@ -105,4 +108,54 @@ test('正常断线仍安排重连；离线期间取消定时器，联网只创�
   env.emit('online')
   assert.equal(env.Socket.instances.length, 2)
   socket.close()
+})
+
+test('心跳回复在转交编辑器前清除超时；保留版本和权限字段', t => {
+  const env = browser(t)
+  const messages = []
+  const socket = new CollabSocket({ token: 'test', onMessage: message => messages.push(message) })
+  socket.connect()
+  const current = env.Socket.instances[0]
+  current.open()
+  env.timers.get(socket.heartbeatTimer)()
+  assert.deepEqual(current.sent, [{ type: 'ping' }])
+  assert.notEqual(socket.pongTimer, null)
+  const pong = { type: 'pong', docId: 1, revision: 8, permission: 1 }
+  current.onmessage({ data: JSON.stringify(pong) })
+  assert.equal(socket.pongTimer, null)
+  assert.equal(env.timers.size, 1)
+  assert.deepEqual(messages, [pong])
+  socket.close()
+  assert.equal(env.timers.size, 0)
+})
+
+test('OPEN连接缺失心跳时暂停并重连；旧连接迟到回复不能清除新连接超时', t => {
+  const env = browser(t)
+  let closes = 0
+  const errors = []
+  const socket = new CollabSocket({ token: 'test', onClose: () => closes++, onError: error => errors.push(error) })
+  socket.connect()
+  const previous = env.Socket.instances[0]
+  previous.open()
+  env.timers.get(socket.heartbeatTimer)()
+  const expired = env.timers.get(socket.pongTimer)
+  env.fireTimeout(socket.pongTimer)
+  assert.equal(closes, 1)
+  assert.equal(previous.readyState, 3)
+  assert.equal(socket.send({ type: 'op' }), false)
+  assert.equal(env.timers.size, 1)
+  assert.match(errors[0], /响应超时/)
+  env.fireTimeout(socket.reconnectTimer)
+  const current = env.Socket.instances[1]
+  current.open()
+  env.timers.get(socket.heartbeatTimer)()
+  const deadline = socket.pongTimer
+  previous.onmessage({ data: JSON.stringify({ type: 'pong' }) })
+  expired()
+  assert.equal(socket.pongTimer, deadline)
+  assert.equal(closes, 1)
+  current.onmessage({ data: JSON.stringify({ type: 'pong' }) })
+  assert.equal(socket.pongTimer, null)
+  socket.close()
+  assert.equal(env.timers.size, 0)
 })
