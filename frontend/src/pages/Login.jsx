@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Form, Input, Typography } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
 import request from '../api/request'
@@ -12,28 +12,35 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const requestControllerRef = useRef(null)
+  useEffect(() => () => requestControllerRef.current?.abort(), [])
 
   async function onFinish(values) {
+    const controller = new AbortController()
+    requestControllerRef.current = controller
     setSubmitting(true)
     setError(''); setNotice('')
     const payload = { username: values.username.trim(), password: values.password,
       ...(registering ? { nickname: values.nickname?.trim() } : {}) }
     try {
       if (registering) {
-        await request.post('/auth/register', payload)
+        await request.post('/auth/register', payload, { signal: controller.signal })
+        if (controller.signal.aborted) return
         setNotice('注册成功，请用新账号登录')
         setRegistering(false)
         form.setFieldsValue({ password: '', confirmPassword: '' })
         return
       }
-      const response = await request.post('/auth/login', payload)
+      const response = await request.post('/auth/login', payload, { signal: controller.signal })
+      if (controller.signal.aborted) return
       localStorage.setItem('collab-token', response.data.token)
       localStorage.setItem('collab-user', response.data.user.username)
       navigate(safeReturnPath(location.state?.from), { replace: true })
     } catch (error) {
-      setError(error?.message || '请求失败，请稍后重试')
+      if (!controller.signal.aborted) setError(error?.message || '请求失败，请稍后重试')
     } finally {
-      setSubmitting(false)
+      if (requestControllerRef.current === controller) requestControllerRef.current = null
+      if (!controller.signal.aborted) setSubmitting(false)
     }
   }
 
@@ -43,6 +50,7 @@ export default function Login() {
         <Typography.Title level={2}>协同文档</Typography.Title>
         <Typography.Paragraph type="secondary">多人实时协作，从一篇文档开始。</Typography.Paragraph>
         {location.state?.expired && <Alert type="warning" showIcon message="登录已失效，请重新登录；未确认的本地草稿仍保留在此浏览器中" />}
+        {location.state?.sessionChanged && <Alert type="info" showIcon message="登录状态已在其他页面更改，请重新登录；未确认的草稿仍保留在原账号下" />}
         {error && <Alert type="error" showIcon message={error} />}
         {notice && <Alert type="success" showIcon message={notice} />}
         <Form form={form} layout="vertical" onFinish={onFinish} disabled={submitting}>

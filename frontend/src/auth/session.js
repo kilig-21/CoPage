@@ -11,6 +11,20 @@ export function expireSession(storage, requestToken, notify) {
   return true
 }
 
+// storage 事件仅发送到其它页面；按实际存储判断，忽略排队中的旧事件。
+export function subscribeSessionChanges(storage, eventTarget, onChanged) {
+  let token = storage.getItem('collab-token')
+  const changed = event => {
+    if (event.storageArea !== storage || (event.key !== null && event.key !== 'collab-token')) return
+    const next = storage.getItem('collab-token')
+    if (next === token) return
+    token = next
+    onChanged()
+  }
+  eventTarget.addEventListener('storage', changed)
+  return () => eventTarget.removeEventListener('storage', changed)
+}
+
 // WS 握手错误不提供 HTTP 状态；使用独立的轻量请求确认，网络/5xx 不视为登录失效。
 export function createReconnectSessionCheck({ getStatus, isCurrent, onExpired }) {
   let pending = null

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { safeReturnPath, expireSession, createReconnectSessionCheck } from './session.js'
+import { safeReturnPath, expireSession, subscribeSessionChanges, createReconnectSessionCheck } from './session.js'
 
 test('login only returns to supported internal pages', () => {
   assert.equal(safeReturnPath('/docs/60'), '/docs/60')
@@ -23,6 +23,46 @@ test('expired session preserves drafts and late errors cannot clear a newer logi
   assert.equal(data.get('copage-draft:v1:testA:60:x'), 'saved')
   assert.equal(expireSession(storage, 'new', () => notifications++), false)
   assert.equal(notifications, 1)
+})
+
+test('other-tab logout and account changes notify once without changing tokens or drafts', () => {
+  const data = new Map([['collab-token', 'account-A'], ['copage-draft:v1:testA:212:x', 'saved']])
+  const storage = { getItem: key => data.get(key) ?? null }
+  const events = new EventTarget()
+  let notifications = 0
+  const stop = subscribeSessionChanges(storage, events, () => notifications++)
+  const emit = (key, storageArea = storage) => events.dispatchEvent(Object.assign(new Event('storage'), { key, storageArea }))
+  emit('copage-draft:v1:testA:212:x')
+  data.delete('collab-token')
+  emit('collab-token', {})
+  assert.equal(notifications, 0)
+  emit('collab-token')
+  emit('collab-token')
+  assert.equal(notifications, 1)
+  data.set('collab-token', 'account-B')
+  emit('collab-token')
+  assert.equal(notifications, 2)
+  assert.equal(data.get('collab-token'), 'account-B')
+  assert.equal(data.get('copage-draft:v1:testA:212:x'), 'saved')
+  stop()
+  data.delete('collab-token')
+  emit(null)
+  assert.equal(notifications, 2)
+})
+
+test('storage clear notifies and stale queued events use the current session', () => {
+  let token = 'A', notifications = 0
+  const storage = { getItem: () => token }
+  const events = new EventTarget()
+  const stop = subscribeSessionChanges(storage, events, () => notifications++)
+  const emit = key => events.dispatchEvent(Object.assign(new Event('storage'), { key, storageArea: storage, oldValue: 'A', newValue: 'B' }))
+  token = 'A' // 另一页面先改成B又改回A；迟到事件不应中断当前会话。
+  emit('collab-token')
+  assert.equal(notifications, 0)
+  token = null
+  emit(null)
+  assert.equal(notifications, 1)
+  stop()
 })
 
 test('reconnect only expires a current session confirmed unauthorized', async () => {

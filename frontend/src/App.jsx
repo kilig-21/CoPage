@@ -1,6 +1,6 @@
-import { Component, lazy, Suspense, useEffect } from 'react'
+import { Component, lazy, Suspense, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { safeReturnPath } from './auth/session'
+import { safeReturnPath, subscribeSessionChanges } from './auth/session'
 
 const Login = lazy(() => import('./pages/Login'))
 const DocList = lazy(() => import('./pages/DocList'))
@@ -37,6 +37,7 @@ function RequireAuth({ children }) {
 export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
+  const [sessionEpoch, setSessionEpoch] = useState(0)
   useEffect(() => {
     document.title = `${PAGE_TITLES[location.pathname] || '文档'} · CoPage`
   }, [location.pathname])
@@ -47,8 +48,17 @@ export default function App() {
     window.addEventListener('copage-auth-expired', expired)
     return () => window.removeEventListener('copage-auth-expired', expired)
   }, [location, navigate])
+  useEffect(() => subscribeSessionChanges(localStorage, window, () => {
+    // 先同步暂停旧编辑器，再切换路由，防止组合输入在卸载时用旧身份提交。
+    window.dispatchEvent(new Event('copage-auth-changed'))
+    if (location.pathname === '/login') setSessionEpoch(value => value + 1)
+    navigate('/login', { replace: true, state: {
+      sessionChanged: true, from: safeReturnPath(location.pathname === '/login'
+        ? location.state?.from : location.pathname + location.search + location.hash),
+    } })
+  }), [location, navigate])
   return (
-    <PageBoundary key={location.pathname}>
+    <PageBoundary key={`${location.pathname}:${sessionEpoch}`}>
     <Suspense fallback={<main className="page-load-message" role="status">正在加载页面，请稍候…</main>}>
     <Routes>
       <Route path="/login" element={<Login />} />

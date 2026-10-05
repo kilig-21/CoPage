@@ -478,6 +478,23 @@ export default function useQuillCollab(docId) {
       if (source === 'user' || range === null) scheduleCursor()
     }
     const renderRemoteCursors = () => cursorLayer.render()
+    const onSessionChanged = () => {
+      if (!active || localStorage.getItem('collab-token') === token) return
+      // 关闭发送通道后再收集组合输入，保存在捕获的原账号草稿中。
+      socket.close()
+      abortImageUpload()
+      flushComposition()
+      persistDraft()
+      connected = false
+      synced = false
+      client.disconnect()
+      composing = false
+      compositionInbox.clear()
+      updateEditable()
+      titleController?.abort()
+      sessionCheckController.abort()
+      active = false
+    }
     const onBeforeUnload = (event) => {
       flushComposition()
       persistDraft()
@@ -493,6 +510,7 @@ export default function useQuillCollab(docId) {
     quill.root.addEventListener('scroll', renderRemoteCursors)
     window.addEventListener('resize', renderRemoteCursors)
     window.addEventListener('beforeunload', onBeforeUnload)
+    window.addEventListener('copage-auth-changed', onSessionChanged)
     const cursorKeepaliveTimer = window.setInterval(() => {
       cursorLayer.expire()
       if (lastSentCursor?.visible) sendCursor(true)
@@ -566,6 +584,7 @@ export default function useQuillCollab(docId) {
       })
 
     return () => {
+      onSessionChanged()
       hideCursor()
       flushComposition()
       persistDraft()
@@ -584,6 +603,7 @@ export default function useQuillCollab(docId) {
       quill.root.removeEventListener('scroll', renderRemoteCursors)
       window.removeEventListener('resize', renderRemoteCursors)
       window.removeEventListener('beforeunload', onBeforeUnload)
+      window.removeEventListener('copage-auth-changed', onSessionChanged)
       client.close()
       socket.close()
       abortImageUpload()
