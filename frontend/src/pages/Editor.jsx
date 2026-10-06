@@ -11,6 +11,7 @@ import ShareModal from '../components/ShareModal'
 import { draftRecordsJson } from '../editor/draftRecords'
 import { downloadTextFile } from '../editor/downloadTextFile'
 import DraftBackupDownloads from '../components/DraftBackupDownloads'
+import DocumentFindPanel from '../components/DocumentFindPanel'
 
 export default function Editor() {
   const { id } = useParams()
@@ -21,14 +22,36 @@ export default function Editor() {
   const [managing, setManaging] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showExport, setShowExport] = useState(false)
+  const [showFind, setShowFind] = useState(false)
+  const [findFocusEpoch, setFindFocusEpoch] = useState(0)
   const [draftDownloadNotice, setDraftDownloadNotice] = useState('')
   const { editorHostRef, connection, users, error, title, permission, isOwner,
-    saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, unreadableDrafts, unavailableDrafts, recoverDraft, discardDraft, canRestoreHistory, canExportDocument } = useQuillCollab(docId)
+    saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, unreadableDrafts, unavailableDrafts, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor } = useQuillCollab(docId)
   const isConnected = connection === '已连接'
   useEffect(() => {
     document.title = permission > 0 && title ? `${title} · CoPage` : '文档 · CoPage'
   }, [title, permission])
   useEffect(() => setDraftDownloadNotice(''), [docId])
+  function openFind() {
+    startDocumentFind()
+    setShowFind(true)
+    setFindFocusEpoch(value => value + 1)
+  }
+  function closeFind() {
+    closeDocumentFind()
+    setShowFind(false)
+    queueMicrotask(focusDocumentEditor)
+  }
+  useEffect(() => {
+    const shortcut = event => {
+      if (permission <= 0 || recoveryDraft || renaming || sharing || managing || showHistory || showExport ||
+          event.isComposing || !(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 'f') return
+      event.preventDefault()
+      openFind()
+    }
+    window.addEventListener('keydown', shortcut)
+    return () => window.removeEventListener('keydown', shortcut)
+  }, [permission, recoveryDraft, renaming, sharing, managing, showHistory, showExport, startDocumentFind])
   function saveRawDrafts() {
     try {
       downloadTextFile(draftRecordsJson(docId, unreadableDrafts), `原始草稿-${docId}.json`, 'application/json;charset=utf-8')
@@ -47,6 +70,7 @@ export default function Editor() {
           {permission === 2 && <Button onClick={() => setRenaming(true)}>重命名</Button>}
         </div>
         <Space wrap className="editor-actions">
+          {permission > 0 && <Button aria-label="文档内查找" title="文档内查找（Ctrl/⌘+F）" onClick={openFind}>文档内查找</Button>}
           {permission > 0 && <Button onClick={() => setSharing(true)}>分享链接</Button>}
           {permission > 0 && <Button onClick={() => setShowHistory(true)}>历史版本</Button>}
           {permission > 0 && <Button onClick={() => setShowExport(true)}>导出文档</Button>}
@@ -83,6 +107,9 @@ export default function Editor() {
               <DraftBackupDownloads backup={backup} />
             </div>)}
             <Button onClick={() => navigate('/docs')}>稍后处理，返回列表</Button></>} />}
+        {showFind && permission > 0 && <DocumentFindPanel state={documentFindState} permission={permission}
+          focusEpoch={findFocusEpoch} onQuery={queryDocument} onNext={nextDocumentMatch}
+          onReplace={replaceDocumentMatch} onClose={closeFind} />}
         <section className="editor-canvas">
           <div ref={editorHostRef} className="editor-host" aria-label="协同编辑器" />
         </section>

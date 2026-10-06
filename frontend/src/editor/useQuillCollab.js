@@ -15,6 +15,7 @@ import { createCompositionInbox } from './compositionInbox'
 import { createEditCapacityGuard } from './editCapacityGuard'
 import { createDraftBackup } from './draftBackup'
 import { readDraftRecords } from './draftRecords'
+import { createDocumentFind, EMPTY_DOCUMENT_FIND } from './documentFind'
 
 function createClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `client-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -38,6 +39,8 @@ export default function useQuillCollab(docId) {
   const recoveryActionsRef = useRef(null)
   const historyReadyRef = useRef(null)
   const exportReadyRef = useRef(null)
+  const documentFindRef = useRef(null)
+  const [documentFindState, setDocumentFindState] = useState(EMPTY_DOCUMENT_FIND)
   const [loadAttempt, setLoadAttempt] = useState(0)
 
   useEffect(() => {
@@ -58,6 +61,7 @@ export default function useQuillCollab(docId) {
     setError('')
     setPermission(0)
     setIsOwner(false)
+    setDocumentFindState(EMPTY_DOCUMENT_FIND)
 
     if (!Number.isSafeInteger(docId) || docId <= 0) {
       setConnection('地址无效')
@@ -135,6 +139,7 @@ export default function useQuillCollab(docId) {
     let uploading = false
     let imageInsertIndex = null
     let pendingImageOperation = null
+    let documentFind = null
     let uploadController = null
     let titleController = null
     const refreshTitle = async () => {
@@ -152,6 +157,7 @@ export default function useQuillCollab(docId) {
     const updateSaveStatus = () => {
       if (!active) return
       const pending = client.hasUnconfirmedChanges()
+      documentFind?.refreshStatus()
       setSaveStatus(recoveryActionsRef.current ? '等待恢复本地草稿'
         : !connected || !synced ? (pending ? '有修改尚未同步' : '等待同步')
         : uploading ? '正在上传图片'
@@ -161,6 +167,7 @@ export default function useQuillCollab(docId) {
     }
     const updateEditable = () => {
       quill.enable(canEdit && connected && synced)
+      documentFind?.refreshStatus()
       updateToolbar()
     }
     let cursorSendTimer = null
@@ -256,6 +263,20 @@ export default function useQuillCollab(docId) {
     imageInput.addEventListener('change', onImageChange)
     imageInput.addEventListener('cancel', onImageCancel)
 
+    const updateWithFindFocus = update => {
+      const control = quill.root.ownerDocument.activeElement
+      const inFind = control?.closest('[data-document-find-panel]')
+      // 查找框内组合输入时，远端更新不能借用正文旧选区把焦点移走。
+      if (inFind) {
+        const selection = quill.root.ownerDocument.getSelection()
+        if (selection?.rangeCount && quill.root.contains(selection.getRangeAt(0).startContainer)) selection.removeAllRanges()
+      }
+      update(Boolean(inFind))
+      if (inFind && control.isConnected) {
+        control.focus({ preventScroll: true })
+        documentFind?.refreshSelection()
+      }
+    }
     const client = new CollabClient({
       docId,
       clientId,
@@ -266,17 +287,19 @@ export default function useQuillCollab(docId) {
         cursorLayer.clear()
         lastSentCursor = null
         // 仅应用服务端差异，避免重连全文替换抹掉本标签的撤销记录。
-        if (content) quill.updateContents(quill.getContents().diff(content), 'api')
+        if (content) updateWithFindFocus(() => quill.updateContents(quill.getContents().diff(content), 'api'))
         lastKnownContents = quill.getContents()
       },
       onRemote: (operation) => {
         if (!active) return
         const selection = quill.getSelection()
-        quill.updateContents(operation, 'api')
-        if (selection) {
-          const nextIndex = operation.transformPosition(selection.index, true)
-          quill.setSelection(nextIndex, selection.length, 'silent')
-        }
+        updateWithFindFocus(inFind => {
+          quill.updateContents(operation, 'api')
+          if (selection && !inFind) {
+            const nextIndex = operation.transformPosition(selection.index, true)
+            quill.setSelection(nextIndex, selection.length, 'silent')
+          }
+        })
         lastKnownContents = quill.getContents()
       },
       onUsers: (onlineUsers) => {
@@ -469,6 +492,7 @@ export default function useQuillCollab(docId) {
       if (pendingImageOperation) pendingImageOperation = delta.transform(pendingImageOperation, true)
       if (imageInsertIndex !== null) imageInsertIndex = delta.transformPosition(imageInsertIndex, true)
       cursorLayer.transform(delta)
+      documentFind?.changed(delta)
       if (source !== 'user') return
       scheduleCursor()
       if (composing) {
@@ -530,6 +554,13 @@ export default function useQuillCollab(docId) {
       event.returnValue = ''
     }
 
+    documentFind = createDocumentFind(quill, {
+      Delta,
+      canReplace: () => active && canEdit && connected && synced && !uploading
+        && !composing && !client.hasUnconfirmedChanges() && !recoveryActionsRef.current,
+      onState: state => { if (active) setDocumentFindState(state) },
+    })
+    documentFindRef.current = documentFind
     quill.on('text-change', onTextChange)
     quill.on('selection-change', onSelectionChange)
     quill.root.addEventListener('compositionstart', onCompositionStart)
@@ -660,6 +691,8 @@ export default function useQuillCollab(docId) {
       recoveryActionsRef.current = null
       historyReadyRef.current = null
       exportReadyRef.current = null
+      documentFind?.dispose()
+      documentFindRef.current = null
       quill.getModule('toolbar')?.container.remove()
       host.replaceChildren()
       quillRef.current = null
@@ -674,5 +707,12 @@ export default function useQuillCollab(docId) {
     discardDraft: () => recoveryActionsRef.current?.discard(),
     canRestoreHistory: () => Boolean(historyReadyRef.current?.()),
     canExportDocument: () => Boolean(exportReadyRef.current?.()),
+    documentFindState,
+    startDocumentFind: () => { documentFindRef.current?.start() },
+    closeDocumentFind: () => { documentFindRef.current?.pause() },
+    queryDocument: (query, caseSensitive, selectMatches) => documentFindRef.current?.setQuery(query, caseSensitive, selectMatches),
+    nextDocumentMatch: step => documentFindRef.current?.next(step),
+    replaceDocumentMatch: (replacement, all) => documentFindRef.current?.replace(replacement, all),
+    focusDocumentEditor: () => quillRef.current?.focus(),
   }
 }

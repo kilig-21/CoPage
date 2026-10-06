@@ -70,3 +70,9 @@ body { margin: 0; min-width: 0; }
 .history-version-list { max-height: 40vh; overflow-y: auto; margin: 16px 0; }
 .history-preview { margin-top: 20px; scroll-margin-top: 16px; }
 .history-preview:focus-visible { outline: 2px solid #2563eb; outline-offset: 4px; }
+
+.document-find-panel { position: sticky; top: 12px; z-index: 3; margin-top: 16px; padding: 16px; background: #fff; border: 1px solid #e8ecf3; border-radius: 8px; }
+.document-find-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.document-find-row:first-child { justify-content: space-between; }
+.document-find-field { flex: 1 1 260px; min-width: 0; }
+:root::highlight(copage-document-find-current) { background-color: #fde68a; color: #172033; }
