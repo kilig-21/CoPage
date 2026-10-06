@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Form, Input, Typography } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
 import request from '../api/request'
-import { safeReturnPath } from '../auth/session'
+import { safeReturnPath, saveSession } from '../auth/session'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -33,8 +33,7 @@ export default function Login() {
       }
       const response = await request.post('/auth/login', payload, { signal: controller.signal })
       if (controller.signal.aborted) return
-      localStorage.setItem('collab-token', response.data.token)
-      localStorage.setItem('collab-user', response.data.user.username)
+      saveSession(localStorage, { token: response.data.token, username: response.data.user.username })
       navigate(safeReturnPath(location.state?.from), { replace: true })
     } catch (error) {
       if (!controller.signal.aborted) setError(error?.message || '请求失败，请稍后重试')

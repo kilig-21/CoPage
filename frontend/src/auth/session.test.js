@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { safeReturnPath, expireSession, subscribeSessionChanges, createReconnectSessionCheck } from './session.js'
+import { safeReturnPath, saveSession, expireSession, subscribeSessionChanges, createReconnectSessionCheck } from './session.js'
 
 test('login only returns to supported internal pages', () => {
   assert.equal(safeReturnPath('/docs/60'), '/docs/60')
@@ -100,4 +100,56 @@ test('reconnect checks coalesce and ignore late unauthorized results after sessi
   resolveStatus(401)
   await next
   assert.equal(expired, 1)
+})
+
+test('登录成功提交完整身份，写入过程不留下可用于读取错误账号草稿的令牌', () => {
+  const data = new Map([['collab-token', 'old-B'], ['collab-user', 'testB'],
+    ['copage-draft:v1:testB:220:old', 'original-B-draft']])
+  const identities = new Map([['old-B', 'testB'], ['new-A', 'testA']])
+  const check = () => {
+    const token = data.get('collab-token')
+    if (token) assert.equal(data.get('collab-user'), identities.get(token))
+    assert.equal(data.get('copage-draft:v1:testB:220:old'), 'original-B-draft')
+  }
+  const storage = {
+    removeItem: key => { data.delete(key); check() },
+    setItem: (key, value) => { data.set(key, value); check() },
+  }
+  saveSession(storage, { token: 'new-A', username: 'testA' })
+  assert.equal(data.get('collab-token'), 'new-A')
+  assert.equal(data.get('collab-user'), 'testA')
+})
+
+test('登录保存各步骤失败时身份仍一致，草稿不变且解除失败后可重试', () => {
+  for (const failingStep of ['remove-token', 'write-user', 'write-token']) {
+    const data = new Map([['collab-token', 'old-B'], ['collab-user', 'testB'],
+      ['copage-draft:v1:testB:220:old', 'original-B-draft']])
+    let failureEnabled = true
+    const fail = step => {
+      if (failureEnabled && step === failingStep) throw new DOMException('storage unavailable', 'QuotaExceededError')
+    }
+    const storage = {
+      removeItem: key => { fail('remove-token'); data.delete(key) },
+      setItem: (key, value) => { fail(key === 'collab-user' ? 'write-user' : 'write-token'); data.set(key, value) },
+    }
+    assert.throws(() => saveSession(storage, { token: 'new-A', username: 'testA' }), /无法保存登录信息.*草稿仍保留/)
+    const token = data.get('collab-token')
+    assert.ok(token === undefined || (token === 'old-B' && data.get('collab-user') === 'testB'))
+    assert.equal(data.get('copage-draft:v1:testB:220:old'), 'original-B-draft')
+    failureEnabled = false
+    saveSession(storage, { token: 'new-A', username: 'testA' })
+    assert.equal(data.get('collab-token'), 'new-A')
+    assert.equal(data.get('collab-user'), 'testA')
+    assert.equal(data.get('copage-draft:v1:testB:220:old'), 'original-B-draft')
+  }
+})
+
+test('不完整的登录响应在修改现有身份之前拒绝', () => {
+  for (const response of [{ token: '', username: 'testA' }, { token: 'new-A' },
+    { token: 'new-A', username: ' ' }, { token: 42, username: 'testA' }]) {
+    let writes = 0
+    const storage = { removeItem: () => writes++, setItem: () => writes++ }
+    assert.throws(() => saveSession(storage, response), /登录信息不完整/)
+    assert.equal(writes, 0)
+  }
 })

@@ -2,6 +2,21 @@ export function safeReturnPath(path) {
   return typeof path === 'string' && /^\/(?:docs(?:\/\d+)?|templates|trash|search)(?:[?#].*)?$/.test(path) ? path : '/docs'
 }
 
+export function saveSession(storage, { token, username }) {
+  if (typeof token !== 'string' || !token.trim() || typeof username !== 'string' || !username.trim()) {
+    throw new Error('登录信息不完整，请重试')
+  }
+  try {
+    // 先停止旧身份，再保存账号名；只有完整写入账号名后才能提交新令牌。
+    // Web Storage 单次写入失败不会改变该键，因此任一步失败都不会留下身份错配。
+    storage.removeItem('collab-token')
+    storage.setItem('collab-user', username)
+    storage.setItem('collab-token', token)
+  } catch {
+    throw new Error('浏览器无法保存登录信息，请允许本站保存数据后重试；已有本地草稿仍保留。')
+  }
+}
+
 // 只处理当前请求所属的会话，避免迟到的 401 退出刚登录的新账号；草稿键保持原样。
 export function expireSession(storage, requestToken, notify) {
   if (!requestToken || storage.getItem('collab-token') !== requestToken) return false
