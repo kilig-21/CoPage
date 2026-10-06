@@ -2,6 +2,8 @@ import { Component, lazy, Suspense, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { safeReturnPath, subscribeSessionChanges } from './auth/session'
 import LocalDraftBackup from './components/LocalDraftBackup'
+import StorageUnavailable from './components/StorageUnavailable'
+import { canReadBrowserStorage } from './auth/browserStorage'
 
 const Login = lazy(() => import('./pages/Login'))
 const DocList = lazy(() => import('./pages/DocList'))
@@ -35,7 +37,7 @@ function RequireAuth({ children }) {
     : <Navigate to="/login" replace state={{ from: location.pathname + location.search + location.hash }} />
 }
 
-export default function App() {
+function SessionApp() {
   const location = useLocation()
   const navigate = useNavigate()
   const [sessionEpoch, setSessionEpoch] = useState(0)
@@ -86,4 +88,17 @@ export default function App() {
     </Suspense>
     </PageBoundary>
   )
+}
+
+export default function App() {
+  const [storageReady, setStorageReady] = useState(() => canReadBrowserStorage(window))
+  useEffect(() => {
+    if (!storageReady) document.title = '浏览器存储不可用 · CoPage'
+  }, [storageReady])
+  if (!storageReady) return <StorageUnavailable onRetry={() => {
+    const ready = canReadBrowserStorage(window)
+    setStorageReady(ready)
+    return ready
+  }} />
+  return <SessionApp />
 }
