@@ -6,6 +6,7 @@ import useQuillCollab from '../editor/useQuillCollab'
 import CollaboratorModal from '../components/CollaboratorModal'
 import HistoryDrawer from '../components/HistoryDrawer'
 import ExportModal from '../components/ExportModal'
+import PrintModal from '../components/PrintModal'
 import RenameModal from '../components/RenameModal'
 import ShareModal from '../components/ShareModal'
 import { draftRecordsJson } from '../editor/draftRecords'
@@ -22,6 +23,7 @@ export default function Editor() {
   const [managing, setManaging] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [showExport, setShowExport] = useState(false)
+  const [showPrint, setShowPrint] = useState(false)
   const [showFind, setShowFind] = useState(false)
   const [findFocusEpoch, setFindFocusEpoch] = useState(0)
   const [draftDownloadNotice, setDraftDownloadNotice] = useState('')
@@ -44,14 +46,15 @@ export default function Editor() {
   }
   useEffect(() => {
     const shortcut = event => {
-      if (permission <= 0 || recoveryDraft || renaming || sharing || managing || showHistory || showExport ||
-          event.isComposing || !(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 'f') return
+      if (permission <= 0 || recoveryDraft || renaming || sharing || managing || showHistory || showExport || showPrint ||
+          event.isComposing || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || !['f', 'p'].includes(event.key.toLowerCase())) return
       event.preventDefault()
-      openFind()
+      if (event.key.toLowerCase() === 'p') setShowPrint(true)
+      else openFind()
     }
     window.addEventListener('keydown', shortcut)
     return () => window.removeEventListener('keydown', shortcut)
-  }, [permission, recoveryDraft, renaming, sharing, managing, showHistory, showExport, startDocumentFind])
+  }, [permission, recoveryDraft, renaming, sharing, managing, showHistory, showExport, showPrint, startDocumentFind])
   function saveRawDrafts() {
     try {
       downloadTextFile(draftRecordsJson(docId, unreadableDrafts), `原始草稿-${docId}.json`, 'application/json;charset=utf-8')
@@ -74,6 +77,7 @@ export default function Editor() {
           {permission > 0 && <Button onClick={() => setSharing(true)}>分享链接</Button>}
           {permission > 0 && <Button onClick={() => setShowHistory(true)}>历史版本</Button>}
           {permission > 0 && <Button onClick={() => setShowExport(true)}>导出文档</Button>}
+          {permission > 0 && <Button title="打印 / PDF（Ctrl/⌘+P）" onClick={() => setShowPrint(true)}>打印 / PDF</Button>}
           {isOwner && permission === 2 && <Button icon={<TeamOutlined />} onClick={() => setManaging(true)}>协作者管理</Button>}
         </Space>
       </header>
@@ -122,6 +126,9 @@ export default function Editor() {
         canRestore={canRestoreHistory} onClose={() => setShowHistory(false)} />}
       {showExport && <ExportModal docId={docId} canExport={() => permission > 0 && !recoveryDraft && canExportDocument()}
         onClose={() => setShowExport(false)} />}
+      {showPrint && permission > 0 && <PrintModal docId={docId}
+        canPrint={() => permission > 0 && !recoveryDraft && canExportDocument()}
+        onClose={() => setShowPrint(false)} />}
       <Modal title="发现未确认的本地编辑" open={Boolean(recoveryDraft)} closable={false}
         maskClosable={false} keyboard={false} onCancel={() => undefined}
         footer={[

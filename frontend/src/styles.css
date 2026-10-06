@@ -76,3 +76,41 @@ body { margin: 0; min-width: 0; }
 .document-find-row:first-child { justify-content: space-between; }
 .document-find-field { flex: 1 1 260px; min-width: 0; }
 :root::highlight(copage-document-find-current) { background-color: #fde68a; color: #172033; }
+
+.document-print-sheet { margin-top: 20px; padding: 28px; border: 1px solid #e8ecf3; background: #fff; color: #172033; overflow-wrap: anywhere; max-height: 55vh; overflow-y: auto; }
+.document-print-sheet h1 { margin: 0 0 12px; font-size: 24px; line-height: 1.4; }
+.document-print-meta { margin: 0 0 16px; color: #666; font-size: 12px; }
+.document-print-sheet .document-preview.ql-container { border: 0; font-family: inherit; font-size: 14px; line-height: 1.7; }
+.document-print-sheet .ql-editor { height: auto; min-height: 0; max-height: none; overflow: visible; padding: 0; }
+.document-print-sheet .ql-editor img { max-width: 100%; height: auto; }
+.document-print-sheet .ql-tooltip { display: none; }
+.document-print-controls .ant-alert { margin: 12px 0; }
+@media (max-width: 640px) { .document-print-sheet { padding: 16px; } }
+@media print {
+  @page { size: A4; margin: 18mm; }
+  html:has(.document-print-portal) { background: #fff !important; }
+  body:has(.document-print-portal) { background: #fff !important; overflow: visible !important; min-height: 0 !important; height: auto !important; padding: 0 !important; }
+  body:has(.document-print-portal) > :not(.document-print-portal) { display: none !important; }
+  .document-print-portal .ant-modal-mask,
+  .document-print-portal .ant-modal-header,
+  .document-print-portal .ant-modal-footer,
+  .document-print-portal .ant-modal-close,
+  .document-print-controls { display: none !important; }
+  .document-print-portal .ant-modal-root,
+  .document-print-portal .ant-modal-wrap,
+  .document-print-portal .ant-modal,
+  .document-print-portal .ant-modal-content,
+  .document-print-portal .ant-modal-body {
+    position: static !important; inset: auto !important; transform: none !important;
+    width: auto !important; max-width: none !important; height: auto !important; max-height: none !important;
+    margin: 0 !important; padding: 0 !important; overflow: visible !important;
+    box-shadow: none !important; border: 0 !important; background: #fff !important; animation: none !important; opacity: 1 !important; visibility: visible !important;
+  }
+  .document-print-sheet { margin: 0; padding: 0; border: 0; max-height: none; overflow: visible; }
+  .document-print-sheet h1 { break-after: avoid; }
+  .document-print-sheet .ql-editor { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .document-print-sheet .ql-editor img { max-height: 245mm; object-fit: contain; break-inside: avoid; }
+  .document-print-sheet .ql-editor pre, .document-print-sheet .ql-code-block { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .document-print-sheet .ql-editor .ql-code-block-container { background: #f5f5f5 !important; color: #111 !important; }
+  :root::highlight(copage-document-find-current) { background-color: transparent; color: inherit; }
+}
