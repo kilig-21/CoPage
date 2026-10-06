@@ -28,6 +28,60 @@ class DocumentServiceTest {
     }
 
     @Test
+    void readOnlyCopyCreatesPrivateDocumentWithFullBodyAndMatchingBaseline() {
+        UserContext.set(2L, "reader");
+        String rich = "{\"ops\":[{\"insert\":\"" + "大".repeat(400000) + "\"},{\"insert\":\"正文\\n\",\"attributes\":{\"bold\":true}}]}";
+        var source = new DocumentRow(5L, "共享原稿", rich, 8L, 1L, "拥有者", 12L, row.updateTime());
+        when(repository.findForUpdate(5L)).thenReturn(Optional.of(source));
+        when(repository.collaboratorPermission(5L, 2L)).thenReturn(1);
+        when(repository.create("我的副本", 2L, 0L, rich)).thenReturn(9L);
+        var copied = service.copy(5, " 我的副本 ");
+        assertEquals(9L, copied.id());
+        assertEquals(8L, copied.sourceRevision());
+        assertEquals("我的副本", copied.title());
+        verify(repository).saveInitialSnapshot(9L, rich);
+        verify(repository, never()).addCollaborator(anyLong(), anyLong(), anyInt());
+        verify(repository, never()).rename(anyLong(), anyString());
+        verify(repository, never()).softDelete(anyLong());
+        verify(repository, never()).find(5L);
+    }
+
+    @Test
+    void copyRequiresLoginValidSourceAndCurrentPermissionBeforeAnyWrite() {
+        assertEquals(ErrorCode.UNAUTHORIZED, assertThrows(BizException.class, () -> service.copy(5, null)).getErrorCode());
+        UserContext.set(3L, "stranger");
+        assertEquals(ErrorCode.PARAM_ERROR, assertThrows(BizException.class, () -> service.copy(0, null)).getErrorCode());
+        when(repository.findForUpdate(5L)).thenReturn(Optional.empty());
+        assertEquals(ErrorCode.NOT_FOUND, assertThrows(BizException.class, () -> service.copy(5, null)).getErrorCode());
+        when(repository.findForUpdate(5L)).thenReturn(Optional.of(row));
+        assertEquals(ErrorCode.FORBIDDEN, assertThrows(BizException.class, () -> service.copy(5, null)).getErrorCode());
+        verify(repository, never()).create(anyString(), anyLong(), anyLong(), anyString());
+        verify(repository, never()).saveInitialSnapshot(anyLong(), anyString());
+    }
+
+    @Test
+    void copyRejectsBlankOrOversizedExplicitTitleBeforeWriting() {
+        UserContext.set(1L, "owner");
+        when(repository.findForUpdate(5L)).thenReturn(Optional.of(row));
+        for (String title : new String[]{" ", "名".repeat(201)}) {
+            assertEquals(ErrorCode.PARAM_ERROR, assertThrows(BizException.class, () -> service.copy(5, title)).getErrorCode());
+        }
+        verify(repository, never()).create(anyString(), anyLong(), anyLong(), anyString());
+    }
+
+    @Test
+    void copyDefaultTitleIsBoundedWithoutSplittingEmojiAndStartsFromOwnRoot() {
+        UserContext.set(1L, "owner");
+        String title = "标".repeat(195) + "😀" + "末".repeat(3);
+        var source = new DocumentRow(5L, title, row.content(), 8L, 1L, "拥有者", 12L, row.updateTime());
+        when(repository.findForUpdate(5L)).thenReturn(Optional.of(source));
+        String expected = "标".repeat(195) + " 的副本";
+        when(repository.create(expected, 1L, 0L, row.content())).thenReturn(9L);
+        assertEquals(expected, service.copy(5, null).title());
+        verify(repository).saveInitialSnapshot(9L, row.content());
+    }
+
+    @Test
     void metadataRequiresCurrentVisibilityAndNeverReturnsBody() throws Exception {
         when(repository.find(5L)).thenReturn(Optional.of(row));
         assertEquals(ErrorCode.UNAUTHORIZED, assertThrows(BizException.class, () -> service.metadata(5)).getErrorCode());

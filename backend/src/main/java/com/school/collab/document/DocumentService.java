@@ -90,6 +90,31 @@ public class DocumentService {
         return summary(row);
     }
 
+    /** 锁定来源并核对当前权限；副本归操作人，正文与版本0基线同事务保存。 */
+    @Transactional
+    public CopyView copy(long sourceId, String title) {
+        long userId = currentUserId();
+        if (sourceId <= 0) throw new BizException(ErrorCode.PARAM_ERROR);
+        DocumentRow source = documents.findForUpdate(sourceId)
+                .orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
+        if (permission(source, userId) == 0) throw new BizException(ErrorCode.FORBIDDEN);
+        String normalized = title == null ? defaultCopyTitle(source.title()) : normalizeTitle(title, false);
+        String content = source.content() == null ? EMPTY_CONTENT : source.content();
+        long id = documents.create(normalized, userId, 0L, content);
+        documents.saveInitialSnapshot(id, content);
+        indexAfterCommit(id);
+        return new CopyView(id, normalized, source.revision());
+    }
+
+    private static String defaultCopyTitle(String title) {
+        String suffix = " 的副本";
+        int end = Math.min(title.length(), 200 - suffix.length());
+        if (end > 0 && Character.isHighSurrogate(title.charAt(end - 1))) end--;
+        return title.substring(0, end) + suffix;
+    }
+
+    public record CopyView(long id, String title, long sourceRevision) { }
+
     public DetailView detail(long docId) {
         long userId = currentUserId();
         DocumentRow row = requireVisible(docId, userId);

@@ -59,6 +59,14 @@ public class DocumentController {
         return Result.ok(DocumentTemplates.list());
     }
 
+    @PostMapping("/{id}/copy")
+    public Result<DocumentService.CopyView> copy(@PathVariable long id,
+            @RequestBody(required = false) CopyRequest request) {
+        return Result.ok(documents.copy(id, request == null ? null : request.title()));
+    }
+
+    public record CopyRequest(String title) { }
+
     @GetMapping("/{id}")
     public Result<DocumentService.DetailView> detail(@PathVariable long id) {
         return Result.ok(documents.detail(id));

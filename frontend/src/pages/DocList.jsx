@@ -5,12 +5,14 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
 import CollaboratorModal from '../components/CollaboratorModal'
 import ImportModal from '../components/ImportModal'
+import CopyModal from '../components/CopyModal'
 import RenameModal from '../components/RenameModal'
 
 const PAGE_SIZE = 20
 
 export default function DocList() {
   const [managing, setManaging] = useState(null)
+  const [copying, setCopying] = useState(null)
   const navigate = useNavigate()
   const [docs, setDocs] = useState([])
   const [total, setTotal] = useState(0)
@@ -111,6 +113,7 @@ export default function DocList() {
             renderItem={(doc) => (
               <List.Item actions={[
                 <Link key="open" to={'/docs/' + doc.id}>打开</Link>,
+                <Button key="copy" type="link" onClick={() => setCopying(doc)}>创建副本</Button>,
                 doc.permission === 2 && <Button key="rename" type="link" onClick={() => setEditing(doc)}>重命名</Button>,
                 doc.isOwner && <Button key="members" type="link" onClick={() => setManaging(doc)}>协作者管理</Button>,
                 doc.isOwner && <Popconfirm key="delete" title="将这篇文档移入回收站？" description="协作者将停止访问，你可以在回收站恢复。" onConfirm={() => deleteDocument(doc.id)}>
@@ -125,6 +128,8 @@ export default function DocList() {
             disabled={loading} onChange={setPage} />}
         </Card>
       </main>
+      {copying && <CopyModal doc={copying} onClose={() => setCopying(null)}
+        onCreated={data => { message.success('已创建服务端版本 ' + data.sourceRevision + ' 的副本'); navigate('/docs/' + data.id) }} />}
       {managing && <CollaboratorModal doc={managing} onClose={() => setManaging(null)} />}
       {importing && <ImportModal onClose={() => setImporting(false)} onCreated={id => navigate('/docs/' + id)} />}
       {editing && <RenameModal doc={editing} onClose={() => setEditing(null)}
