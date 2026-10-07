@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { CloseCircleOutlined, FileTextOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
-import { Alert, Avatar, Button, Card, Empty, Input, Layout, List, Pagination, Popconfirm, Space, Typography, message } from 'antd'
+import { Alert, Avatar, Button, Card, Empty, Input, Layout, List, Pagination, Popconfirm, Radio, Space, Tag, Typography, message } from 'antd'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
 import CollaboratorModal from '../components/CollaboratorModal'
@@ -18,12 +18,16 @@ export default function DocList() {
   const [total, setTotal] = useState(0)
   const [searchParams, setSearchParams] = useSearchParams()
   const keyword = (searchParams.get('keyword') || '').slice(0, 200).trim()
+  const rawScope = searchParams.get('scope')
+  const scope = ['owned', 'shared'].includes(rawScope) ? rawScope : 'all'
   const rawPage = Number(searchParams.get('page') || 1)
   const page = Number.isSafeInteger(rawPage) && rawPage > 0 && rawPage <= 1_000_000 ? rawPage : 1
   const [filter, setFilter] = useState(keyword)
-  const setPage = next => setSearchParams({ ...(keyword ? { keyword } : {}), page: String(next) })
+  const scopeParams = scope === 'all' ? {} : { scope }
+  const setPage = next => setSearchParams({ ...scopeParams, ...(keyword ? { keyword } : {}), page: String(next) })
   useEffect(() => setFilter(keyword), [keyword])
-  const applyFilter = value => setSearchParams(value.trim() ? { keyword: value.trim() } : {})
+  const applyFilter = value => setSearchParams({ ...scopeParams, ...(value.trim() ? { keyword: value.trim() } : {}) })
+  const applyScope = next => setSearchParams({ ...(next === 'all' ? {} : { scope: next }), ...(keyword ? { keyword } : {}) })
   const [refresh, setRefresh] = useState(0)
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -35,7 +39,7 @@ export default function DocList() {
     const controller = new AbortController()
     setLoading(true)
     setLoadError('')
-    request.get('/doc/list', { params: { page, size: PAGE_SIZE, keyword }, signal: controller.signal })
+    request.get('/doc/list', { params: { page, size: PAGE_SIZE, keyword, scope }, signal: controller.signal })
       .then((response) => {
         if (controller.signal.aborted) return
         const lastPage = Math.max(1, Math.ceil(response.data.total / PAGE_SIZE))
@@ -44,13 +48,13 @@ export default function DocList() {
         setTotal(response.data.total)
       })
       .catch((error) => {
-        if (!controller.signal.aborted) { setDocs([]); setLoadError(error?.message || '文档列表加载失败') }
+        if (!controller.signal.aborted) { setDocs([]); setTotal(0); setLoadError(error?.message || '文档列表加载失败') }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [page, keyword, refresh])
+  }, [page, keyword, scope, refresh])
 
   async function createDocument() {
     if (creating) return
@@ -98,7 +102,11 @@ export default function DocList() {
             <Button type="primary" icon={<PlusOutlined />} loading={creating} onClick={createDocument}>新建文档</Button>
           </Space>
         </div>
-        <Input.Search className="search-box" aria-label="按文档标题筛选" placeholder="按标题筛选我的文档"
+        <Space wrap style={{ marginBottom: 16 }}>
+          <Radio.Group aria-label="文档分类" value={scope} onChange={event => applyScope(event.target.value)}
+            options={[{ label: '全部', value: 'all' }, { label: '我创建', value: 'owned' }, { label: '与我协作', value: 'shared' }]} />
+        </Space>
+        <Input.Search className="search-box" aria-label="按文档标题筛选" placeholder="按标题筛选当前分类"
           maxLength={200} value={filter} allowClear={{ clearIcon: <CloseCircleOutlined aria-label="清除标题输入" /> }} enterButton="筛选"
           onChange={event => setFilter(event.target.value)} onSearch={applyFilter} />
         {keyword && <div className="filter-summary"><span>标题包含“{keyword}”</span>
@@ -109,7 +117,7 @@ export default function DocList() {
           <List
             loading={loading}
             dataSource={docs}
-            locale={{ emptyText: loading ? '正在加载…' : loadError ? '列表暂不可用' : <Empty description={keyword ? "没有匹配的标题，试试其他关键词" : "还没有文档，先新建一篇吧"} /> }}
+            locale={{ emptyText: loading ? '正在加载…' : loadError ? '列表暂不可用' : <Empty description={keyword ? '没有匹配的标题，试试其他关键词' : scope === 'shared' ? '还没有共享给你的文档，请文档所有者添加你为协作者' : '还没有文档，先新建一篇吧'} /> }}
             renderItem={(doc) => (
               <List.Item actions={[
                 <Link key="open" to={'/docs/' + doc.id}>打开</Link>,
@@ -120,7 +128,8 @@ export default function DocList() {
                   <Button type="link" danger>删除</Button>
                 </Popconfirm>,
               ].filter(Boolean)}>
-                <List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={<Link to={'/docs/' + doc.id}>{doc.title}</Link>} description={doc.ownerName + ' · ' + doc.updateTime} />
+                <List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={<Link to={'/docs/' + doc.id}>{doc.title}</Link>}
+                  description={<Space wrap><Tag>{doc.isOwner ? '所有者' : doc.permission === 2 ? '可编辑' : '只读'}</Tag><span>{doc.ownerName + ' · ' + doc.updateTime}</span></Space>} />
               </List.Item>
             )}
           />

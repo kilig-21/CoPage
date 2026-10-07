@@ -28,6 +28,42 @@ class DocumentServiceTest {
     }
 
     @Test
+    void listUsesSummaryPermissionsWithoutPerDocumentLookups() {
+        UserContext.set(2L, "reader");
+        when(repository.countVisible(2L, "需求", "shared")).thenReturn(1L);
+        when(repository.listVisible(2L, "需求", "shared", 2, 20)).thenReturn(java.util.List.of(
+                new DocumentRepository.VisibleSummaryRow(5L, "需求", 1L, "拥有者", 0L, row.updateTime(), 1)));
+        var result = service.list(2, 20, " 需求 ", "shared");
+        assertEquals(1L, result.total());
+        assertEquals(1, result.list().getFirst().permission());
+        assertFalse(result.list().getFirst().isOwner());
+        var json = new ObjectMapper().valueToTree(result.list().getFirst());
+        assertFalse(json.has("content"));
+        assertFalse(json.has("revision"));
+        verify(repository).countVisible(2L, "需求", "shared");
+        verify(repository).listVisible(2L, "需求", "shared", 2, 20);
+        verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void listRejectsInvalidFiltersAndRequiresLoginBeforeReading() {
+        for (String scope : new String[]{null, "", "other", "shared' OR 1=1"}) {
+            assertEquals(ErrorCode.PARAM_ERROR,
+                    assertThrows(BizException.class, () -> service.list(1, 20, "", scope)).getErrorCode());
+        }
+        assertEquals(ErrorCode.UNAUTHORIZED,
+                assertThrows(BizException.class, () -> service.list(1, 20, "", "all")).getErrorCode());
+        UserContext.set(2L, "reader");
+        assertEquals(ErrorCode.PARAM_ERROR,
+                assertThrows(BizException.class, () -> service.list(1, 20, "名".repeat(201), "all")).getErrorCode());
+        for (int[] paging : new int[][]{{0, 20}, {1, 0}, {1, 101}}) {
+            assertEquals(ErrorCode.PARAM_ERROR,
+                    assertThrows(BizException.class, () -> service.list(paging[0], paging[1], "", "all")).getErrorCode());
+        }
+        verifyNoInteractions(repository);
+    }
+
+    @Test
     void readOnlyCopyCreatesPrivateDocumentWithFullBodyAndMatchingBaseline() {
         UserContext.set(2L, "reader");
         String rich = "{\"ops\":[{\"insert\":\"" + "大".repeat(400000) + "\"},{\"insert\":\"正文\\n\",\"attributes\":{\"bold\":true}}]}";

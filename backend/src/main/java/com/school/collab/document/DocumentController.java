@@ -27,9 +27,10 @@ public class DocumentController {
     public Result<DocumentService.ListView> list(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "") String keyword
+            @RequestParam(defaultValue = "") String keyword,
+            @RequestParam(defaultValue = "all") String scope
     ) {
-        return Result.ok(documents.list(page, size, keyword));
+        return Result.ok(documents.list(page, size, keyword, scope));
     }
 
     @PostMapping

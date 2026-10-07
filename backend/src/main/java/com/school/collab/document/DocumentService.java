@@ -47,15 +47,19 @@ public class DocumentService {
         this.lifecycle = lifecycle;
     }
 
-    public ListView list(int page, int size, String keyword) {
-        if (page < 1 || size < 1 || size > 100) {
+    @Transactional(readOnly = true)
+    public ListView list(int page, int size, String keyword, String scope) {
+        if (page < 1 || size < 1 || size > 100 ||
+                !("all".equals(scope) || "owned".equals(scope) || "shared".equals(scope))) {
             throw new BizException(ErrorCode.PARAM_ERROR);
         }
         long userId = currentUserId();
         String filter = keyword == null ? "" : keyword.trim();
-        long total = documents.countVisible(userId, filter);
-        List<SummaryView> list = documents.listVisible(userId, filter, page, size)
-                .stream().map(this::summary).toList();
+        if (filter.length() > 200) throw new BizException(ErrorCode.PARAM_ERROR);
+        long total = documents.countVisible(userId, filter, scope);
+        List<SummaryView> list = documents.listVisible(userId, filter, scope, page, size)
+                .stream().map(row -> new SummaryView(row.id(), row.title(), row.ownerId(), row.ownerName(),
+                        row.parentId(), format(row.updateTime()), row.permission(), row.ownerId() == userId)).toList();
         return new ListView(total, list);
     }
 

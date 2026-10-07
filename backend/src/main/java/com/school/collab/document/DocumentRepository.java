@@ -15,10 +15,10 @@ import java.util.Optional;
 public class DocumentRepository {
     private static final String VISIBLE_FILTER = """
             d.is_deleted = 0 AND
-            (d.owner_id = ? OR EXISTS (
-                SELECT 1 FROM doc_collaborator c
-                WHERE c.doc_id = d.id AND c.user_id = ?
-            )) AND (? = '' OR LOCATE(?, d.title) > 0)
+            (d.owner_id = ? OR c.user_id IS NOT NULL)
+            AND (? = '' OR LOCATE(?, d.title) > 0)
+            AND (? = 'all' OR (? = 'owned' AND d.owner_id = ?)
+                 OR (? = 'shared' AND d.owner_id <> ?))
             """;
     private static final RowMapper<DocumentRow> ROW_MAPPER = (rs, rowNum) -> new DocumentRow(
             rs.getLong("id"),
@@ -116,24 +116,33 @@ public class DocumentRepository {
 
     public record CollaboratorView(long userId, String username, String nickname, int permission) { }
 
-    public long countVisible(long userId, String keyword) {
+    public long countVisible(long userId, String keyword, String scope) {
         return jdbc.queryForObject(
-                "SELECT COUNT(*) FROM document d WHERE " + VISIBLE_FILTER,
-                Long.class, userId, userId, keyword, keyword);
+                "SELECT COUNT(*) FROM document d LEFT JOIN doc_collaborator c ON c.doc_id=d.id AND c.user_id=? WHERE " + VISIBLE_FILTER,
+                Long.class, userId, userId, keyword, keyword, scope, scope, userId, scope, userId);
     }
 
-    public List<DocumentRow> listVisible(long userId, String keyword, int page, int size) {
+    /** 列表只取摘要；成员权限与正文可见性在同一次查询中计算，避免逐篇补查。 */
+    public List<VisibleSummaryRow> listVisible(long userId, String keyword, String scope, int page, int size) {
         long offset = ((long) page - 1) * size;
         return jdbc.query("""
-                SELECT d.id, d.title, d.content, d.revision, d.owner_id,
-                       u.nickname AS owner_name, d.parent_id, d.update_time
+                SELECT d.id, d.title, d.owner_id,
+                       u.nickname AS owner_name, d.parent_id, d.update_time,
+                       CASE WHEN d.owner_id = ? THEN 2 ELSE c.permission END AS permission
                 FROM document d JOIN user u ON u.id = d.owner_id
+                LEFT JOIN doc_collaborator c ON c.doc_id = d.id AND c.user_id = ?
                 WHERE
                 """ + VISIBLE_FILTER + """
                 ORDER BY d.update_time DESC, d.id DESC
                 LIMIT ? OFFSET ?
-                """, ROW_MAPPER, userId, userId, keyword, keyword, size, offset);
+                """, (rs, index) -> new VisibleSummaryRow(rs.getLong("id"), rs.getString("title"),
+                rs.getLong("owner_id"), rs.getString("owner_name"), rs.getLong("parent_id"),
+                rs.getTimestamp("update_time").toLocalDateTime(), rs.getInt("permission")),
+                userId, userId, userId, keyword, keyword, scope, scope, userId, scope, userId, size, offset);
     }
+
+    public record VisibleSummaryRow(long id, String title, long ownerId, String ownerName,
+                                    long parentId, LocalDateTime updateTime, int permission) { }
 
     /** 搜索前在数据库计算权限边界，ES 不保存或推断协作者权限。 */
     public List<Long> visibleIds(long userId) {
