@@ -46,6 +46,8 @@ body { margin: 0; min-width: 0; }
 .search-title { margin-bottom: 24px; }
 .search-title .ant-typography { margin: 0; }
 .search-box { margin-bottom: 24px; }
+.search-results-card .ant-list-item-meta-title,
+.search-results-card .ant-list-item-meta-description { overflow-wrap: anywhere; }
 @media (max-width: 640px) { .content-wrap, .editor-wrap { padding: 28px 0; } .topbar { padding: 0 16px; } .editor-canvas { padding: 32px 24px; } }
 
 .editor-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 300px; }

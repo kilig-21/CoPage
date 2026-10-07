@@ -59,7 +59,7 @@ export default function Search() {
       <Space className="search-title"><Button type="text" aria-label="返回文档列表" icon={<ArrowLeftOutlined />} onClick={() => navigate('/docs')} /><Typography.Title level={2}>搜索文档</Typography.Title></Space>
       <Input.Search aria-label="搜索标题和正文" placeholder="搜索标题和正文" value={input} maxLength={100} onChange={(event) => setInput(event.target.value)} onSearch={search} loading={loading} size="large" enterButton="搜索" className="search-box" />
       {error && <Alert type="error" showIcon message={error} action={<Button size="small" onClick={() => setRetry((value) => value + 1)}>重试</Button>} />}
-      <Card>
+      <Card className="search-results-card">
         {query && !loading && !error && <Typography.Paragraph type="secondary">找到 {total} 篇可访问的文档</Typography.Paragraph>}
         {total > 10000 && !loading && !error && <Typography.Paragraph type="secondary">最多显示前 10000 条结果，试试更具体的关键词。</Typography.Paragraph>}
         <List loading={loading} dataSource={results}

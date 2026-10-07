@@ -28,6 +28,37 @@ class SearchServiceTest {
     }
 
     @Test
+    void Unicode大小写转换不能改变原文高亮坐标() {
+        assertEquals("İ <strong>TARGET</strong>", SearchService.highlight("İ TARGET", "target"));
+        UserContext.set(1L, "owner");
+        when(documents.visibleIds(1)).thenReturn(List.of(5L));
+        when(index.search("target", List.of(5L), 1, 20))
+                .thenReturn(new SearchIndex.SearchPage(1, List.of(5L)));
+        when(documents.find(5L)).thenReturn(Optional.of(new DocumentRow(
+                5, "标题", "{\"ops\":[{\"insert\":\"İ TARGET\\n\"}]}", 1,
+                1, "owner", 0, LocalDateTime.now())));
+        assertEquals("İ <strong>TARGET</strong>\n", service.search("target", 1, 20).list().getFirst().snippet());
+        assertEquals("<strong>i</strong>", SearchService.highlight("i", "İ"));
+    }
+
+    @Test
+    void 摘要窗口不能拆开UTF16代理对() {
+        assertEquals("a".repeat(159) + "😀", SearchService.highlight("a".repeat(159) + "😀末", "missing"));
+        assertEquals("…😀" + "b".repeat(59) + "<strong>TARGET</strong>",
+                SearchService.highlight("a😀" + "b".repeat(59) + "TARGET", "target"));
+        assertEquals("<strong>TARGET</strong>" + "a".repeat(79) + "😀…",
+                SearchService.highlight("TARGET" + "a".repeat(79) + "😀末", "target"));
+    }
+
+    @Test
+    void Unicode高亮仍按字面关键词并转义原文HTML() {
+        assertEquals("&lt;b&gt;İ <strong>[x].*</strong>&lt;/b&gt;",
+                SearchService.highlight("<b>İ [x].*</b>", "[x].*"));
+        assertEquals("<strong>a\\E</strong>", SearchService.highlight("a\\E", "a\\E"));
+        assertEquals("<strong>Σ</strong>", SearchService.highlight("Σ", "ς"));
+    }
+
+    @Test
     void 检索只交给ES当前用户可见的文档ID() {
         UserContext.set(1L, "owner");
         when(documents.visibleIds(1)).thenReturn(List.of(5L));

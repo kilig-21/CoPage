@@ -9,7 +9,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class SearchService {
@@ -32,33 +33,55 @@ public class SearchService {
         }
         List<Long> visible = documents.visibleIds(userId);
         SearchIndex.SearchPage matches = index.search(q, visible, page, size);
+        Pattern literal = literalPattern(q);
         List<HitView> hits = matches.ids().stream()
                 .map(id -> documents.find(id).orElse(null))
                 .filter(row -> row != null && (row.ownerId() == userId
                         || documents.collaboratorPermission(row.id(), userId) > 0))
-                .map(row -> view(row, q))
+                .map(row -> view(row, literal))
                 .toList();
         return new SearchView(matches.total(), hits);
     }
 
-    private static HitView view(DocumentRow row, String q) {
+    private static HitView view(DocumentRow row, Pattern literal) {
         String body = SearchIndex.plainText(row.content());
-        String excerpt = body.toLowerCase(Locale.ROOT).contains(q.toLowerCase(Locale.ROOT))
-                ? body : row.title();
-        return new HitView(row.id(), row.title(), highlight(excerpt, q),
+        String excerpt = literal.matcher(body).find() ? body : row.title();
+        return new HitView(row.id(), row.title(), highlight(excerpt, literal),
                 row.updateTime().format(TIME));
     }
 
     /** 只保留服务端生成的 strong 标记；原文中的 HTML 全部转义。 */
     static String highlight(String text, String query) {
-        int match = text.toLowerCase(Locale.ROOT).indexOf(query.toLowerCase(Locale.ROOT));
-        if (match < 0) return escape(text.substring(0, Math.min(160, text.length())));
-        int start = Math.max(0, match - 60);
-        int end = Math.min(text.length(), match + query.length() + 80);
-        return (start > 0 ? "…" : "") + escape(text.substring(start, match))
-                + "<strong>" + escape(text.substring(match, match + query.length())) + "</strong>"
-                + escape(text.substring(match + query.length(), end))
+        return highlight(text, literalPattern(query));
+    }
+
+    private static Pattern literalPattern(String query) {
+        // 只作字面匹配；匹配坐标来自原文，不使用可能变长的小写副本坐标。
+        return Pattern.compile(Pattern.quote(query), Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    }
+
+    private static String highlight(String text, Pattern literal) {
+        Matcher match = literal.matcher(text);
+        if (!match.find()) return escape(text.substring(0, sliceEnd(text, Math.min(160, text.length()))));
+        int start = sliceStart(text, Math.max(0, match.start() - 60));
+        int end = sliceEnd(text, Math.min(text.length(), match.end() + 80));
+        return (start > 0 ? "…" : "") + escape(text.substring(start, match.start()))
+                + "<strong>" + escape(text.substring(match.start(), match.end())) + "</strong>"
+                + escape(text.substring(match.end(), end))
                 + (end < text.length() ? "…" : "");
+    }
+
+    private static boolean splitsSurrogatePair(String text, int offset) {
+        return offset > 0 && offset < text.length() && Character.isLowSurrogate(text.charAt(offset))
+                && Character.isHighSurrogate(text.charAt(offset - 1));
+    }
+
+    private static int sliceStart(String text, int offset) {
+        return splitsSurrogatePair(text, offset) ? offset - 1 : offset;
+    }
+
+    private static int sliceEnd(String text, int offset) {
+        return splitsSurrogatePair(text, offset) ? offset + 1 : offset;
     }
 
     private static String escape(String value) {
