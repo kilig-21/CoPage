@@ -112,8 +112,8 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
       okText:'确认清理',cancelText:'取消',onOk:compact,
     })}>清理过期历史</Button>}
     <div className="history-version-list"><Spin spinning={loading}>
-      <List dataSource={rows} renderItem={v => <List.Item actions={[
-        <Button key="view" disabled={busy} onClick={() => choose(v.revision)}>查看版本 {v.revision}</Button>,
+      <List rowKey="revision" dataSource={rows} renderItem={v => <List.Item actions={[
+        <Button key="view" disabled={busy || loading} onClick={() => choose(v.revision)}>查看版本 {v.revision}</Button>,
       ]}>
         <Space direction="vertical"><Typography.Text>{v.name || `版本 ${v.revision}`}</Typography.Text>
           <Typography.Text type="secondary">{v.savedAt || ''} {v.author || ''}</Typography.Text>
