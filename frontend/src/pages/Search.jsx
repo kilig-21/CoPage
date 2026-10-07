@@ -33,6 +33,11 @@ export default function Search() {
       request.get('/search', { params: { q: query, page, size: PAGE_SIZE }, signal: controller.signal })
         .then((response) => {
           if (!active) return
+          const lastPage = Math.max(1, Math.ceil(Math.min(response.data.total, 10000) / PAGE_SIZE))
+          if (page > lastPage) {
+            setParams({ q: query, page: String(lastPage) }, { replace: true })
+            return
+          }
           setResults(response.data.list)
           setTotal(response.data.total)
         })
@@ -52,10 +57,11 @@ export default function Search() {
   return (
     <main className="content-wrap">
       <Space className="search-title"><Button type="text" aria-label="返回文档列表" icon={<ArrowLeftOutlined />} onClick={() => navigate('/docs')} /><Typography.Title level={2}>搜索文档</Typography.Title></Space>
-      <Input.Search placeholder="搜索标题和正文" value={input} maxLength={100} onChange={(event) => setInput(event.target.value)} onSearch={search} loading={loading} size="large" enterButton="搜索" className="search-box" />
+      <Input.Search aria-label="搜索标题和正文" placeholder="搜索标题和正文" value={input} maxLength={100} onChange={(event) => setInput(event.target.value)} onSearch={search} loading={loading} size="large" enterButton="搜索" className="search-box" />
       {error && <Alert type="error" showIcon message={error} action={<Button size="small" onClick={() => setRetry((value) => value + 1)}>重试</Button>} />}
       <Card>
         {query && !loading && !error && <Typography.Paragraph type="secondary">找到 {total} 篇可访问的文档</Typography.Paragraph>}
+        {total > 10000 && !loading && !error && <Typography.Paragraph type="secondary">最多显示前 10000 条结果，试试更具体的关键词。</Typography.Paragraph>}
         <List loading={loading} dataSource={results}
           locale={{ emptyText: <Empty description={error ? '暂时无法显示搜索结果' : query ? '没有找到相关文档' : '输入关键词，搜索你有权限访问的标题和正文'} /> }}
           pagination={total > PAGE_SIZE ? { current: page, pageSize: PAGE_SIZE, total: Math.min(total, 10000), showSizeChanger: false, onChange: (next) => setParams({ q: query, page: String(next) }) } : false}
