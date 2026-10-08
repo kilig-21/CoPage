@@ -7,12 +7,14 @@ import CollaboratorModal from '../components/CollaboratorModal'
 import ImportModal from '../components/ImportModal'
 import CopyModal from '../components/CopyModal'
 import RenameModal from '../components/RenameModal'
+import UserGuide from '../components/UserGuide'
 
 const PAGE_SIZE = 20
 
 export default function DocList() {
   const [managing, setManaging] = useState(null)
   const [copying, setCopying] = useState(null)
+  const [showGuide, setShowGuide] = useState(false)
   const navigate = useNavigate()
   const [docs, setDocs] = useState([])
   const [total, setTotal] = useState(0)
@@ -97,6 +99,7 @@ export default function DocList() {
         <Space wrap>
           <Button icon={<SearchOutlined />} onClick={() => navigate('/search')}>搜索</Button>
           <Button onClick={() => navigate('/trash')}>回收站</Button>
+          <Button onClick={() => setShowGuide(true)}>使用指南</Button>
           <Avatar>{(localStorage.getItem('collab-user') || 'A').slice(0, 1).toUpperCase()}</Avatar>
           <Button onClick={() => navigate('/account')}>账号设置</Button>
           <Button type="text" onClick={logout}>退出</Button>
@@ -147,6 +150,7 @@ export default function DocList() {
             disabled={loading} onChange={setPage} />}
         </Card>
       </main>
+      {showGuide && <UserGuide onClose={() => setShowGuide(false)} />}
       {copying && <CopyModal doc={copying} onClose={() => setCopying(null)}
         onCreated={data => { message.success('已创建服务端版本 ' + data.sourceRevision + ' 的副本'); navigate('/docs/' + data.id) }} />}
       {managing && <CollaboratorModal doc={managing} onClose={() => setManaging(null)} />}

@@ -3,11 +3,13 @@ import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Space, Spin, Ty
 import { Link, useNavigate } from 'react-router-dom'
 import request from '../api/request'
 import DocumentPreview from '../components/DocumentPreview'
+import UserGuide from '../components/UserGuide'
 
 export default function Templates() {
   const navigate = useNavigate()
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
+  const [showGuide, setShowGuide] = useState(false)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [selected, setSelected] = useState(null)
@@ -44,7 +46,7 @@ export default function Templates() {
   }
 
   return <Layout className="app-shell">
-    <header className="topbar"><Typography.Title level={4}>文档模板</Typography.Title><Button onClick={() => navigate('/docs')}>返回我的文档</Button></header>
+    <header className="topbar"><Typography.Title level={4}>文档模板</Typography.Title><Space wrap><Button onClick={() => setShowGuide(true)}>使用指南</Button><Button onClick={() => navigate('/docs')}>返回我的文档</Button></Space></header>
     <main className="content-wrap">
       <Typography.Title level={2}>从模板开始</Typography.Title>
       <Typography.Paragraph type="secondary">选择框架后创建自己的文档。模板不会引用其他用户的内容。</Typography.Paragraph>
@@ -57,6 +59,7 @@ export default function Templates() {
         </Card></List.Item>} /></Spin>
       <Space><Link to="/docs">也可以返回列表创建空白文档</Link></Space>
     </main>
+    {showGuide && <UserGuide onClose={() => setShowGuide(false)} />}
     <Modal title={selected ? '使用' + selected.title : '使用模板'} open={Boolean(selected)} width={720}
       onCancel={() => { if (!creating) { setSelected(null); setError('') } }} onOk={create}
       okText="创建文档" confirmLoading={creating} closable={!creating} maskClosable={!creating} cancelButtonProps={{ disabled: creating }}>

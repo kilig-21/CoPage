@@ -14,6 +14,7 @@ import { draftRecordsJson } from '../editor/draftRecords'
 import { downloadTextFile } from '../editor/downloadTextFile'
 import DraftBackupDownloads from '../components/DraftBackupDownloads'
 import DocumentFindPanel from '../components/DocumentFindPanel'
+import UserGuide from '../components/UserGuide'
 
 export default function Editor() {
   const { id } = useParams()
@@ -27,6 +28,7 @@ export default function Editor() {
   const [showPrint, setShowPrint] = useState(false)
   const [showCopy, setShowCopy] = useState(false)
   const [showFind, setShowFind] = useState(false)
+  const [showGuide, setShowGuide] = useState(false)
   const [findFocusEpoch, setFindFocusEpoch] = useState(0)
   const [draftDownloadNotice, setDraftDownloadNotice] = useState('')
   const { editorHostRef, connection, users, error, title, permission, isOwner,
@@ -54,7 +56,7 @@ export default function Editor() {
   }
   useEffect(() => {
     const shortcut = event => {
-      if (permission <= 0 || recoveryDraft || renaming || sharing || managing || showHistory || showExport || showPrint || showCopy ||
+      if (permission <= 0 || recoveryDraft || renaming || sharing || managing || showHistory || showExport || showPrint || showCopy || showGuide ||
           event.isComposing || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || !['f', 'p'].includes(event.key.toLowerCase())) return
       event.preventDefault()
       if (event.key.toLowerCase() === 'p') setShowPrint(true)
@@ -62,7 +64,7 @@ export default function Editor() {
     }
     window.addEventListener('keydown', shortcut)
     return () => window.removeEventListener('keydown', shortcut)
-  }, [permission, recoveryDraft, renaming, sharing, managing, showHistory, showExport, showPrint, showCopy, startDocumentFind])
+  }, [permission, recoveryDraft, renaming, sharing, managing, showHistory, showExport, showPrint, showCopy, showGuide, startDocumentFind])
   function saveRawDrafts() {
     try {
       downloadTextFile(draftRecordsJson(docId, unreadableDrafts), `原始草稿-${docId}.json`, 'application/json;charset=utf-8')
@@ -81,6 +83,7 @@ export default function Editor() {
           {permission === 2 && <Button onClick={() => setRenaming(true)}>重命名</Button>}
         </div>
         <Space wrap className="editor-actions">
+          <Button onClick={() => setShowGuide(true)}>使用指南</Button>
           {permission > 0 && <Button aria-label="文档内查找" title="文档内查找（Ctrl/⌘+F）" onClick={openFind}>文档内查找</Button>}
           {permission > 0 && <Button onClick={() => setSharing(true)}>分享链接</Button>}
           {permission > 0 && <Button onClick={() => setShowHistory(true)}>历史版本</Button>}
@@ -127,6 +130,7 @@ export default function Editor() {
           <div ref={editorHostRef} className="editor-host" aria-label="协同编辑器" />
         </section>
       </main>
+      {showGuide && <UserGuide initialSection="save" onClose={() => setShowGuide(false)} />}
       {renaming && <RenameModal doc={{ id: docId, title }} onSaved={refreshTitle} onClose={() => setRenaming(false)} />}
       {sharing && <ShareModal docId={docId} isOwner={isOwner && permission === 2} onClose={() => setSharing(false)}
         onManage={() => { setSharing(false); setManaging(true) }} />}
