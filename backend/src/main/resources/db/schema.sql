@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS `user` (
   `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
   `username` VARCHAR(50) NOT NULL,
   `password` VARCHAR(100) NOT NULL,
+  `credential_version` BIGINT NOT NULL DEFAULT 0,
   `nickname` VARCHAR(50),
   `avatar` VARCHAR(255),
   `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

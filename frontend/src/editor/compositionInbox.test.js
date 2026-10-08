@@ -30,7 +30,7 @@ test('组合输入先提交本地差异，再按原顺序处理远端操作和�
   client.close()
 })
 
-for (const urgent of [{ type: 'permission', permission: 1 }, { type: 'error', code: 403 }]) {
+for (const urgent of [{ type: 'permission', permission: 1 }, { type: 'error', code: 403 }, { type: 'error', code: 401 }]) {
   test(`${urgent.type}立即处理并丢弃旧队列，结束输入后重新同步`, () => {
     let composing = true
     const delivered = []

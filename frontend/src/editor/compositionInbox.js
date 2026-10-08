@@ -5,7 +5,7 @@ export function createCompositionInbox({ isComposing, deliver, resync, maxMessag
     receive(message) {
       if (!isComposing()) { deliver(message); return }
       if ((message.type === 'permission' && message.permission < 2) ||
-          (message.type === 'error' && message.code === 403)) {
+          (message.type === 'error' && [401, 403].includes(message.code))) {
         queue = []
         needsResync = true
         deliver(message)

@@ -69,6 +69,7 @@ public class AuthService {
         }
         String token = JwtUtil.createToken(
                 user.getId(), user.getUsername(), user.getNickname(),
+                user.getCredentialVersion() == null ? 0 : user.getCredentialVersion(),
                 jwtSecret, Duration.ofHours(jwtExpireHours));
         return new LoginView(token, view(user));
     }

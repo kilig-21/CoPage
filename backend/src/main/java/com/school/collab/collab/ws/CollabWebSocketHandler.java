@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.school.collab.collab.CollabException;
 import com.school.collab.collab.presence.RedisPresenceStore;
 import com.school.collab.collab.service.DocRevService;
+import com.school.collab.auth.AccountSessions;
 import com.school.collab.common.BizException;
 import com.school.collab.document.DocumentService;
 import com.school.collab.document.DocumentFormats;
@@ -33,6 +34,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
     private final WsSender sender;
     private final CollabEventBus eventBus;
     private final RedisPresenceStore presence;
+    private final AccountSessions accounts;
 
     public CollabWebSocketHandler(
             ObjectMapper objectMapper,
@@ -41,7 +43,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
             WsSessionRegistry registry,
             WsSender sender,
             CollabEventBus eventBus,
-            RedisPresenceStore presence
+            RedisPresenceStore presence, AccountSessions accounts
     ) {
         this.objectMapper = objectMapper;
         this.docRevService = docRevService;
@@ -50,11 +52,18 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         this.sender = sender;
         this.eventBus = eventBus;
         this.presence = presence;
+        this.accounts = accounts;
     }
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         try {
+            Object user = session.getAttributes().get(WsHandshakeInterceptor.USER_ID);
+            if (!(user instanceof Long id) || !accounts.isCurrent(id, WsHandshakeInterceptor.credentialVersion(session))) {
+                sendError(session, 401, "登录已失效，请重新登录；未确认内容仍保留");
+                try { session.close(CloseStatus.POLICY_VIOLATION); } catch (IOException ignored) { }
+                return;
+            }
             JsonNode payload = objectMapper.readTree(message.getPayload());
             String type = requiredText(payload, "type");
             switch (type) {

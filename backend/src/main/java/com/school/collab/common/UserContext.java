@@ -10,12 +10,20 @@ public final class UserContext {
     private static final ThreadLocal<Long> USER_ID = new ThreadLocal<>();
     private static final ThreadLocal<String> USERNAME = new ThreadLocal<>();
 
+    private static final ThreadLocal<Long> CREDENTIAL_VERSION = new ThreadLocal<>();
+
+    public static void set(Long userId, String username, long version) {
+        USER_ID.set(userId); USERNAME.set(username); CREDENTIAL_VERSION.set(version);
+    }
+    public static long getCredentialVersion() { return CREDENTIAL_VERSION.get() == null ? 0 : CREDENTIAL_VERSION.get(); }
+
     private UserContext() {
     }
 
     public static void set(Long userId, String username) {
         USER_ID.set(userId);
         USERNAME.set(username);
+        CREDENTIAL_VERSION.set(0L);
     }
 
     /** 当前登录用户 id；未登录时为 null。 */
@@ -30,5 +38,6 @@ public final class UserContext {
     public static void clear() {
         USER_ID.remove();
         USERNAME.remove();
+        CREDENTIAL_VERSION.remove();
     }
 }

@@ -14,15 +14,24 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import static org.mockito.Mockito.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class JwtBoundaryTest {
     private static final String SECRET = "test-secret-longer-than-thirty-two-bytes";
 
+    private AccountSessions sessions() {
+        AccountRepository accounts=mock(AccountRepository.class);
+        when(accounts.profile(12L)).thenReturn(Optional.of(new AccountRepository.Profile(12,"alice","Alice",null,0)));
+        when(accounts.profile(13L)).thenReturn(Optional.of(new AccountRepository.Profile(13,"bob","Bob",null,0)));
+        return new AccountSessions(accounts,SECRET);
+    }
+
     @Test
     void httpRequiresBearerAndClearsRequestContext() throws Exception {
-        JwtInterceptor interceptor = new JwtInterceptor(SECRET, new ObjectMapper());
+        JwtInterceptor interceptor = new JwtInterceptor(sessions(), new ObjectMapper());
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/doc/list");
         MockHttpServletResponse response = new MockHttpServletResponse();
         assertFalse(interceptor.preHandle(request, response, new Object()));
@@ -39,7 +48,7 @@ class JwtBoundaryTest {
 
     @Test
     void websocketRequiresValidQueryToken() {
-        WsHandshakeInterceptor interceptor = new WsHandshakeInterceptor(SECRET);
+        WsHandshakeInterceptor interceptor = new WsHandshakeInterceptor(sessions());
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/ws/collab");
         MockHttpServletResponse response = new MockHttpServletResponse();
         assertFalse(interceptor.beforeHandshake(new ServletServerHttpRequest(request),

@@ -10,6 +10,8 @@ import com.school.collab.document.DocumentService;
 import com.school.collab.collab.store.VersionedOperation;
 import com.school.collab.ot.Delta;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import com.school.collab.auth.AccountSessions;
 import org.mockito.ArgumentCaptor;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -32,13 +34,32 @@ class CollabWebSocketHandlerTest {
     private final WsSender sender = mock(WsSender.class);
     private final CollabEventBus eventBus = mock(CollabEventBus.class);
     private final RedisPresenceStore presence = mock(RedisPresenceStore.class);
+    private final AccountSessions accounts = mock(AccountSessions.class);
+    @BeforeEach void validSessions() { when(accounts.isCurrent(anyLong(),anyLong())).thenReturn(true); }
+    private WebSocketSession session() {
+        var session=mock(WebSocketSession.class);
+        when(session.getAttributes()).thenReturn(Map.of(WsHandshakeInterceptor.USER_ID,2L,WsHandshakeInterceptor.NICKNAME,"testB"));
+        return session;
+    }
     private final CollabWebSocketHandler handler =
             new CollabWebSocketHandler(
-                    objectMapper, revisions, documents, registry, sender, eventBus, presence);
+                    objectMapper, revisions, documents, registry, sender, eventBus, presence, accounts);
+
+    @Test
+    void revokedCredentialCannotSendAnyCollaborationMessage() throws Exception {
+        when(accounts.isCurrent(2L,0L)).thenReturn(false);
+        for(String type:List.of("join","op","history_request","cursor","ping")) {
+            var session=session();
+            handler.handleTextMessage(session,new TextMessage("{\"type\":\""+type+"\"}"));
+            verify(sender).send(eq(session),argThat(message->message.path("code").asInt()==401));
+            verify(session).close(CloseStatus.POLICY_VIOLATION);
+        }
+        verifyNoInteractions(revisions,documents,registry,eventBus,presence);
+    }
 
     @Test
     void unsupportedEmbedIsRejectedBeforeRevisionOrPersistence() throws Exception {
-        WebSocketSession session = mock(WebSocketSession.class);
+        WebSocketSession session = session();
         when(registry.require(session)).thenReturn(new WsSessionRegistry.SessionInfo(
                 "session-1", session, 5L, "test-client", 2L, "testB"));
         when(documents.permissionFor(5L, 2L)).thenReturn(2);
@@ -54,7 +75,7 @@ class CollabWebSocketHandlerTest {
 
     @Test
     void unsupportedPendingOperationCannotEnterReconnectRecovery() throws Exception {
-        WebSocketSession session = mock(WebSocketSession.class);
+        WebSocketSession session = session();
         when(session.getAttributes()).thenReturn(Map.of(
                 WsHandshakeInterceptor.USER_ID, 2L, WsHandshakeInterceptor.NICKNAME, "testB"));
         handler.handleTextMessage(session, new TextMessage("""
@@ -70,7 +91,7 @@ class CollabWebSocketHandlerTest {
 
     @Test
     void joinRegistersAndSendsCatchupInsideTheServiceCallback() throws Exception {
-        WebSocketSession session = mock(WebSocketSession.class);
+        WebSocketSession session = session();
         when(session.getAttributes()).thenReturn(Map.of(
                 WsHandshakeInterceptor.USER_ID, 2L, WsHandshakeInterceptor.NICKNAME, "testB"));
         WsSessionRegistry.SessionInfo info = new WsSessionRegistry.SessionInfo(
@@ -106,7 +127,7 @@ class CollabWebSocketHandlerTest {
 
     @Test
     void unauthorizedUserCannotJoinDocument() throws Exception {
-        WebSocketSession session = mock(WebSocketSession.class);
+        WebSocketSession session = session();
         when(session.getAttributes()).thenReturn(Map.of(
                 WsHandshakeInterceptor.USER_ID, 2L,
                 WsHandshakeInterceptor.NICKNAME, "测试用户 B"));
@@ -124,7 +145,7 @@ class CollabWebSocketHandlerTest {
 
     @Test
     void readOnlyCollaboratorCannotSubmitOperation() throws Exception {
-        WebSocketSession session = mock(WebSocketSession.class);
+        WebSocketSession session = session();
         WsSessionRegistry.SessionInfo info = new WsSessionRegistry.SessionInfo(
                 "session-1", session, 5L, "test-client", 2L, "testB");
         when(registry.require(session)).thenReturn(info);
@@ -142,7 +163,7 @@ class CollabWebSocketHandlerTest {
 
     @Test
     void repeatedOperationOnlyResendsTheOriginalAck() throws Exception {
-        WebSocketSession session = mock(WebSocketSession.class);
+        WebSocketSession session = session();
         WsSessionRegistry.SessionInfo info = new WsSessionRegistry.SessionInfo(
                 "session-1", session, 5L, "test-client", 2L, "testB");
         when(registry.require(session)).thenReturn(info);
@@ -165,7 +186,7 @@ class CollabWebSocketHandlerTest {
 
     @Test
     void cursorUsesAuthenticatedNicknameAndSupportsHide() throws Exception {
-        WebSocketSession session = mock(WebSocketSession.class);
+        WebSocketSession session = session();
         WsSessionRegistry.SessionInfo info = new WsSessionRegistry.SessionInfo(
                 "session-1", session, 5L, "test-client", 2L, "测试用户 B");
         when(registry.require(session)).thenReturn(info);
@@ -185,7 +206,7 @@ class CollabWebSocketHandlerTest {
 
     @Test
     void leavingSessionBroadcastsCursorHide() {
-        WebSocketSession session = mock(WebSocketSession.class);
+        WebSocketSession session = session();
         WsSessionRegistry.SessionInfo info = new WsSessionRegistry.SessionInfo(
                 "session-1", session, 5L, "test-client", 2L, "测试用户 B");
         when(registry.current(session)).thenReturn(info);

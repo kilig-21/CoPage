@@ -3,6 +3,7 @@ package com.school.collab.collab.ws;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.school.collab.auth.AccountSessions;
 import com.school.collab.common.BizException;
 import com.school.collab.common.ErrorCode;
 import com.school.collab.document.DocumentService;
@@ -29,16 +30,18 @@ public class CollabEventBus implements MessageListener {
     private final WsSessionRegistry registry;
     private final WsSender sender;
     private final DocumentService documents;
+    private final AccountSessions accounts;
 
     public CollabEventBus(
             StringRedisTemplate redis, ObjectMapper objectMapper,
-            WsSessionRegistry registry, WsSender sender, DocumentService documents
+            WsSessionRegistry registry, WsSender sender, DocumentService documents, AccountSessions accounts
     ) {
         this.redis = redis;
         this.objectMapper = objectMapper;
         this.registry = registry;
         this.sender = sender;
         this.documents = documents;
+        this.accounts = accounts;
     }
 
     public String instanceId() {
@@ -58,6 +61,13 @@ public class CollabEventBus implements MessageListener {
     public void onMessage(Message message, byte[] pattern) {
         try {
             JsonNode envelope = objectMapper.readTree(message.getBody());
+            if ("account_changed".equals(envelope.path("payload").path("type").asText())) {
+                long userId = envelope.path("userId").asLong();
+                if (userId > 0) for (var target : registry.sessionsOfUser(userId)) {
+                    try { rejectExpired(target); } catch (IOException | IllegalStateException ignored) { }
+                }
+                return;
+            }
             long docId = envelope.path("docId").asLong();
             JsonNode payload = envelope.path("payload");
             if (docId <= 0 || !payload.isObject()) {
@@ -74,6 +84,7 @@ public class CollabEventBus implements MessageListener {
                 }
                 try {
                     // 每次转发前以 MySQL 为准，不能依赖异步权限事件顺序或失效的会话权限。
+                    if (rejectExpired(target)) continue;
                     int permission = currentPermission(docId, target.userId());
                     sender.send(target.session(), objectMapper.createObjectNode()
                             .put("type", "permission").put("docId", docId).put("permission", permission));
@@ -90,6 +101,20 @@ public class CollabEventBus implements MessageListener {
         } catch (Exception exception) {
             log.warn("无法解析 Redis 协同广播消息", exception);
         }
+    }
+
+    public void publishAccountChanged(long userId) {
+        var envelope = objectMapper.createObjectNode().put("instanceId", instanceId).put("userId", userId);
+        envelope.set("payload", objectMapper.createObjectNode().put("type", "account_changed"));
+        redis.convertAndSend(CHANNEL, envelope.toString());
+    }
+
+    private boolean rejectExpired(WsSessionRegistry.SessionInfo target) throws IOException {
+        if (accounts.isCurrent(target.userId(), WsHandshakeInterceptor.credentialVersion(target.session()))) return false;
+        try { sender.send(target.session(), objectMapper.createObjectNode().put("type", "error").put("code", 401)
+                .put("message", "登录已失效，请重新登录；未确认内容仍保留")); }
+        finally { target.session().close(CloseStatus.POLICY_VIOLATION); }
+        return true;
     }
 
     private int currentPermission(long docId, long userId) {

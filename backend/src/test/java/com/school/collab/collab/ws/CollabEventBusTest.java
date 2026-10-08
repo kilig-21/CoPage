@@ -6,6 +6,8 @@ import com.school.collab.common.BizException;
 import com.school.collab.common.ErrorCode;
 import com.school.collab.document.DocumentService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
+import com.school.collab.auth.AccountSessions;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.redis.connection.Message;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -24,7 +26,36 @@ class CollabEventBusTest {
     private final WsSessionRegistry registry = mock(WsSessionRegistry.class);
     private final WsSender sender = mock(WsSender.class);
     private final DocumentService documents = mock(DocumentService.class);
-    private final CollabEventBus bus = new CollabEventBus(redis, objectMapper, registry, sender, documents);
+    private final AccountSessions accounts = mock(AccountSessions.class);
+    private final CollabEventBus bus = new CollabEventBus(redis, objectMapper, registry, sender, documents, accounts);
+    @BeforeEach void validSessions() { when(accounts.isCurrent(anyLong(),anyLong())).thenReturn(true); }
+
+    @Test
+    void lostPasswordNotificationStillCannotLeakDocumentToOldCredential() throws Exception {
+        WebSocketSession old=mock(WebSocketSession.class);
+        when(old.getAttributes()).thenReturn(java.util.Map.of(WsHandshakeInterceptor.CREDENTIAL_VERSION,0L));
+        when(registry.sessionsOf(9L)).thenReturn(List.of(new WsSessionRegistry.SessionInfo("old",old,9L,"a",1L,"owner")));
+        when(accounts.isCurrent(1L,0L)).thenReturn(false);
+        JsonNode payload=objectMapper.readTree("{\"type\":\"op\",\"docId\":9,\"revision\":2}");
+        deliver(payload);
+        verify(sender,never()).send(old,payload);
+        verify(sender).send(eq(old),argThat(node->node.path("code").asInt()==401));
+        verify(old).close(org.springframework.web.socket.CloseStatus.POLICY_VIOLATION);
+        verifyNoInteractions(documents);
+    }
+    @Test
+    void delayedPasswordNotificationDoesNotCloseCurrentCredential() throws Exception {
+        WebSocketSession current=mock(WebSocketSession.class);
+        when(current.getAttributes()).thenReturn(java.util.Map.of(WsHandshakeInterceptor.CREDENTIAL_VERSION,4L));
+        when(registry.sessionsOfUser(1L)).thenReturn(List.of(new WsSessionRegistry.SessionInfo("new",current,9L,"a",1L,"owner")));
+        when(accounts.isCurrent(1L,4L)).thenReturn(true);
+        bus.publishAccountChanged(1);
+        var body=ArgumentCaptor.forClass(Object.class);
+        verify(redis).convertAndSend(eq(CollabEventBus.CHANNEL),body.capture());
+        Message message=mock(Message.class);when(message.getBody()).thenReturn(body.getValue().toString().getBytes(StandardCharsets.UTF_8));
+        bus.onMessage(message,null);
+        verify(sender,never()).send(eq(current),any());verify(current,never()).close(any());
+    }
 
     @Test
     void concurrentlyClosedSessionDoesNotPreventOtherPeersReceivingOperation() throws Exception {

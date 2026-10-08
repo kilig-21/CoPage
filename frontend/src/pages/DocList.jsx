@@ -90,6 +90,7 @@ export default function DocList() {
           <Button icon={<SearchOutlined />} onClick={() => navigate('/search')}>搜索</Button>
           <Button onClick={() => navigate('/trash')}>回收站</Button>
           <Avatar>{(localStorage.getItem('collab-user') || 'A').slice(0, 1).toUpperCase()}</Avatar>
+          <Button onClick={() => navigate('/account')}>账号设置</Button>
           <Button type="text" onClick={logout}>退出</Button>
         </Space>
       </header>

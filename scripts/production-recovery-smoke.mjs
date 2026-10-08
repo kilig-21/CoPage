@@ -78,6 +78,13 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
   }
   try {
     token = (await api(port, '/auth/login', 'POST', { username, password })).token
+    const revokedToken = token
+    const oldPassword = password
+    const currentPassword = randomBytes(24).toString('hex')
+    await api(port, '/account/password', 'POST', { currentPassword: password, newPassword: currentPassword })
+    password = currentPassword
+    token = (await api(port, '/auth/login', 'POST', { username, password })).token
+    assert.equal(JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).credentialVersion, 1)
     const title = '恢复演练-' + randomUUID()
     const document = await api(port, '/doc', 'POST', { title })
     const docId = document.id
@@ -177,6 +184,18 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
       }
     }
     assert.ok(loggedIn, '恢复后的账号必须可登录')
+    assert.equal(JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).credentialVersion, 1)
+    const oldSession = await fetch(origin(restoredPort) + '/api/account/me', {
+      headers: { Authorization: 'Bearer ' + revokedToken }, signal: AbortSignal.timeout(5000),
+    })
+    assert.equal(oldSession.status, 401, '恢复备份不得复活已撤销的旧令牌')
+    const oldLogin = await fetch(origin(restoredPort) + '/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password: oldPassword }), signal: AbortSignal.timeout(5000),
+    })
+    assert.equal(oldLogin.status, 401, '恢复后旧密码仍不得登录')
+    await api(restoredPort, '/account/me')
+    console.log('PASS: 已改密码和凭据版本1完整恢复，新密码可登录，旧密码与旧令牌仍拒绝')
     const restored = await api(restoredPort, '/doc/' + docId)
     assert.equal(restored.title, original.title)
     assert.equal(restored.revision, original.revision)

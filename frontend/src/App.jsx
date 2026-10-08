@@ -5,6 +5,7 @@ import LocalDraftBackup from './components/LocalDraftBackup'
 import StorageUnavailable from './components/StorageUnavailable'
 import { canReadBrowserStorage } from './auth/browserStorage'
 
+const Account = lazy(() => import('./pages/Account'))
 const Login = lazy(() => import('./pages/Login'))
 const DocList = lazy(() => import('./pages/DocList'))
 const Editor = lazy(() => import('./pages/Editor'))
@@ -13,7 +14,7 @@ const Templates = lazy(() => import('./pages/Templates'))
 const Trash = lazy(() => import('./pages/Trash'))
 
 const PAGE_TITLES = {
-  '/login': '登录或注册', '/docs': '我的文档', '/search': '搜索文档',
+  '/account': '账号设置', '/login': '登录或注册', '/docs': '我的文档', '/search': '搜索文档',
   '/templates': '文档模板', '/trash': '回收站',
 }
 
@@ -78,6 +79,7 @@ function SessionApp() {
     <Suspense fallback={<main className="page-load-message" role="status">正在加载页面，请稍候…</main>}>
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/account" element={<RequireAuth><Account /></RequireAuth>} />
       <Route path="/docs" element={<RequireAuth><DocList /></RequireAuth>} />
       <Route path="/docs/:id" element={<RequireAuth><Editor /></RequireAuth>} />
       <Route path="/search" element={<RequireAuth><Search /></RequireAuth>} />

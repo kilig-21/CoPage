@@ -48,6 +48,10 @@ public class WsSessionRegistry {
         return sessions == null ? List.of() : new ArrayList<>(sessions.values());
     }
 
+    public List<SessionInfo> sessionsOfUser(long userId) {
+        return bySessionId.values().stream().filter(info -> info.userId() == userId).toList();
+    }
+
     public void unregister(WebSocketSession session) {
         SessionInfo old = bySessionId.remove(session.getId());
         if (old == null) {
