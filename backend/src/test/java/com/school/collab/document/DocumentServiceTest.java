@@ -28,6 +28,42 @@ class DocumentServiceTest {
     }
 
     @Test
+    void workbenchUsesCurrentVisibilityAndNeverLoadsBodies() {
+        UserContext.set(2L, "reader");
+        when(repository.countVisible(2L, "", "owned")).thenReturn(3L);
+        when(repository.countVisible(2L, "", "shared")).thenReturn(1L);
+        when(repository.listVisible(2L, "", "all", 1, 6)).thenReturn(java.util.List.of(
+                new DocumentRepository.VisibleSummaryRow(5L, "共享资料", 1L, "拥有者", 0L, row.updateTime(), 1),
+                new DocumentRepository.VisibleSummaryRow(6L, "我的资料", 2L, "reader", 0L, row.updateTime(), 2)));
+        var result = service.workbench();
+        assertEquals(3L, result.ownedCount());
+        assertEquals(1L, result.sharedCount());
+        assertFalse(result.recent().getFirst().isOwner());
+        assertEquals(1, result.recent().getFirst().permission());
+        assertTrue(result.recent().getLast().isOwner());
+        var json = new ObjectMapper().valueToTree(result);
+        assertFalse(json.get("recent").get(0).has("content"));
+        assertFalse(json.get("recent").get(0).has("revision"));
+        verify(repository).countVisible(2L, "", "owned");
+        verify(repository).countVisible(2L, "", "shared");
+        verify(repository).listVisible(2L, "", "all", 1, 6);
+        verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void workbenchRequiresLoginBeforeAnyReadAndReturnsAnActualEmptyResult() {
+        assertEquals(ErrorCode.UNAUTHORIZED,
+                assertThrows(BizException.class, service::workbench).getErrorCode());
+        verifyNoInteractions(repository);
+        UserContext.set(2L, "reader");
+        when(repository.listVisible(2L, "", "all", 1, 6)).thenReturn(java.util.List.of());
+        var result = service.workbench();
+        assertEquals(0L, result.ownedCount());
+        assertEquals(0L, result.sharedCount());
+        assertTrue(result.recent().isEmpty());
+    }
+
+    @Test
     void listUsesSummaryPermissionsWithoutPerDocumentLookups() {
         UserContext.set(2L, "reader");
         when(repository.countVisible(2L, "需求", "shared")).thenReturn(1L);

@@ -46,7 +46,7 @@ export default function Templates() {
   }
 
   return <Layout className="app-shell">
-    <header className="topbar"><Typography.Title level={4}>文档模板</Typography.Title><Space wrap><Button onClick={() => setShowGuide(true)}>使用指南</Button><Button onClick={() => navigate('/docs')}>返回我的文档</Button></Space></header>
+    <header className="topbar"><Typography.Title level={4}>文档模板</Typography.Title><Space wrap><Button onClick={() => navigate('/home')}>工作台</Button><Button onClick={() => setShowGuide(true)}>使用指南</Button><Button onClick={() => navigate('/docs')}>返回我的文档</Button></Space></header>
     <main className="content-wrap">
       <Typography.Title level={2}>从模板开始</Typography.Title>
       <Typography.Paragraph type="secondary">选择框架后创建自己的文档。模板不会引用其他用户的内容。</Typography.Paragraph>

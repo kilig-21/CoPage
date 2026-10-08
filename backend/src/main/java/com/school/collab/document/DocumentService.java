@@ -63,6 +63,19 @@ public class DocumentService {
         return new ListView(total, list);
     }
 
+    @Transactional(readOnly = true)
+    public WorkbenchView workbench() {
+        long userId = currentUserId();
+        long owned = documents.countVisible(userId, "", "owned");
+        long shared = documents.countVisible(userId, "", "shared");
+        List<SummaryView> recent = documents.listVisible(userId, "", "all", 1, 6)
+                .stream().map(row -> new SummaryView(row.id(), row.title(), row.ownerId(), row.ownerName(),
+                        row.parentId(), format(row.updateTime()), row.permission(), row.ownerId() == userId)).toList();
+        return new WorkbenchView(owned, shared, recent);
+    }
+
+    public record WorkbenchView(long ownedCount, long sharedCount, List<SummaryView> recent) { }
+
     @Transactional
     public SummaryView create(String title, long parentId) {
         return create(title, parentId, null);

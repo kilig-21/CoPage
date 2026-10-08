@@ -33,6 +33,11 @@ public class DocumentController {
         return Result.ok(documents.list(page, size, keyword, scope));
     }
 
+    @GetMapping("/workbench")
+    public Result<DocumentService.WorkbenchView> workbench() {
+        return Result.ok(documents.workbench());
+    }
+
     @PostMapping
     public Result<DocumentService.SummaryView> create(@RequestBody(required = false) CreateRequest request) {
         return Result.ok(documents.create(

@@ -56,7 +56,7 @@ export default function Search() {
 
   return (
     <main className="content-wrap">
-      <Space className="search-title"><Button type="text" aria-label="返回文档列表" icon={<ArrowLeftOutlined />} onClick={() => navigate('/docs')} /><Typography.Title level={2}>搜索文档</Typography.Title></Space>
+      <Space className="search-title"><Button type="text" aria-label="返回文档列表" icon={<ArrowLeftOutlined />} onClick={() => navigate('/docs')} /><Typography.Title level={2}>搜索文档</Typography.Title><Button onClick={() => navigate('/home')}>工作台</Button></Space>
       <Input.Search aria-label="搜索标题和正文" placeholder="搜索标题和正文" value={input} maxLength={100} onChange={(event) => setInput(event.target.value)} onSearch={search} loading={loading} size="large" enterButton="搜索" className="search-box" />
       {error && <Alert type="error" showIcon message={error} action={<Button size="small" onClick={() => setRetry((value) => value + 1)}>重试</Button>} />}
       <Card className="search-results-card">

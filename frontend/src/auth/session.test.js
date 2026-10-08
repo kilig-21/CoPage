@@ -5,6 +5,8 @@ import { safeReturnPath, saveSession, expireSession, subscribeSessionChanges, cr
 test('login only returns to supported internal pages', () => {
   assert.equal(safeReturnPath('/docs/60'), '/docs/60')
   assert.equal(safeReturnPath('/search?q=meeting&page=2'), '/search?q=meeting&page=2')
+  assert.equal(safeReturnPath('/home'), '/home')
+  assert.equal(safeReturnPath('/home/../../login'), '/docs')
   assert.equal(safeReturnPath('/templates'), '/templates')
   assert.equal(safeReturnPath('/trash'), '/trash')
   assert.equal(safeReturnPath('/account'), '/account')

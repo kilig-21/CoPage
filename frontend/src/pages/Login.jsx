@@ -38,7 +38,7 @@ export default function Login() {
       const response = await request.post('/auth/login', payload, { signal: controller.signal })
       if (controller.signal.aborted) return
       saveSession(localStorage, { token: response.data.token, username: response.data.user.username })
-      navigate(safeReturnPath(location.state?.from), { replace: true })
+      navigate(safeReturnPath(location.state?.from || '/home'), { replace: true })
     } catch (error) {
       if (!controller.signal.aborted) {
         if (registering && error?.code !== 400) {

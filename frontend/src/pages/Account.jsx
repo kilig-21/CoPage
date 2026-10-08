@@ -73,7 +73,7 @@ export default function Account() {
     }
   }
   return <Layout className="app-shell">
-    <header className="topbar"><Typography.Title level={4}>账号设置</Typography.Title><Button onClick={() => navigate('/docs')}>返回我的文档</Button></header>
+    <header className="topbar"><Typography.Title level={4}>账号设置</Typography.Title><Space wrap><Button onClick={() => navigate('/home')}>工作台</Button><Button onClick={() => navigate('/docs')}>返回我的文档</Button></Space></header>
     <main className="content-wrap">
       <Typography.Title level={2}>我的账号</Typography.Title>
       {loadError && <Alert type="error" showIcon message={loadError} action={<Button onClick={() => setRefresh(value => value + 1)}>重试</Button>} />}
