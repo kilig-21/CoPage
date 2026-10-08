@@ -39,6 +39,7 @@ export default function Editor() {
   }, [isOwner, permission])
   useEffect(() => {
     if (permission <= 0) setShowHistory(false)
+    if (permission !== 2) setRenaming(false)
   }, [permission])
   useEffect(() => {
     document.title = permission > 0 && title ? `${title} · CoPage` : '文档 · CoPage'
@@ -131,7 +132,7 @@ export default function Editor() {
         </section>
       </main>
       {showGuide && <UserGuide initialSection="save" onClose={() => setShowGuide(false)} />}
-      {renaming && <RenameModal doc={{ id: docId, title }} onSaved={refreshTitle} onClose={() => setRenaming(false)} />}
+      {renaming && permission === 2 && <RenameModal doc={{ id: docId, title }} onSaved={refreshTitle} onClose={() => setRenaming(false)} />}
       {sharing && <ShareModal docId={docId} isOwner={isOwner && permission === 2} onClose={() => setSharing(false)}
         onManage={() => { setSharing(false); setManaging(true) }} />}
       {managing && isOwner && permission === 2 && <CollaboratorModal doc={{ id: docId, title }} onClose={() => setManaging(false)} />}
