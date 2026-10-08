@@ -124,6 +124,7 @@ export default function DocList() {
           {loadError && <Alert type="error" showIcon message={loadError}
             action={<Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>重试</Button>} />}
           <List
+            rowKey="id"
             loading={loading}
             dataSource={docs}
             locale={{ emptyText: loading ? '正在加载…' : loadError ? '列表暂不可用' : <Empty description={keyword ? '没有匹配的标题，试试其他关键词' : scope === 'shared' ? '还没有共享给你的文档，请文档所有者添加你为协作者' : '还没有文档，先新建一篇吧'} /> }}
@@ -133,7 +134,7 @@ export default function DocList() {
                 <Button key="copy" type="link" onClick={() => setCopying(doc)}>创建副本</Button>,
                 doc.permission === 2 && <Button key="rename" type="link" onClick={() => setEditing(doc)}>重命名</Button>,
                 doc.isOwner && <Button key="members" type="link" onClick={() => setManaging(doc)}>协作者管理</Button>,
-                doc.isOwner && <Popconfirm key="delete" title="将这篇文档移入回收站？" description="协作者将停止访问，你可以在回收站恢复。" onConfirm={() => deleteDocument(doc.id)}>
+                doc.isOwner && <Popconfirm key="delete" overlayClassName="document-action-confirm" title={`将“${doc.title}”移入回收站？`} description="协作者将停止访问，你可以在回收站恢复。" onConfirm={() => deleteDocument(doc.id)}>
                   <Button type="link" danger>删除</Button>
                 </Popconfirm>,
               ].filter(Boolean)}>

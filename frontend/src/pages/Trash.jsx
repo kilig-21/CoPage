@@ -41,9 +41,9 @@ export default function Trash() {
       <Typography.Paragraph type="secondary">这里只显示你拥有的已删除文档。恢复保留正文、版本与原协作者权限；已清理的普通历史不会重建。</Typography.Paragraph>
       {error&&<Alert type="error" showIcon message={error} action={<Button disabled={loading} onClick={()=>setRefresh(n=>n+1)}>重试</Button>} />}
       {notice&&<Alert type="success" showIcon message={notice} />}
-      <Card><List loading={loading} dataSource={docs}
+      <Card className="trash-list-card"><List rowKey="id" loading={loading} dataSource={docs}
         locale={{emptyText:loading?'正在加载…':error?'列表暂不可用':<Empty description="回收站是空的" />}}
-        renderItem={doc=><List.Item actions={[<Popconfirm key="restore" title="恢复这篇文档？"
+        renderItem={doc=><List.Item actions={[<Popconfirm key="restore" overlayClassName="document-action-confirm" title={`恢复“${doc.title}”？`}
           description="恢复后，原协作者将重新获得原来的权限。" okText="确认恢复" cancelText="取消"
           disabled={restoring!==null} onConfirm={()=>restore(doc)}>
           <Button disabled={restoring!==null} loading={restoring===doc.id}>恢复文档</Button></Popconfirm>]}>
