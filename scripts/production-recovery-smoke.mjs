@@ -3,6 +3,7 @@ import { randomBytes, randomUUID, createHash } from 'node:crypto'
 import { mkdtempSync, readFileSync, writeFileSync, unlinkSync, rmdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { openRecoveryChannel } from './recovery-channel.mjs'
 
 // 仅由生产配置验收脚本调用，输入是该脚本新建的随机临时项目。
 export async function runRecoveryCheck({ docker, base, env, source, sql, port, username, password }) {
@@ -27,48 +28,10 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
     assert.equal(payload.code, 0, payload.message)
     return payload.data
   }
-  const connect = async (p, docId, clientId, lastRevision = 0) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${p}/ws/collab?token=${encodeURIComponent(token)}`)
-    const messages = []
-    const listeners = new Set()
-    ws.addEventListener('message', event => {
-      const message = JSON.parse(event.data)
-      messages.push(message)
-      for (const listener of listeners) listener(message)
-    })
-    const wait = (predicate, after = 0) => {
-      const match = messages.slice(after).find(predicate)
-      if (match) return Promise.resolve(match)
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => { listeners.delete(listener); reject(new Error('恢复验收 WS 消息超时')) }, 20_000)
-        const listener = message => {
-          if (!predicate(message)) return
-          clearTimeout(timer)
-          listeners.delete(listener)
-          resolve(message)
-        }
-        listeners.add(listener)
-      })
-    }
-    await new Promise((resolve, reject) => {
-      ws.addEventListener('open', resolve, { once: true })
-      ws.addEventListener('error', () => reject(new Error('恢复验收 WS 握手失败')), { once: true })
-    })
-    const syncId = randomUUID()
-    ws.send(JSON.stringify({ type: 'join', docId, clientId, lastRevision, syncId }))
-    const sync = await wait(m => (m.type === 'sync' && m.syncId === syncId) || m.type === 'error')
-    assert.equal(sync.type, 'sync', '恢复验收join拒绝：' + sync.message)
-    return {
-      ws, sync,
-      async submit(opId, baseRevision, op, expectedType = 'ack') {
-        const after = messages.length
-        ws.send(JSON.stringify({ type: 'op', docId, clientId, opId, baseRevision, op }))
-        const reply = await wait(m => (m.type === 'ack' && m.opId === opId) || m.type === 'error', after)
-        assert.equal(reply.type, expectedType, reply.message)
-        return reply
-      },
-    }
-  }
+  const connect = (p, docId, clientId, lastRevision = 0, phase = 'source') => openRecoveryChannel({
+    url: `ws://127.0.0.1:${p}/ws/collab?token=${encodeURIComponent(token)}`,
+    docId, clientId, lastRevision, phase,
+  })
   const readSql = (stack, query) => stack([
     'exec', '-T', 'mysql', 'sh', '-ec',
     'MYSQL_PWD="$MYSQL_PASSWORD" mysql -h127.0.0.1 -u"$MYSQL_USER" -N -D collab_doc',
@@ -225,7 +188,7 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
     assert.equal((await api(restoredPort, '/doc/' + docId)).permission, 1)
     assertSearchHit(await api(restoredPort, searchPath(title)))
     assertSearchHit(await api(restoredPort, searchPath(bodyMarker)))
-    socket = await connect(restoredPort, docId, randomUUID(), 20)
+    socket = await connect(restoredPort, docId, randomUUID(), 20, 'restored-readonly')
     const forbidden = await socket.submit(randomUUID(), 20, { ops: [{ insert: '不应提交' }] }, 'error')
     assert.equal(forbidden.code, 403, '恢复后的只读协作者不得提交操作')
     socket.ws.close()
@@ -242,7 +205,7 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
     }
     console.log('PASS: 空 ES 从 MySQL 自动重建标题/正文索引；所有者及只读协作者可检索，无权账号零命中且无摘要')
     token = (await api(restoredPort, '/auth/login', 'POST', { username, password })).token
-    socket = await connect(restoredPort, docId, clientId, 18)
+    socket = await connect(restoredPort, docId, clientId, 18, 'restored-owner')
     assert.equal(socket.sync.revision, 20)
     assert.equal(socket.sync.historyComplete, true)
     assert.deepEqual(socket.sync.history.map(entry => entry.revision), [19, 20])

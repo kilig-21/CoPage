@@ -49,6 +49,9 @@ jobs:
         run: npm ci --registry=https://registry.npmjs.org --no-audit --no-fund
       - name: Run frontend regression
         run: npm test
+      - name: Verify recovery channel diagnostics
+        working-directory: .
+        run: node --test scripts/recovery-channel.test.mjs
       - name: Check dependency advisories
         run: npm audit --registry=https://registry.npmjs.org --audit-level=moderate
       - name: Build production frontend
