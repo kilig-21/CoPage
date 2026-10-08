@@ -12,6 +12,8 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [noticeType, setNoticeType] = useState('success')
+  const [registrationUncertain, setRegistrationUncertain] = useState(false)
   const requestControllerRef = useRef(null)
   useEffect(() => () => requestControllerRef.current?.abort(), [])
 
@@ -19,7 +21,7 @@ export default function Login() {
     const controller = new AbortController()
     requestControllerRef.current = controller
     setSubmitting(true)
-    setError(''); setNotice('')
+    setError(''); setNotice(''); setNoticeType('success'); setRegistrationUncertain(false)
     const payload = { username: values.username.trim(), password: values.password,
       ...(registering ? { nickname: values.nickname?.trim() } : {}) }
     try {
@@ -36,7 +38,12 @@ export default function Login() {
       saveSession(localStorage, { token: response.data.token, username: response.data.user.username })
       navigate(safeReturnPath(location.state?.from), { replace: true })
     } catch (error) {
-      if (!controller.signal.aborted) setError(error?.message || '请求失败，请稍后重试')
+      if (!controller.signal.aborted) {
+        if (registering && error?.code !== 400) {
+          setRegistrationUncertain(true)
+          setError('注册结果未确认，账号可能已经创建。请先用填写的账号尝试登录；若无法登录，再检查账号和密码或重新注册。')
+        } else setError(error?.message || '请求失败，请稍后重试')
+      }
     } finally {
       if (requestControllerRef.current === controller) requestControllerRef.current = null
       if (!controller.signal.aborted) setSubmitting(false)
@@ -53,8 +60,13 @@ export default function Login() {
         {location.state?.expired && <Alert type="warning" showIcon message="登录已失效，请重新登录；未确认的本地草稿仍保留在此浏览器中" />}
         {location.state?.sessionChanged && <Alert type="info" showIcon message="登录状态已在其他页面更改，请重新登录；未确认的草稿仍保留在原账号下" />}
         {location.state?.backupHandled && <Alert type="info" showIcon message="请重新登录；未确认内容请从已保存的本地备份恢复" />}
-        {error && <Alert type="error" showIcon message={error} />}
-        {notice && <Alert type="success" showIcon message={notice} />}
+        {error && <Alert type="error" showIcon message={error} action={registrationUncertain && <Button
+          disabled={submitting} onClick={() => {
+            setRegistering(false); setRegistrationUncertain(false); setError('')
+            setNoticeType('info'); setNotice('请尝试登录确认账号是否已创建。')
+            form.setFieldsValue({ confirmPassword: '', nickname: '' })
+          }}>转到登录确认</Button>} />}
+        {notice && <Alert type={noticeType} showIcon message={notice} />}
         <Form form={form} layout="vertical" onFinish={onFinish} disabled={submitting}>
           <Form.Item label="用户名" name="username" normalize={value => value.trim()} rules={[
             { required: true, message: '请输入用户名' }, { min: 3, max: 50, message: '用户名需要 3～50 个字符' }]}>
@@ -84,7 +96,7 @@ export default function Login() {
         </Typography.Paragraph>}
         <Button type="link" disabled={submitting} onClick={() => {
           const username = form.getFieldValue('username'); form.resetFields(); form.setFieldsValue({ username });
-          setError(''); setNotice(''); setRegistering(value => !value)
+          setError(''); setNotice(''); setRegistrationUncertain(false); setRegistering(value => !value)
         }}>
           {registering ? '已有账号？返回登录' : '没有账号？注册'}
         </Button>
