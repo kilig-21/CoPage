@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CloseCircleOutlined, FileTextOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { Alert, Avatar, Button, Card, Empty, Input, Layout, List, Pagination, Popconfirm, Radio, Space, Tag, Typography, message } from 'antd'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -33,6 +33,8 @@ export default function DocList() {
   const [editing, setEditing] = useState(null)
   const [loadError, setLoadError] = useState('')
   const [creating, setCreating] = useState(false)
+  const createController = useRef(null)
+  useEffect(() => () => createController.current?.abort(), [])
   const [importing, setImporting] = useState(false)
 
   useEffect(() => {
@@ -57,14 +59,20 @@ export default function DocList() {
   }, [page, keyword, scope, refresh])
 
   async function createDocument() {
-    if (creating) return
+    if (createController.current) return
+    const controller = new AbortController()
+    createController.current = controller
     setCreating(true)
     try {
-      const response = await request.post('/doc', { title: '未命名文档' })
+      const response = await request.post('/doc', { title: '未命名文档' }, { signal: controller.signal })
+      if (controller.signal.aborted) return
       navigate('/docs/' + response.data.id)
     } catch (error) {
-      message.error(error?.message || '创建文档失败')
-    } finally { setCreating(false) }
+      if (!controller.signal.aborted) message.error(error?.code === 400 ? error.message : '创建结果未确认，请先刷新列表检查是否已创建，再决定是否重试')
+    } finally {
+      if (createController.current === controller) createController.current = null
+      if (!controller.signal.aborted) setCreating(false)
+    }
   }
 
   async function deleteDocument(id) {

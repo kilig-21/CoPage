@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Input, Modal, Typography } from 'antd'
 import request from '../api/request'
 
@@ -7,6 +7,8 @@ export default function ImportModal({ onClose, onCreated }) {
   const [title, setTitle] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const importController = useRef(null)
+  useEffect(() => () => importController.current?.abort(), [])
   function choose(event) {
     const next = event.target.files?.[0] ?? null
     setError(''); setFile(null)
@@ -17,13 +19,21 @@ export default function ImportModal({ onClose, onCreated }) {
     setTitle(next?.name.replace(/(?:\.copage)?\.(?:txt|json)$/i, '').slice(0, 200) ?? '')
   }
   async function importFile() {
-    if (!file || busy) return
+    if (!file || importController.current) return
+    const controller = new AbortController()
+    importController.current = controller
     setBusy(true); setError('')
     const form = new FormData(); form.append('file', file)
     if (title.trim()) form.append('title', title.trim())
-    try { const result = await request.post('/doc/import', form); onCreated(result.data.id) }
-    catch (ex) { setError(ex.message || '导入失败，请检查文件后重试') }
-    finally { setBusy(false) }
+    try {
+      const result = await request.post('/doc/import', form, { signal: controller.signal })
+      if (!controller.signal.aborted) onCreated(result.data.id)
+    } catch (ex) {
+      if (!controller.signal.aborted) setError(ex?.code === 400 ? ex.message : '导入结果未确认，请先回到列表检查是否已创建，再决定是否重试')
+    } finally {
+      if (importController.current === controller) importController.current = null
+      if (!controller.signal.aborted) setBusy(false)
+    }
   }
   return <Modal title="导入为新文档" open onCancel={busy ? undefined : onClose} onOk={importFile}
     okText="导入文档" cancelText="取消" confirmLoading={busy} okButtonProps={{ disabled: !file }}

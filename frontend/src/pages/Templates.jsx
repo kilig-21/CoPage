@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Space, Spin, Typography } from 'antd'
 import { Link, useNavigate } from 'react-router-dom'
 import request from '../api/request'
@@ -13,6 +13,8 @@ export default function Templates() {
   const [selected, setSelected] = useState(null)
   const [title, setTitle] = useState('')
   const [creating, setCreating] = useState(false)
+  const createController = useRef(null)
+  useEffect(() => () => createController.current?.abort(), [])
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true); setError('')
@@ -24,14 +26,21 @@ export default function Templates() {
   }, [refresh])
 
   async function create() {
-    if (creating) return
+    if (createController.current) return
     if (!title.trim()) { setError('请输入文档标题'); return }
+    const controller = new AbortController()
+    createController.current = controller
     setCreating(true); setError('')
     try {
-      const response = await request.post('/doc', { title: title.trim(), templateId: selected.id })
+      const response = await request.post('/doc', { title: title.trim(), templateId: selected.id }, { signal: controller.signal })
+      if (controller.signal.aborted) return
       navigate('/docs/' + response.data.id)
-    } catch (ex) { setError(ex.message || '创建失败，请重试') }
-    finally { setCreating(false) }
+    } catch (ex) {
+      if (!controller.signal.aborted) setError(ex?.code === 400 ? ex.message : '创建结果未确认，请先回到列表检查是否已创建，再决定是否重试')
+    } finally {
+      if (createController.current === controller) createController.current = null
+      if (!controller.signal.aborted) setCreating(false)
+    }
   }
 
   return <Layout className="app-shell">
