@@ -36,6 +36,9 @@ export default function Editor() {
     if (!isOwner || permission !== 2) setManaging(false)
   }, [isOwner, permission])
   useEffect(() => {
+    if (permission <= 0) setShowHistory(false)
+  }, [permission])
+  useEffect(() => {
     document.title = permission > 0 && title ? `${title} · CoPage` : '文档 · CoPage'
   }, [title, permission])
   useEffect(() => setDraftDownloadNotice(''), [docId])
@@ -128,7 +131,7 @@ export default function Editor() {
       {sharing && <ShareModal docId={docId} isOwner={isOwner && permission === 2} onClose={() => setSharing(false)}
         onManage={() => { setSharing(false); setManaging(true) }} />}
       {managing && isOwner && permission === 2 && <CollaboratorModal doc={{ id: docId, title }} onClose={() => setManaging(false)} />}
-      {showHistory && <HistoryDrawer docId={docId} isOwner={isOwner && permission === 2}
+      {showHistory && permission > 0 && <HistoryDrawer docId={docId} isOwner={isOwner && permission === 2}
         canRestore={canRestoreHistory} onClose={() => setShowHistory(false)} />}
       {showExport && <ExportModal docId={docId} canExport={() => permission > 0 && !recoveryDraft && canExportDocument()}
         onClose={() => setShowExport(false)} />}

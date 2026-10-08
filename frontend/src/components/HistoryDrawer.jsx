@@ -3,6 +3,10 @@ import { Alert, Button, Drawer, Input, List, Modal, Space, Spin, Tag, Typography
 import request from '../api/request'
 import DocumentPreview from './DocumentPreview'
 
+const rejectedCodes = new Set([400, 401, 403, 404, 40901, 40902, 40903, 40904])
+const mutationError = (error, uncertain) => rejectedCodes.has(error?.code)
+  ? error.message || '请求被拒绝，请核对后重试' : uncertain
+
 export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
   const [modal, contextHolder] = Modal.useModal()
   const [history, setHistory] = useState(null)
@@ -21,38 +25,82 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
   const alive = useRef(true)
   const selectionRequest = useRef(0)
   const restoreRequest = useRef(null)
+  const requests = useRef(new Set())
+  const listRequest = useRef(null)
+  const previewRequest = useRef(null)
+  const mutation = useRef(null)
   const base = `/doc/${docId}/history`
+  const beginRequest = () => {
+    const controller = new AbortController()
+    requests.current.add(controller)
+    return controller
+  }
+  const isLive = controller => alive.current && !controller.signal.aborted
+  const beginMutation = () => {
+    if (!alive.current || mutation.current) return null
+    const controller = beginRequest()
+    mutation.current = controller
+    setBusy(true); setError(''); setNotice('')
+    return controller
+  }
+  const finishMutation = controller => {
+    requests.current.delete(controller)
+    if (mutation.current === controller) mutation.current = null
+    if (isLive(controller)) setBusy(false)
+  }
   const load = async (before) => {
+    listRequest.current?.abort()
+    const controller = beginRequest()
+    listRequest.current = controller
     setLoading(true)
     try {
-      const response = await request.get(base, { params: before == null ? {} : { beforeRevision: before } })
-      if (!alive.current) return
+      const response = await request.get(base, { params: before == null ? {} : { beforeRevision: before }, signal: controller.signal })
+      if (!isLive(controller)) return
       setHistory(response.data)
       setVersions(old => before == null ? response.data.list : [...old, ...response.data.list])
       if (isOwner) {
-        const policy = await request.get(base + '/retention')
-        if (alive.current) setRetention(policy.data)
+        const policy = await request.get(base + '/retention', { signal: controller.signal })
+        if (isLive(controller)) setRetention(policy.data)
       }
-      if (alive.current) setError('')
-    } catch (ex) { if (alive.current) setError(ex.message || '历史加载失败') }
-    finally { if (alive.current) setLoading(false) }
+      if (isLive(controller)) setError('')
+    } catch (ex) { if (isLive(controller)) setError(ex.message || '历史加载失败') }
+    finally {
+      requests.current.delete(controller)
+      if (listRequest.current === controller) listRequest.current = null
+      if (isLive(controller)) setLoading(false)
+    }
   }
-  useEffect(() => { alive.current = true; load(); return () => { alive.current = false } }, [docId])
+  useEffect(() => {
+    alive.current = true
+    load()
+    return () => {
+      alive.current = false
+      selectionRequest.current++
+      for (const controller of requests.current) controller.abort()
+      requests.current.clear()
+      listRequest.current = null; previewRequest.current = null; mutation.current = null
+    }
+  }, [docId])
   const choose = async (revision) => {
+    previewRequest.current?.abort()
+    const controller = beginRequest()
+    previewRequest.current = controller
     const ticket = ++selectionRequest.current
     setSelected(revision); setPreview(null); setPreviewLoading(true); setPreviewError(''); setName(''); restoreRequest.current = null
     try {
-      const response = await request.get(`${base}/${revision}`)
-      if (alive.current && ticket === selectionRequest.current) {
+      const response = await request.get(`${base}/${revision}`, { signal: controller.signal })
+      if (isLive(controller) && ticket === selectionRequest.current) {
         setPreview(response.data.content); setError('')
         setName(history?.namedVersions.find(version => version.revision === revision)?.name || '')
       }
-    } catch (ex) { if (alive.current && ticket === selectionRequest.current) setPreviewError(ex.message || '版本读取失败') }
+    } catch (ex) { if (isLive(controller) && ticket === selectionRequest.current) setPreviewError(ex.message || '版本读取失败') }
     finally {
-      if (alive.current && ticket === selectionRequest.current) {
+      requests.current.delete(controller)
+      if (previewRequest.current === controller) previewRequest.current = null
+      if (isLive(controller) && ticket === selectionRequest.current) {
         setPreviewLoading(false)
         requestAnimationFrame(() => {
-          if (!alive.current || ticket !== selectionRequest.current) return
+          if (!isLive(controller) || ticket !== selectionRequest.current) return
           previewRegion.current?.focus({ preventScroll: true })
           previewRegion.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
         })
@@ -60,37 +108,45 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
     }
   }
   const mark = async (remove = false) => {
-    setBusy(true)
+    const controller = beginMutation()
+    if (!controller) return
     try {
-      if (remove) await request.delete(`${base}/${selected}/name`)
-      else await request.put(`${base}/${selected}/name`, { name })
-      if (alive.current) { setNotice(remove ? '已取消重要版本标记' : '重要版本已保存'); await load() }
-    } catch (ex) { if (alive.current) setError(ex.message || '版本标记失败') }
-    finally { if (alive.current) setBusy(false) }
+      if (remove) await request.delete(`${base}/${selected}/name`, { signal: controller.signal })
+      else await request.put(`${base}/${selected}/name`, { name }, { signal: controller.signal })
+      if (isLive(controller)) { setNotice(remove ? '已取消重要版本标记' : '重要版本已保存'); await load() }
+    } catch (ex) { if (isLive(controller)) setError(mutationError(ex, '重要版本更新结果未确认，请刷新列表核对后再决定是否重试')) }
+    finally { finishMutation(controller) }
   }
   const restore = async () => {
+    if (!alive.current || mutation.current) return
     if (!canRestore()) { setError('请等待连接恢复、当前编辑保存和图片上传完成后再恢复版本'); return }
-    setBusy(true)
-    // 超时后的重试复用请求 ID 和原预期版本，防止重复恢复。
-    restoreRequest.current ??= { expectedRevision: history.currentRevision, requestId: globalThis.crypto.randomUUID() }
+    const controller = beginMutation()
+    if (!controller) return
     try {
-      const response = await request.post(`${base}/${selected}/restore`, restoreRequest.current)
-      if (alive.current) { setNotice(`已恢复，生成版本 ${response.data.revision}`); restoreRequest.current = null; await load() }
+      // 超时后的重试复用请求 ID 和原预期版本，防止重复恢复。
+      restoreRequest.current ??= { expectedRevision: history.currentRevision, requestId: globalThis.crypto.randomUUID() }
+      const response = await request.post(`${base}/${selected}/restore`, restoreRequest.current, { signal: controller.signal })
+      if (isLive(controller)) { setNotice(`已恢复，生成版本 ${response.data.revision}`); restoreRequest.current = null; await load() }
     } catch (ex) {
-      if (alive.current) {
-        setError(ex.message || '恢复请求失败，可以重试')
-        if (ex.code === 40902) { restoreRequest.current = null; await load(); setError('文档已有新编辑，请重新核对最新版本后再恢复') }
+      if (isLive(controller)) {
+        setError(mutationError(ex, '恢复结果未确认，可重试这次恢复以核对结果，也可刷新历史列表查看最新版本'))
+        if (ex.code === 40902) {
+          restoreRequest.current = null
+          await load()
+          if (isLive(controller)) setError('文档已有新编辑，请重新核对最新版本后再恢复')
+        }
       }
-    } finally { if (alive.current) setBusy(false) }
+    } finally { finishMutation(controller) }
   }
   const named = history?.namedVersions || []
   const compact = async () => {
-    setBusy(true)
+    const controller = beginMutation()
+    if (!controller) return
     try {
-      await request.post(base + '/compact', {expectedRevision:retention.currentRevision,beforeRevision:retention.proposedMinimumRevision})
-      if (alive.current) { setSelected(null); setPreview(null); setNotice('历史已清理，重要版本继续保留'); await load() }
-    } catch (ex) { if (alive.current) setError(ex.message || '历史清理失败，请刷新预览后重试') }
-    finally { if (alive.current) setBusy(false) }
+      await request.post(base + '/compact', { expectedRevision: retention.currentRevision, beforeRevision: retention.proposedMinimumRevision }, { signal: controller.signal })
+      if (isLive(controller)) { setSelected(null); setPreview(null); setNotice('历史已清理，重要版本继续保留'); await load() }
+    } catch (ex) { if (isLive(controller)) setError(mutationError(ex, '历史清理结果未确认，请刷新列表和保留范围后再决定是否重试')) }
+    finally { finishMutation(controller) }
   }
   const rows = [...new Map([
     ...(history && !versions.some(v => v.revision === history.minimumRevision)
@@ -99,7 +155,7 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
       ? [{ revision: history.currentRevision, name: '当前版本' }] : []),
     ...versions, ...named,
   ].map(v => [v.revision, v])).values()].sort((a, b) => b.revision - a.revision)
-  return <Drawer title="历史版本" aria-label="历史版本" open width={720} onClose={onClose} maskClosable={!busy} closable={!busy}>
+  return <Drawer title="历史版本" aria-label="历史版本" open width={720} onClose={onClose} maskClosable={!busy} closable={!busy} keyboard={!busy}>
     {contextHolder}
     <Typography.Paragraph>查看已保存的版本。恢复会生成新版本，旧记录仍保留；重要版本会在普通历史清理后继续保留。</Typography.Paragraph>
     {error && <Alert type="warning" showIcon message={error} />}
