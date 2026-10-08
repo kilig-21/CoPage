@@ -32,8 +32,8 @@ class CollabEventBusTest {
 
     @Test
     void lostPasswordNotificationStillCannotLeakDocumentToOldCredential() throws Exception {
-        WebSocketSession old=mock(WebSocketSession.class);
-        when(old.getAttributes()).thenReturn(java.util.Map.of(WsHandshakeInterceptor.CREDENTIAL_VERSION,0L));
+        WebSocketSession old=session();
+        when(old.getAttributes()).thenReturn(java.util.Map.of(WsHandshakeInterceptor.CREDENTIAL_VERSION,0L, WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE));
         when(registry.sessionsOf(9L)).thenReturn(List.of(new WsSessionRegistry.SessionInfo("old",old,9L,"a",1L,"owner")));
         when(accounts.isCurrent(1L,0L)).thenReturn(false);
         JsonNode payload=objectMapper.readTree("{\"type\":\"op\",\"docId\":9,\"revision\":2}");
@@ -45,8 +45,8 @@ class CollabEventBusTest {
     }
     @Test
     void delayedPasswordNotificationDoesNotCloseCurrentCredential() throws Exception {
-        WebSocketSession current=mock(WebSocketSession.class);
-        when(current.getAttributes()).thenReturn(java.util.Map.of(WsHandshakeInterceptor.CREDENTIAL_VERSION,4L));
+        WebSocketSession current=session();
+        when(current.getAttributes()).thenReturn(java.util.Map.of(WsHandshakeInterceptor.CREDENTIAL_VERSION,4L, WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE));
         when(registry.sessionsOfUser(1L)).thenReturn(List.of(new WsSessionRegistry.SessionInfo("new",current,9L,"a",1L,"owner")));
         when(accounts.isCurrent(1L,4L)).thenReturn(true);
         bus.publishAccountChanged(1);
@@ -59,8 +59,8 @@ class CollabEventBusTest {
 
     @Test
     void concurrentlyClosedSessionDoesNotPreventOtherPeersReceivingOperation() throws Exception {
-        WebSocketSession closing = mock(WebSocketSession.class);
-        WebSocketSession healthy = mock(WebSocketSession.class);
+        WebSocketSession closing = session();
+        WebSocketSession healthy = session();
         when(registry.sessionsOf(9L)).thenReturn(List.of(
                 new WsSessionRegistry.SessionInfo("closing", closing, 9L, "a", 1L, "owner"),
                 new WsSessionRegistry.SessionInfo("healthy", healthy, 9L, "b", 2L, "member")));
@@ -77,8 +77,8 @@ class CollabEventBusTest {
 
     @Test
     void failureClosingOneRevokedSessionDoesNotPreventOtherRevocations() throws Exception {
-        WebSocketSession closing = mock(WebSocketSession.class);
-        WebSocketSession healthy = mock(WebSocketSession.class);
+        WebSocketSession closing = session();
+        WebSocketSession healthy = session();
         when(registry.sessionsOf(9L)).thenReturn(List.of(
                 new WsSessionRegistry.SessionInfo("closing", closing, 9L, "a", 1L, "owner"),
                 new WsSessionRegistry.SessionInfo("healthy", healthy, 9L, "b", 2L, "member")));
@@ -94,8 +94,8 @@ class CollabEventBusTest {
 
     @Test
     void localOriginIsSkippedButOtherLocalSessionsReceiveBroadcast() throws Exception {
-        WebSocketSession origin = mock(WebSocketSession.class);
-        WebSocketSession other = mock(WebSocketSession.class);
+        WebSocketSession origin = session();
+        WebSocketSession other = session();
         when(registry.sessionsOf(9L)).thenReturn(List.of(
                 new WsSessionRegistry.SessionInfo("origin", origin, 9L, "a", 1L, "testA"),
                 new WsSessionRegistry.SessionInfo("other", other, 9L, "b", 2L, "testB")));
@@ -119,7 +119,7 @@ class CollabEventBusTest {
 
     @Test
     void revokedSessionNeverReceivesDocumentBroadcastEvenWhenPermissionNotificationWasLost() throws Exception {
-        WebSocketSession revoked = mock(WebSocketSession.class);
+        WebSocketSession revoked = session();
         when(registry.sessionsOf(9L)).thenReturn(List.of(
                 new WsSessionRegistry.SessionInfo("revoked", revoked, 9L, "b", 2L, "testB")));
         when(documents.permissionFor(9L, 2L)).thenThrow(new BizException(ErrorCode.FORBIDDEN));
@@ -133,8 +133,8 @@ class CollabEventBusTest {
 
     @Test
     void permissionEventOnlyTargetsMemberAndRechecksDatabaseInsteadOfTrustingStalePayload() throws Exception {
-        WebSocketSession owner = mock(WebSocketSession.class);
-        WebSocketSession member = mock(WebSocketSession.class);
+        WebSocketSession owner = session();
+        WebSocketSession member = session();
         when(registry.sessionsOf(9L)).thenReturn(List.of(
                 new WsSessionRegistry.SessionInfo("owner", owner, 9L, "a", 1L, "owner"),
                 new WsSessionRegistry.SessionInfo("member", member, 9L, "b", 2L, "member")));
@@ -146,8 +146,8 @@ class CollabEventBusTest {
 
     @Test
     void deletionEventClosesBothOwnerAndMemberSessions() throws Exception {
-        WebSocketSession owner = mock(WebSocketSession.class);
-        WebSocketSession member = mock(WebSocketSession.class);
+        WebSocketSession owner = session();
+        WebSocketSession member = session();
         when(registry.sessionsOf(9L)).thenReturn(List.of(
                 new WsSessionRegistry.SessionInfo("owner", owner, 9L, "a", 1L, "owner"),
                 new WsSessionRegistry.SessionInfo("member", member, 9L, "b", 2L, "member")));
@@ -163,7 +163,7 @@ class CollabEventBusTest {
 
     @Test
     void delayedDeletionNotificationDoesNotRevokeRestoredDocument() throws Exception {
-        WebSocketSession restored = mock(WebSocketSession.class);
+        WebSocketSession restored = session();
         when(registry.sessionsOf(9L)).thenReturn(List.of(
                 new WsSessionRegistry.SessionInfo("restored", restored, 9L, "b", 2L, "member")));
         when(documents.permissionFor(9L, 2L)).thenReturn(2);
@@ -174,6 +174,31 @@ class CollabEventBusTest {
         verify(restored, never()).close(any());
     }
 
+    private WebSocketSession session() {
+        var session = mock(WebSocketSession.class);
+        when(session.getAttributes()).thenReturn(java.util.Map.of(
+                WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE));
+        return session;
+    }
+
+    @Test
+    void expiredSocketCannotReceiveBroadcastAndCurrentPeerIsUnaffected() throws Exception {
+        var expired = session();
+        var current = session();
+        when(expired.getAttributes()).thenReturn(java.util.Map.of(WsHandshakeInterceptor.TOKEN_EXPIRES_AT, 0L));
+        when(registry.sessionsOf(9L)).thenReturn(List.of(
+                new WsSessionRegistry.SessionInfo("expired", expired, 9L, "a", 1L, "owner"),
+                new WsSessionRegistry.SessionInfo("current", current, 9L, "b", 2L, "member")));
+        when(documents.permissionFor(9L, 2L)).thenReturn(2);
+        JsonNode payload = objectMapper.readTree("{\"type\":\"op\",\"docId\":9,\"revision\":2}");
+        deliver(payload);
+        verify(sender, never()).send(expired, payload);
+        verify(sender).send(eq(expired), argThat(message -> message.path("code").asInt() == 401));
+        verify(expired).close(org.springframework.web.socket.CloseStatus.POLICY_VIOLATION);
+        verify(accounts, never()).isCurrent(eq(1L), anyLong());
+        verify(documents, never()).permissionFor(9L, 1L);
+        verify(sender).send(current, payload);
+    }
     private void deliver(JsonNode payload) {
         Message message = mock(Message.class);
         when(message.getBody()).thenReturn(objectMapper.createObjectNode().put("docId", 9)

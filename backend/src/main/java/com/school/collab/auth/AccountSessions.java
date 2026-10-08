@@ -10,11 +10,20 @@ import org.springframework.stereotype.Service;
 public class AccountSessions {
     private final AccountRepository accounts;
     private final String secret;
+
     public AccountSessions(AccountRepository accounts, @Value("${collab.jwt.secret}") String secret) {
-        this.accounts=accounts; this.secret=secret;
+        this.accounts = accounts;
+        this.secret = secret;
     }
+
     public AccountRepository.Profile authenticate(String token) {
+        return authenticateSession(token).profile();
+    }
+
+    public Authenticated authenticateSession(String token) {
         var claims = JwtUtil.parse(token, secret);
+        var expiration = claims.getExpiration();
+        if (expiration == null) throw unauthorized();
         long id = Long.parseLong(claims.getSubject());
         Object raw = claims.get("credentialVersion");
         // 兼容部署前的JWT：仅账号尚未改密(version=0)时接受缺省版本。
@@ -22,9 +31,19 @@ public class AccountSessions {
         long version = raw == null ? 0 : ((Number) raw).longValue();
         if (id <= 0 || version < 0) throw unauthorized();
         var profile = accounts.profile(id).orElseThrow(this::unauthorized);
-        if (profile.credentialVersion() != version) throw unauthorized();
-        return profile;
+        if (profile.credentialVersion() != version || expiration.getTime() <= System.currentTimeMillis()) {
+            throw unauthorized();
+        }
+        return new Authenticated(profile, expiration.getTime());
     }
-    public boolean isCurrent(long id, long version) { return accounts.isCurrent(id,version); }
-    private BizException unauthorized() { return new BizException(ErrorCode.UNAUTHORIZED); }
+
+    public boolean isCurrent(long id, long version) {
+        return accounts.isCurrent(id, version);
+    }
+
+    private BizException unauthorized() {
+        return new BizException(ErrorCode.UNAUTHORIZED);
+    }
+
+    public record Authenticated(AccountRepository.Profile profile, long expiresAt) { }
 }

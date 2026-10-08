@@ -56,7 +56,8 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
     })
     const syncId = randomUUID()
     ws.send(JSON.stringify({ type: 'join', docId, clientId, lastRevision, syncId }))
-    const sync = await wait(m => m.type === 'sync' && m.syncId === syncId)
+    const sync = await wait(m => (m.type === 'sync' && m.syncId === syncId) || m.type === 'error')
+    assert.equal(sync.type, 'sync', '恢复验收join拒绝：' + sync.message)
     return {
       ws, sync,
       async submit(opId, baseRevision, op, expectedType = 'ack') {
@@ -255,6 +256,12 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
     socket?.ws.close()
     const ids = destination(['ps', '-aq']).stdout.trim().split(/\s+/).filter(Boolean)
     for (const id of ids) assertProject(id, restoredProject)
+    if (!verified) {
+      try {
+        const diagnostics = destination(['logs', '--no-color', 'backend'], { allowFailure: true })
+        writeFileSync(join(backupDir, 'restored-backend.log'), diagnostics.stdout + diagnostics.stderr, { mode: 0o600 })
+      } catch { console.error('恢复目标诊断未能保存；继续清理已核对归属的临时项目') }
+    }
     destination(['down', '--volumes', '--remove-orphans'])
     if (verified) {
       unlinkSync(sqlFile)
@@ -262,7 +269,7 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
       rmdirSync(backupDir)
       console.log('恢复目标临时项目及合成备份文件已清理')
     } else {
-      console.error(`恢复验收失败；仅包含合成测试数据的备份保留在：${backupDir}`)
+      console.error(`恢复验收失败；合成备份与恢复目标诊断保留在：${backupDir}`)
     }
   }
 }

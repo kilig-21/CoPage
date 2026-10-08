@@ -25,6 +25,28 @@ class AccountSessionsTest {
     private void version(long value) {
         when(accounts.profile(5L)).thenReturn(Optional.of(new AccountRepository.Profile(5,"owner","New nickname",null,value)));
     }
+    @Test void handshakeRetainsSignedExpirationWithoutRetainingToken() {
+        version(0);
+        String token = JwtUtil.createToken(5L, "owner", SECRET, Duration.ofHours(1));
+        long expected = JwtUtil.parse(token, SECRET).getExpiration().getTime();
+        assertEquals(expected, sessions.authenticateSession(token).expiresAt());
+        var request = new MockHttpServletRequest("GET", "/ws/collab");
+        request.setQueryString("token=" + token);
+        var attributes = new HashMap<String, Object>();
+        assertTrue(new WsHandshakeInterceptor(sessions).beforeHandshake(new ServletServerHttpRequest(request),
+                new ServletServerHttpResponse(new MockHttpServletResponse()), null, attributes));
+        assertEquals(expected, attributes.get(WsHandshakeInterceptor.TOKEN_EXPIRES_AT));
+        assertFalse(attributes.containsValue(token));
+    }
+
+    @Test void tokenWithoutExpirationIsRejectedBeforeAccountLookup() {
+        String token = io.jsonwebtoken.Jwts.builder().subject("5")
+                .signWith(io.jsonwebtoken.security.Keys.hmacShaKeyFor(SECRET.getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+                .compact();
+        var error = assertThrows(BizException.class, () -> sessions.authenticate(token));
+        assertEquals(com.school.collab.common.ErrorCode.UNAUTHORIZED, error.getErrorCode());
+        verifyNoInteractions(accounts);
+    }
     @Test void legacyTokenIsAcceptedOnlyUntilFirstPasswordChange() {
         String legacy=JwtUtil.createToken(5L,"owner","Old nickname",SECRET,Duration.ofHours(1));
         version(0);assertEquals("New nickname",sessions.authenticate(legacy).nickname());

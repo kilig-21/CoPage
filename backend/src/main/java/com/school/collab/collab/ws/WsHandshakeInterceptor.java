@@ -18,6 +18,7 @@ import java.util.Map;
 public class WsHandshakeInterceptor implements HandshakeInterceptor {
     public static final String USER_ID="ws.userId", USERNAME="ws.username", NICKNAME="ws.nickname";
     public static final String CREDENTIAL_VERSION="ws.credentialVersion";
+    public static final String TOKEN_EXPIRES_AT = "ws.tokenExpiresAt";
     private final AccountSessions sessions;
     public WsHandshakeInterceptor(AccountSessions sessions) { this.sessions=sessions; }
     @Override
@@ -26,14 +27,21 @@ public class WsHandshakeInterceptor implements HandshakeInterceptor {
         String token=UriComponentsBuilder.fromUri(request.getURI()).build().getQueryParams().getFirst("token");
         if(token==null || token.isBlank()) { response.setStatusCode(HttpStatus.UNAUTHORIZED);return false; }
         try {
-            var profile=sessions.authenticate(token);
+            var authenticated = sessions.authenticateSession(token);
+            var profile = authenticated.profile();
             attributes.put(USER_ID,profile.id());attributes.put(USERNAME,profile.username());
             attributes.put(NICKNAME,profile.nickname()==null||profile.nickname().isBlank()?profile.username():profile.nickname());
             attributes.put(CREDENTIAL_VERSION,profile.credentialVersion());
+            attributes.put(TOKEN_EXPIRES_AT, authenticated.expiresAt());
             return true;
         } catch(DataAccessException exception) { response.setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);return false; }
         catch(BizException | JwtException | IllegalArgumentException exception) { response.setStatusCode(HttpStatus.UNAUTHORIZED);return false; }
     }
+    public static boolean tokenUnexpired(WebSocketSession session) {
+        Object value = session.getAttributes().get(TOKEN_EXPIRES_AT);
+        return value instanceof Long expiresAt && expiresAt > System.currentTimeMillis();
+    }
+
     public static long credentialVersion(WebSocketSession session) {
         Object raw=session.getAttributes().get(CREDENTIAL_VERSION);
         return raw==null?0:raw instanceof Long||raw instanceof Integer?((Number)raw).longValue():-1;

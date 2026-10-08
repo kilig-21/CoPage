@@ -62,7 +62,8 @@ console.log('PASS: 生产凭据必填、prod profile、非 root 数据库账号�
 
 const recoverySmoke = process.argv.includes('--recovery-smoke')
 const proxySmoke = process.argv.includes('--proxy-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke
+const expirySmoke = process.argv.includes('--session-expiry-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke
 if (process.argv.includes('--smoke') || fullSmoke) {
   // 随机项目名只属于本次验收，不触及开发或实际生产项目的数据卷。
   const project = 'copage-prod-qa-' + randomBytes(6).toString('hex')
@@ -135,6 +136,15 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       console.log(smoke.stdout.trim())
       assert.equal(sql("SELECT COUNT(*) FROM user WHERE username IN ('testA','testB');").stdout.trim(), '0')
       console.log('PASS: 两个 prod 后端均就绪，独立注册账号跨实例协同通过，未创建演示账号')
+      if (expirySmoke) {
+        const expiry = spawnSync(process.execPath, ['scripts/session-expiry-smoke.mjs'], {
+          cwd, encoding: 'utf8', timeout: 120_000,
+          env: { ...process.env, COPAGE_SMOKE_PORT_A: String(ports[0]), COPAGE_SMOKE_PORT_B: String(ports[1]),
+            COPAGE_SMOKE_JWT_SECRET: qaEnv.PROD_JWT_SECRET },
+        })
+        assert.equal(expiry.status, 0, expiry.stderr)
+        console.log(expiry.stdout.trim())
+      }
       if (proxySmoke) {
         await runProxyCheck({ docker, source: qaDocker, username, password })
       }

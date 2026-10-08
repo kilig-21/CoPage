@@ -110,7 +110,8 @@ public class CollabEventBus implements MessageListener {
     }
 
     private boolean rejectExpired(WsSessionRegistry.SessionInfo target) throws IOException {
-        if (accounts.isCurrent(target.userId(), WsHandshakeInterceptor.credentialVersion(target.session()))) return false;
+        if (WsHandshakeInterceptor.tokenUnexpired(target.session())
+                && accounts.isCurrent(target.userId(), WsHandshakeInterceptor.credentialVersion(target.session()))) return false;
         try { sender.send(target.session(), objectMapper.createObjectNode().put("type", "error").put("code", 401)
                 .put("message", "登录已失效，请重新登录；未确认内容仍保留")); }
         finally { target.session().close(CloseStatus.POLICY_VIOLATION); }

@@ -59,7 +59,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         try {
             Object user = session.getAttributes().get(WsHandshakeInterceptor.USER_ID);
-            if (!(user instanceof Long id) || !accounts.isCurrent(id, WsHandshakeInterceptor.credentialVersion(session))) {
+            if (!(user instanceof Long id) || !WsHandshakeInterceptor.tokenUnexpired(session) || !accounts.isCurrent(id, WsHandshakeInterceptor.credentialVersion(session))) {
                 sendError(session, 401, "登录已失效，请重新登录；未确认内容仍保留");
                 try { session.close(CloseStatus.POLICY_VIOLATION); } catch (IOException ignored) { }
                 return;

@@ -38,13 +38,34 @@ class CollabWebSocketHandlerTest {
     @BeforeEach void validSessions() { when(accounts.isCurrent(anyLong(),anyLong())).thenReturn(true); }
     private WebSocketSession session() {
         var session=mock(WebSocketSession.class);
-        when(session.getAttributes()).thenReturn(Map.of(WsHandshakeInterceptor.USER_ID,2L,WsHandshakeInterceptor.NICKNAME,"testB"));
+        when(session.getAttributes()).thenReturn(Map.of(WsHandshakeInterceptor.USER_ID,2L,WsHandshakeInterceptor.NICKNAME,"testB", WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE));
         return session;
     }
     private final CollabWebSocketHandler handler =
             new CollabWebSocketHandler(
                     objectMapper, revisions, documents, registry, sender, eventBus, presence, accounts);
 
+    @Test
+    void expiredTokenCannotSendAnyCollaborationMessage() throws Exception {
+        for (String type : List.of("join", "op", "history_request", "cursor", "ping")) {
+            var session = session();
+            when(session.getAttributes()).thenReturn(Map.of(
+                    WsHandshakeInterceptor.USER_ID, 2L, WsHandshakeInterceptor.TOKEN_EXPIRES_AT, 0L));
+            handler.handleTextMessage(session, new TextMessage("{\"type\":\"" + type + "\"}"));
+            verify(sender).send(eq(session), argThat(message -> message.path("code").asInt() == 401));
+            verify(session).close(CloseStatus.POLICY_VIOLATION);
+        }
+        verifyNoInteractions(accounts, revisions, documents, registry, eventBus, presence);
+    }
+    @Test
+    void missingExpirationMetadataCannotEnterJoin() throws Exception {
+        var session = session();
+        when(session.getAttributes()).thenReturn(Map.of(WsHandshakeInterceptor.USER_ID, 2L));
+        handler.handleTextMessage(session, new TextMessage("{\"type\":\"join\",\"docId\":5}"));
+        verify(sender).send(eq(session), argThat(message -> message.path("code").asInt() == 401));
+        verify(session).close(CloseStatus.POLICY_VIOLATION);
+        verifyNoInteractions(accounts, revisions, documents, registry, eventBus, presence);
+    }
     @Test
     void revokedCredentialCannotSendAnyCollaborationMessage() throws Exception {
         when(accounts.isCurrent(2L,0L)).thenReturn(false);
@@ -77,7 +98,7 @@ class CollabWebSocketHandlerTest {
     void unsupportedPendingOperationCannotEnterReconnectRecovery() throws Exception {
         WebSocketSession session = session();
         when(session.getAttributes()).thenReturn(Map.of(
-                WsHandshakeInterceptor.USER_ID, 2L, WsHandshakeInterceptor.NICKNAME, "testB"));
+                WsHandshakeInterceptor.USER_ID, 2L, WsHandshakeInterceptor.NICKNAME, "testB", WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE));
         handler.handleTextMessage(session, new TextMessage("""
                 {"type":"join","docId":5,"clientId":"test-client","lastRevision":0,"syncId":"sync-1",
                  "pendingOpId":"op-1","pendingBaseRevision":0,
@@ -93,7 +114,7 @@ class CollabWebSocketHandlerTest {
     void joinRegistersAndSendsCatchupInsideTheServiceCallback() throws Exception {
         WebSocketSession session = session();
         when(session.getAttributes()).thenReturn(Map.of(
-                WsHandshakeInterceptor.USER_ID, 2L, WsHandshakeInterceptor.NICKNAME, "testB"));
+                WsHandshakeInterceptor.USER_ID, 2L, WsHandshakeInterceptor.NICKNAME, "testB", WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE));
         WsSessionRegistry.SessionInfo info = new WsSessionRegistry.SessionInfo(
                 "session-1", session, 5L, "test-client", 2L, "testB");
         when(registry.register(session, 5L, "test-client", 2L, "testB")).thenReturn(info);
@@ -130,7 +151,7 @@ class CollabWebSocketHandlerTest {
         WebSocketSession session = session();
         when(session.getAttributes()).thenReturn(Map.of(
                 WsHandshakeInterceptor.USER_ID, 2L,
-                WsHandshakeInterceptor.NICKNAME, "测试用户 B"));
+                WsHandshakeInterceptor.NICKNAME, "测试用户 B", WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE));
         when(documents.permissionFor(5L, 2L)).thenThrow(new BizException(ErrorCode.FORBIDDEN));
 
         handler.handleTextMessage(session,
