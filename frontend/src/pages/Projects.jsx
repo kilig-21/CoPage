@@ -112,6 +112,13 @@ export default function Projects() {
   const ready = Boolean(data && !loading && !busy && !uncertain)
   const current = detail?.id === selected ? detail : null
   const manage = current?.canManage
+  const hasGroupContext = Boolean(groupId && context?.id === groupId)
+  const canCreateGroup = hasGroupContext && ['owner', 'admin'].includes(context.role)
+  const chooseGroup = scope === 'group' && !groupId
+  const emptyDescription = keyword ? '没有匹配的项目' : archived ? '暂无归档项目'
+    : chooseGroup ? '还没有小组项目，先选择小组再创建'
+      : hasGroupContext ? canCreateGroup ? '还没有小组项目，可以创建一个整理本组资料' : '暂无小组项目，可请创建者或管理员创建'
+        : scope === 'personal' ? '还没有个人项目，可以先创建一个' : '创建个人项目，或从小组入口创建小组项目'
   useEffect(() => { if (fields?.id && !manage) setFields(null) }, [manage, fields?.id])
   async function mutate(action, label, onSuccess) {
     if (mutation.current || !ready) return
@@ -144,11 +151,14 @@ export default function Projects() {
       <Link to="/home">工作台</Link><Link to="/docs">我的文档</Link><Link to="/groups">我的小组</Link>
       <Button onClick={() => setShowGuide(true)}>使用指南</Button>
       <Button disabled={loading || busy} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
-      <Button type="primary" disabled={!ready} onClick={() => { setError(''); setFields({ groupId: context && ['owner', 'admin'].includes(context.role) ? context.id : 0 }) }}>{context && !['owner', 'admin'].includes(context.role) ? '创建个人项目' : '创建项目'}</Button>
+      {chooseGroup ? <Link className="ant-btn ant-btn-primary" to="/groups">选择小组创建项目</Link>
+        : <Button type="primary" disabled={!ready} onClick={() => { setError(''); setFields({ groupId: canCreateGroup ? context.id : 0 }) }}>
+          {canCreateGroup ? '创建小组项目' : '创建个人项目'}</Button>}
     </Space></header>
     <main className="content-wrap project-page">
       <Typography.Title level={2}>{context ? context.name + '的项目' : '把资料整理成项目'}</Typography.Title>
       <Typography.Paragraph type="secondary">整理个人或小组工作，关联保留同一份原文档。项目内只显示你有权限访问的资料。</Typography.Paragraph>
+      {chooseGroup && <Typography.Paragraph>先选择需要整理资料的小组，再由创建者或管理员创建小组项目。</Typography.Paragraph>}
       {groupId > 0 && <Button onClick={() => setParams({})}>查看全部项目</Button>}
       {error && <Alert type="error" showIcon message={error} />}
       {notice && <Alert type="success" showIcon message={notice} />}
@@ -164,7 +174,7 @@ export default function Projects() {
         onChange={e => setInput(e.target.value)} onSearch={value => navigate({ keyword: value.trim() || null, project: null, page: '1' })} enterButton="筛选" />
       <Card title="项目列表" className="project-section">
         <List rowKey="id" loading={loading} dataSource={data?.list || []}
-          locale={{ emptyText: loading ? '正在加载…' : !data ? '列表暂不可用' : <Empty description={keyword ? '没有匹配的项目' : archived ? '暂无归档项目' : '创建个人项目，或从小组入口创建小组项目'} /> }}
+          locale={{ emptyText: loading ? '正在加载…' : !data ? '列表暂不可用' : <Empty description={emptyDescription} /> }}
           renderItem={project => <List.Item actions={archived ? project.canManage ? [
             <Popconfirm key="restore" overlayClassName="document-action-confirm" title={'恢复“' + project.name + '”？'}
               description="恢复项目与原关联，文档继续按当前权限访问。" disabled={!ready} onConfirm={() => mutate(signal =>
@@ -206,7 +216,7 @@ export default function Projects() {
         </>}
       </Card>}
     </main>
-    {fields && <Fields key={fields.id || 'create'} value={fields} context={context} busy={busy} uncertain={uncertain} error={error}
+    {fields && <Fields key={fields.id || 'create'} value={fields} context={hasGroupContext ? context : null} busy={busy} uncertain={uncertain} error={error}
       onClose={() => { if (!busy) setFields(null) }} onReview={review}
       onSave={values => mutate(signal => fields.id ? request.put('/projects/' + fields.id, { name: values.name, description: values.description }, { signal }) :
         request.post('/projects', values, { signal }), fields.id ? '项目资料已保存' : '项目已创建', result => {
