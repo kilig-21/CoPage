@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { documentHref } from '../navigation/documents'
 import request from '../api/request'
 import LogoutButton from '../components/LogoutButton'
 import UserGuide from '../components/UserGuide'
@@ -38,6 +39,7 @@ export default function Projects() {
   const [showGuide, setShowGuide] = useState(false)
   const [params, setParams] = useSearchParams()
   const location = useLocation()
+  const sourcePath = location.pathname + location.search + location.hash
   const selected = idValue(params.get('project'))
   const groupId = idValue(params.get('groupId'))
   const page = Math.min(idValue(params.get('page')) || 1, 1000000)
@@ -48,9 +50,9 @@ export default function Projects() {
   const [data, setData] = useState(null)
   const [context, setContext] = useState(null)
   const [detail, setDetail] = useState(null)
-  const [docPage, setDocPage] = useState(1)
-  const [docKeyword, setDocKeyword] = useState('')
-  const [docInput, setDocInput] = useState('')
+  const docPage = Math.min(idValue(params.get('docPage')) || 1, 1000000)
+  const docKeyword = (params.get('docKeyword') || '').slice(0, 200).trim()
+  const [docInput, setDocInput] = useState(docKeyword)
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState('')
@@ -71,11 +73,15 @@ export default function Projects() {
     return () => mutation.current?.abort()
   }, [location.key])
   useEffect(() => setInput(keyword), [keyword])
-  useEffect(() => { setDocPage(1); setDocKeyword(''); setDocInput('') }, [selected])
+  useEffect(() => setDocInput(docKeyword), [docKeyword])
   const navigate = (changes, keepNotice = false) => {
     preserveNotice.current = keepNotice
     const next = { ...(scope === 'all' ? {} : { scope }), ...(groupId ? { groupId: String(groupId) } : {}),
-      ...(archived ? { archived: 'true' } : {}), ...(keyword ? { keyword } : {}), page: String(page), ...(selected ? { project: String(selected) } : {}), ...changes }
+      ...(archived ? { archived: 'true' } : {}), ...(keyword ? { keyword } : {}), page: String(page), ...(selected ? { project: String(selected) } : {}),
+      ...(docPage > 1 ? { docPage: String(docPage) } : {}), ...(docKeyword ? { docKeyword } : {}), ...changes }
+    if (Object.hasOwn(changes, 'project') && idValue(changes.project) !== selected) {
+      delete next.docPage; delete next.docKeyword
+    }
     for (const key of Object.keys(next)) if (next[key] === null || next[key] === '') delete next[key]
     setParams(next)
   }
@@ -103,7 +109,10 @@ export default function Projects() {
       .then(({ data }) => {
         if (controller.signal.aborted) return
         const last = Math.max(1, Math.ceil(data.total / SIZE))
-        if (docPage > last) { setDocPage(last); return }
+        if (docPage > last) {
+          setParams(current => { const next = new URLSearchParams(current); next.set('docPage', String(last)); return next }, { replace: true })
+          return
+        }
         setDetail(data)
       }).catch(failure => { if (!controller.signal.aborted) setDetailError([400, 403, 404].includes(failure?.code)
         ? failure.message : '项目文档未能加载，请刷新重试。') })
@@ -202,19 +211,19 @@ export default function Projects() {
               <Button disabled={!ready} danger>归档项目</Button></Popconfirm>}
           </Space>
           <Input.Search aria-label="筛选项目内文档" value={docInput} maxLength={200} disabled={busy} placeholder="按文档标题筛选"
-            onChange={e => setDocInput(e.target.value)} onSearch={value => { setDocKeyword(value.trim()); setDocPage(1) }} enterButton="筛选" />
+            onChange={e => setDocInput(e.target.value)} onSearch={value => navigate({ docKeyword: value.trim() || null, docPage: null })} enterButton="筛选" />
           <List rowKey="id" dataSource={current.list} locale={{ emptyText: <Empty description="没有符合条件且可访问的文档" /> }}
             renderItem={doc => <List.Item actions={[
-              <Link key="open" to={'/docs/' + doc.id}>打开</Link>,
+              <Link key="open" to={documentHref(doc.id, sourcePath)}>打开</Link>,
               doc.canRemove && <Popconfirm key="remove" overlayClassName="document-action-confirm" title={'将“' + doc.title + '”移出项目？'}
                 description="只移除当前关联，保留原文档和成员权限。" disabled={!ready} onConfirm={() => mutate(signal =>
                   request.delete('/projects/' + current.id + '/documents/' + doc.id, { signal, params: { associationId: doc.associationId } }), '已移出项目')}>
                 <Button disabled={!ready} danger>移出项目</Button></Popconfirm>,
-            ].filter(Boolean)}><List.Item.Meta title={<Link to={'/docs/' + doc.id}>{doc.title}</Link>}
+            ].filter(Boolean)}><List.Item.Meta title={<Link to={documentHref(doc.id, sourcePath)}>{doc.title}</Link>}
               description={<Space wrap><Tag>{doc.permission === 2 ? '可编辑' : '只读'}</Tag><span>{doc.ownerName + ' · ' + doc.updateTime}</span></Space>} />
             </List.Item>} />
           {current.total > SIZE && <Pagination current={docPage} total={current.total} pageSize={SIZE} showSizeChanger={false}
-            disabled={!ready} onChange={setDocPage} />}
+            disabled={!ready} onChange={next => navigate({ docPage: String(next) })} />}
         </>}
       </Card>}
     </main>

@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Col, Empty, Layout, List, Row, Space, Statistic, Tag, Typography } from 'antd'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
+import { documentHref } from '../navigation/documents'
 import request from '../api/request'
 import LogoutButton from '../components/LogoutButton'
 import UserGuide from '../components/UserGuide'
 import WorkspaceOverview from '../components/WorkspaceOverview'
 
 export default function Home() {
+  const location = useLocation()
+  const sourcePath = location.pathname + location.search + location.hash
   const [data, setData] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -62,10 +65,10 @@ export default function Home() {
         {data && <List rowKey="id" dataSource={data.recent}
           locale={{ emptyText: <Empty description="还没有文档，先从模板创建一篇或请同伴添加你为协作者" /> }}
           renderItem={doc => <List.Item>
-            <List.Item.Meta title={<Link to={'/docs/' + doc.id}>{doc.title}</Link>}
+            <List.Item.Meta title={<Link to={documentHref(doc.id, sourcePath)}>{doc.title}</Link>}
               description={<Space wrap><Tag>{doc.isOwner ? '所有者' : doc.permission === 2 ? '可编辑' : '只读'}</Tag>
                 <span>{doc.ownerName + ' · 更新于 ' + doc.updateTime}</span></Space>} />
-            <Link to={'/docs/' + doc.id}>打开</Link>
+            <Link to={documentHref(doc.id, sourcePath)}>打开</Link>
           </List.Item>} />}
         {!loading && !data && <Typography.Paragraph>恢复连接后重试，即可查看当前可访问的资料。</Typography.Paragraph>}
       </Card>

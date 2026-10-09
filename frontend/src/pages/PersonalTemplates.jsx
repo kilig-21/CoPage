@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { documentHref } from '../navigation/documents'
 import request from '../api/request'
 import LogoutButton from '../components/LogoutButton'
 import UserGuide from '../components/UserGuide'
@@ -12,6 +13,7 @@ export default function PersonalTemplates() {
   const [showGuide, setShowGuide] = useState(false)
   const [params, setParams] = useSearchParams()
   const location = useLocation()
+  const sourcePath = location.pathname + location.search + location.hash
   const navigate = useNavigate()
   const category = Object.hasOwn(categories, params.get('category')) ? params.get('category') : 'all'
   const keyword = (params.get('keyword') || '').slice(0, 200).trim()
@@ -128,7 +130,7 @@ export default function PersonalTemplates() {
         uncertain && <Button key="review" disabled={busy} onClick={review}>{uncertain.kind === 'instance' ? '核对我的文档' : '核对模板列表'}</Button>,
         detail && !editing && <Button key="edit" disabled={!ready} onClick={() => setEditing({ name: detail.name, description: detail.description, category: detail.category, version: detail.version })}>修改资料</Button>,
         detail && !editing && <Button key="create" type="primary" loading={busy} disabled={!ready || !title.trim()}
-          onClick={() => mutate('instance', signal => request.post('/personal-templates/' + detail.id + '/documents', { title: title.trim(), expectedVersion: detail.version }, { signal }), data => navigate('/docs/' + data.id), title.trim())}>创建文档</Button>,
+          onClick={() => mutate('instance', signal => request.post('/personal-templates/' + detail.id + '/documents', { title: title.trim(), expectedVersion: detail.version }, { signal }), data => navigate(documentHref(data.id, sourcePath)), title.trim())}>创建文档</Button>,
         detail && editing && <Button key="save" type="primary" loading={busy} disabled={!ready || !editing.name.trim()}
           onClick={() => mutate('update', signal => request.put('/personal-templates/' + detail.id, { name: editing.name.trim(), description: editing.description.trim(), category: editing.category, expectedVersion: editing.version }, { signal }), () => { setSelected(null); setEditing(null); setNotice('模板资料已保存'); filter(editing.category, editing.name.trim()); setRefresh(n => n + 1) }, { name: editing.name.trim(), category: editing.category })}>保存资料</Button>,
       ]}>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Radio, Space, Spin, Tag, Typography } from 'antd'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { documentHref } from '../navigation/documents'
 import request from '../api/request'
 import LogoutButton from '../components/LogoutButton'
 import DocumentPreview from '../components/DocumentPreview'
@@ -10,6 +11,7 @@ import { templateCategories as categories } from '../templates/categories'
 export default function Templates() {
   const navigate = useNavigate()
   const location = useLocation()
+  const sourcePath = location.pathname + location.search + location.hash
   const [params, setParams] = useSearchParams()
   const category = Object.hasOwn(categories, params.get('category')) ? params.get('category') : 'all'
   const keyword = (params.get('keyword') || '').slice(0, 200).trim()
@@ -56,7 +58,7 @@ export default function Templates() {
     setCreating(true); setCreateError(''); setSubmittedTitle(title.trim())
     try {
       const response = await request.post('/doc', { title: title.trim(), templateId: selected.id }, { signal: controller.signal })
-      if (!controller.signal.aborted) navigate('/docs/' + response.data.id)
+      if (!controller.signal.aborted) navigate(documentHref(response.data.id, sourcePath))
     } catch (ex) {
       if (!controller.signal.aborted) {
         const rejected = [400, 401, 403, 404].includes(ex?.code)

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { CloseCircleOutlined, FileTextOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { Alert, Avatar, Button, Card, Empty, Input, Layout, List, Pagination, Popconfirm, Radio, Space, Tag, Typography, message } from 'antd'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { documentHref } from '../navigation/documents'
 import request from '../api/request'
 import LogoutButton from '../components/LogoutButton'
 import SavePersonalTemplateModal from '../components/SavePersonalTemplateModal'
@@ -18,6 +19,8 @@ export default function DocList() {
   const [copying, setCopying] = useState(null)
   const [showGuide, setShowGuide] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
+  const sourcePath = location.pathname + location.search + location.hash
   const [docs, setDocs] = useState([])
   const [total, setTotal] = useState(0)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -72,7 +75,7 @@ export default function DocList() {
     try {
       const response = await request.post('/doc', { title: '未命名文档' }, { signal: controller.signal })
       if (controller.signal.aborted) return
-      navigate('/docs/' + response.data.id)
+      navigate(documentHref(response.data.id, sourcePath))
     } catch (error) {
       if (!controller.signal.aborted) message.error(error?.code === 400 ? error.message : '创建结果未确认，请先刷新列表检查是否已创建，再决定是否重试')
     } finally {
@@ -136,7 +139,7 @@ export default function DocList() {
             locale={{ emptyText: loading ? '正在加载…' : loadError ? '列表暂不可用' : <Empty description={keyword ? '没有匹配的标题，试试其他关键词' : scope === 'shared' ? '还没有共享给你的文档，请文档所有者添加你为协作者' : '还没有文档，先新建一篇吧'} /> }}
             renderItem={(doc) => (
               <List.Item actions={[
-                <Link key="open" to={'/docs/' + doc.id}>打开</Link>,
+                <Link key="open" to={documentHref(doc.id, sourcePath)}>打开</Link>,
                 <Button key="copy" type="link" onClick={() => setCopying(doc)}>创建副本</Button>,
                 <Button key="template" type="link" disabled={Boolean(templatePendingName)} onClick={() => setSavingTemplate(doc)}>保存为模板</Button>,
                 doc.permission === 2 && <Button key="rename" type="link" onClick={() => setEditing(doc)}>重命名</Button>,
@@ -145,7 +148,7 @@ export default function DocList() {
                   <Button type="link" danger>删除</Button>
                 </Popconfirm>,
               ].filter(Boolean)}>
-                <List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={<Link to={'/docs/' + doc.id}>{doc.title}</Link>}
+                <List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={<Link to={documentHref(doc.id, sourcePath)}>{doc.title}</Link>}
                   description={<Space wrap><Tag>{doc.isOwner ? '所有者' : doc.permission === 2 ? '可编辑' : '只读'}</Tag><span>{doc.ownerName + ' · ' + doc.updateTime}</span></Space>} />
               </List.Item>
             )}
@@ -159,9 +162,9 @@ export default function DocList() {
         onReview={name => navigate('/templates?' + new URLSearchParams({ source: 'personal', keyword: name }).toString())} />}
       {showGuide && <UserGuide onClose={() => setShowGuide(false)} />}
       {copying && <CopyModal doc={copying} onClose={() => setCopying(null)}
-        onCreated={data => { message.success('已创建服务端版本 ' + data.sourceRevision + ' 的副本'); navigate('/docs/' + data.id) }} />}
+        onCreated={data => { message.success('已创建服务端版本 ' + data.sourceRevision + ' 的副本'); navigate(documentHref(data.id, sourcePath)) }} />}
       {managing && <CollaboratorModal doc={managing} onClose={() => setManaging(null)} />}
-      {importing && <ImportModal onClose={() => setImporting(false)} onCreated={id => navigate('/docs/' + id)} />}
+      {importing && <ImportModal onClose={() => setImporting(false)} onCreated={id => navigate(documentHref(id, sourcePath))} />}
       {editing && <RenameModal doc={editing} onClose={() => setEditing(null)}
         onSaved={() => setRefresh(value => value + 1)} />}
     </Layout>

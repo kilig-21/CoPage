@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeftOutlined, CloudOutlined, TeamOutlined } from '@ant-design/icons'
 import { Alert, Avatar, Button, Layout, Modal, Space, Tag, Tooltip, Typography } from 'antd'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { documentHref, documentReturn } from '../navigation/documents'
 import useQuillCollab from '../editor/useQuillCollab'
 import CollaboratorModal from '../components/CollaboratorModal'
 import HistoryDrawer from '../components/HistoryDrawer'
@@ -19,6 +20,8 @@ import UserGuide from '../components/UserGuide'
 export default function Editor() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const returnTarget = documentReturn(location.search)
   const docId = Number(id)
   const [renaming, setRenaming] = useState(false)
   const [sharing, setSharing] = useState(false)
@@ -79,7 +82,7 @@ export default function Editor() {
     <Layout className="app-shell">
       <header className="topbar editor-topbar">
         <div className="editor-title-row">
-          <Button type="text" aria-label="返回文档列表" icon={<ArrowLeftOutlined />} onClick={() => navigate('/docs')} />
+          <Button type="text" aria-label={returnTarget.label} icon={<ArrowLeftOutlined />} onClick={() => navigate(returnTarget.path)}>{returnTarget.label}</Button>
           <Typography.Text className="editor-title" strong>{title || '协同文档 #' + id}</Typography.Text>
           {permission === 2 && <Button onClick={() => setRenaming(true)}>重命名</Button>}
         </div>
@@ -123,7 +126,7 @@ export default function Editor() {
               {unavailableDrafts.length > 1 && <Typography.Paragraph strong>本地草稿 {index + 1}</Typography.Paragraph>}
               <DraftBackupDownloads backup={backup} />
             </div>)}
-            <Button onClick={() => navigate('/docs')}>稍后处理，返回列表</Button></>} />}
+            <Button onClick={() => navigate(returnTarget.path)}>稍后处理，{returnTarget.label}</Button></>} />}
         {showFind && permission > 0 && <DocumentFindPanel state={documentFindState} permission={permission}
           focusEpoch={findFocusEpoch} onQuery={queryDocument} onNext={nextDocumentMatch}
           onReplace={replaceDocumentMatch} onClose={closeFind} />}
@@ -142,7 +145,7 @@ export default function Editor() {
         onClose={() => setShowExport(false)} />}
       {showCopy && permission > 0 && <CopyModal doc={{ id: docId, title }}
         canCopy={() => permission > 0 && !recoveryDraft && canExportDocument()}
-        onClose={() => setShowCopy(false)} onCreated={data => { setShowCopy(false); navigate('/docs/' + data.id) }} />}
+        onClose={() => setShowCopy(false)} onCreated={data => { setShowCopy(false); navigate(documentHref(data.id, returnTarget.path)) }} />}
       {showPrint && permission > 0 && <PrintModal docId={docId}
         canPrint={() => permission > 0 && !recoveryDraft && canExportDocument()}
         onClose={() => setShowPrint(false)} />}
@@ -150,7 +153,7 @@ export default function Editor() {
         maskClosable={false} keyboard={false} onCancel={() => undefined}
         footer={[
           <Button key="discard" danger onClick={discardDraft}>丢弃本地草稿</Button>,
-          <Button key="later" onClick={() => navigate('/docs')}>稍后处理</Button>,
+          <Button key="later" onClick={() => navigate(returnTarget.path)}>稍后处理</Button>,
           <Button key="recover" type="primary" disabled={permission !== 2} onClick={recoverDraft}>恢复草稿并同步</Button>,
         ]}>
         <Typography.Paragraph>这份草稿可能包含服务端尚未确认的修改。恢复前不会自动重发，也不会覆盖本地草稿。</Typography.Paragraph>

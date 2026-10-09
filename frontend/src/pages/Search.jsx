@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeftOutlined, FileTextOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Empty, Input, List, Space, Typography } from 'antd'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { documentHref } from '../navigation/documents'
 import request from '../api/request'
 import LogoutButton from '../components/LogoutButton'
 import { snippetParts } from '../search/snippet'
@@ -10,6 +11,8 @@ const PAGE_SIZE = 10
 
 export default function Search() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const sourcePath = location.pathname + location.search + location.hash
   const [params, setParams] = useSearchParams()
   const query = (params.get('q') || '').trim()
   const rawPage = Number(params.get('page') || 1)
@@ -66,7 +69,7 @@ export default function Search() {
         <List loading={loading} dataSource={results}
           locale={{ emptyText: <Empty description={error ? '暂时无法显示搜索结果' : query ? '没有找到相关文档' : '输入关键词，搜索你有权限访问的标题和正文'} /> }}
           pagination={total > PAGE_SIZE ? { current: page, pageSize: PAGE_SIZE, total: Math.min(total, 10000), showSizeChanger: false, onChange: (next) => setParams({ q: query, page: String(next) }) } : false}
-          renderItem={(item) => <List.Item><List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={<Link to={`/docs/${item.id}`}>{item.title}</Link>} description={<span>{snippetParts(item.snippet).map((part, index) => part.highlighted ? <strong key={index}>{part.text}</strong> : part.text)}</span>} /></List.Item>} />
+          renderItem={(item) => <List.Item><List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={<Link to={documentHref(item.id, sourcePath)}>{item.title}</Link>} description={<span>{snippetParts(item.snippet).map((part, index) => part.highlighted ? <strong key={index}>{part.text}</strong> : part.text)}</span>} /></List.Item>} />
       </Card>
     </main>
   )
