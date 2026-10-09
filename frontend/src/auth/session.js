@@ -29,9 +29,10 @@ export function logoutSession(storage) {
 // 只处理当前请求所属的会话，避免迟到的 401 退出刚登录的新账号；草稿键保持原样。
 export function expireSession(storage, requestToken, notify) {
   if (!requestToken || storage.getItem('collab-token') !== requestToken) return false
-  storage.removeItem('collab-token')
-  storage.removeItem('collab-user')
-  notify()
+  let result
+  try { result = { tokenCleared: true, ...logoutSession(storage) } }
+  catch { result = { tokenCleared: false, usernameCleared: false } }
+  notify({ ...result, cleanupFailed: !result.tokenCleared || !result.usernameCleared })
   return true
 }
 

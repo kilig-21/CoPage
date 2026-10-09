@@ -63,7 +63,9 @@ export default function Account() {
       if (!alive.current || controller.signal.aborted) return
       passwordForm.resetFields()
       let storageFailed = false
-      try { expireSession(localStorage, token, () => {}) } catch { storageFailed = true }
+      try {
+        if (!expireSession(localStorage, token, result => { storageFailed = result.cleanupFailed })) return
+      } catch { storageFailed = true }
       navigate('/login', { replace: true, state: { passwordChanged: true, storageFailed, from: '/account' } })
     } catch (failure) {
       if (alive.current && !controller.signal.aborted) setError(failure.code === 400 ? failure.message

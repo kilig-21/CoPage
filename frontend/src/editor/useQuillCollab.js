@@ -398,7 +398,7 @@ export default function useQuillCollab(docId) {
         persistDraft()
         socket.close()
         expireSession(localStorage, token,
-          () => window.dispatchEvent(new Event('copage-auth-expired')))
+          detail => window.dispatchEvent(new CustomEvent('copage-auth-expired', { detail })))
       },
     })
     client.attachSocket(socket)

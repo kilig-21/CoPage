@@ -61,6 +61,7 @@ export default function Login() {
         {location.state?.logoutCleanupFailed && <Alert type="warning" showIcon message="浏览器未能清除显示用的账号名，请允许本站保存数据后重新登录" />}
         {location.state?.passwordChanged && <Alert type="success" showIcon message="密码已更新，请用新密码重新登录；已有本地草稿仍保留" />}
         {location.state?.storageFailed && <Alert type="warning" showIcon message="浏览器未能清除旧登录信息，请允许本站保存数据后重新登录；密码更新已成功" />}
+        {location.state?.expiredCleanupFailed && <Alert type="warning" showIcon message="浏览器未能完整清除失效的登录信息，请允许本站保存数据后重新登录；原账号草稿仍保留" />}
         {location.state?.expired && <Alert type="warning" showIcon message="登录已失效，请重新登录；未确认的本地草稿仍保留在此浏览器中" />}
         {location.state?.sessionChanged && <Alert type="info" showIcon message="登录状态已在其他页面更改，请重新登录；未确认的草稿仍保留在原账号下" />}
         {location.state?.backupHandled && <Alert type="info" showIcon message="请重新登录；未确认内容请从已保存的本地备份恢复" />}

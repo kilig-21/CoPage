@@ -202,3 +202,41 @@ test('退出已清除令牌但账号名失败仍无登录，后续新登录身�
   assert.equal(data.get('collab-user'), 'testB')
   assert.equal(data.get('copage-draft:v1:testA:377:x'), 'draft')
 })
+
+test('确认失效后账号名清理失败仍通知登录页，原草稿保持', () => {
+  const data = new Map([['collab-token', 'A'], ['collab-user', 'testA'], ['draft-A', 'saved']])
+  let result
+  const storage = { getItem: key => data.get(key), removeItem: key => {
+    if (key === 'collab-user') throw new DOMException('blocked', 'SecurityError')
+    data.delete(key)
+  } }
+  assert.equal(expireSession(storage, 'A', value => { result = value }), true)
+  assert.deepEqual(result, { tokenCleared: true, usernameCleared: false, cleanupFailed: true })
+  assert.equal(data.has('collab-token'), false)
+  assert.equal(data.get('collab-user'), 'testA')
+  assert.equal(data.get('draft-A'), 'saved')
+})
+
+test('服务器确认失效但令牌删除失败仍反馈，不能冒称已清除', () => {
+  const data = new Map([['collab-token', 'A'], ['collab-user', 'testA'], ['draft-A', 'saved']])
+  let result
+  const storage = { getItem: key => data.get(key), removeItem: () => { throw new DOMException('blocked', 'SecurityError') } }
+  assert.equal(expireSession(storage, 'A', value => { result = value }), true)
+  assert.deepEqual(result, { tokenCleared: false, usernameCleared: false, cleanupFailed: true })
+  assert.deepEqual([...data], [['collab-token', 'A'], ['collab-user', 'testA'], ['draft-A', 'saved']])
+})
+
+test('较新登录存在时，失败清理逻辑也不能替旧请求退出新身份', () => {
+  const storage = { getItem: () => 'B', removeItem: () => { throw new Error('must not clear B') } }
+  let notified = false
+  assert.equal(expireSession(storage, 'A', () => { notified = true }), false)
+  assert.equal(notified, false)
+})
+
+test('无法确认当前登录身份时不清理或通知其它账号', () => {
+  let removed = false, notified = false
+  const storage = { getItem: () => { throw new DOMException('blocked', 'SecurityError') }, removeItem: () => { removed = true } }
+  assert.throws(() => expireSession(storage, 'A', () => { notified = true }), /blocked/)
+  assert.equal(removed, false)
+  assert.equal(notified, false)
+})

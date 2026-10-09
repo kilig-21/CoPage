@@ -56,9 +56,14 @@ function SessionApp() {
       : `${PAGE_TITLES[location.pathname] || '文档'} · CoPage`
   }, [location.pathname, localBackup])
   useEffect(() => {
-    const expired = () => navigate('/login', { replace: true, state: {
-      expired: true, from: safeReturnPath(location.pathname + location.search + location.hash),
-    } })
+    const expired = event => {
+      window.dispatchEvent(new Event('copage-auth-changed'))
+      navigate('/login', { replace: true, state: {
+        expired: true, expiredCleanupFailed: Boolean(event.detail?.cleanupFailed),
+        from: safeReturnPath(location.pathname === '/login'
+          ? location.state?.from : location.pathname + location.search + location.hash),
+      } })
+    }
     window.addEventListener('copage-auth-expired', expired)
     return () => window.removeEventListener('copage-auth-expired', expired)
   }, [location, navigate])
