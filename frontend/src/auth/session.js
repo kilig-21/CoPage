@@ -1,5 +1,5 @@
 export function safeReturnPath(path) {
-  return typeof path === 'string' && /^\/(?:docs(?:\/\d+)?|home|templates|trash|search|account)(?:[?#].*)?$/.test(path) ? path : '/docs'
+  return typeof path === 'string' && /^\/(?:docs(?:\/\d+)?|home|groups|templates|trash|search|account)(?:[?#].*)?$/.test(path) ? path : '/docs'
 }
 
 export function saveSession(storage, { token, username }) {

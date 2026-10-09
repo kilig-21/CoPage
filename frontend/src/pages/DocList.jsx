@@ -98,6 +98,7 @@ export default function DocList() {
         <Typography.Title level={4}>协同文档</Typography.Title>
         <Space wrap>
           <Button onClick={() => navigate('/home')}>工作台</Button>
+          <Button onClick={() => navigate('/groups')}>我的小组</Button>
           <Button icon={<SearchOutlined />} onClick={() => navigate('/search')}>搜索</Button>
           <Button onClick={() => navigate('/trash')}>回收站</Button>
           <Button onClick={() => setShowGuide(true)}>使用指南</Button>

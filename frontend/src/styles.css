@@ -123,3 +123,11 @@ body { margin: 0; min-width: 0; }
 .workbench-recent { margin: 24px 0; }
 .workbench .ant-list-item-meta-title, .workbench .ant-list-item-meta-description { overflow-wrap: anywhere; }
 @media (max-width: 640px) { .search-title { flex-wrap: wrap; } }
+
+.group-section { margin-bottom: 24px; }
+.group-page .ant-list-item-meta-title, .group-page .ant-list-item-meta-description { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .group-page .ant-list-item { flex-wrap: wrap; gap: 12px; }
+  .group-page .ant-list-item-meta { flex-basis: 100%; }
+  .group-page .ant-list-item-action { margin-left: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+}
