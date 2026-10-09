@@ -15,7 +15,7 @@ async function api(path, method = 'GET', body, status = 200, auth = token) {
 try {
   await api('/doc/templates','GET',undefined,401,null)
   token=(await api('/auth/login','POST',{username:'testA',password:'123456'})).token
-  const templates=await api('/doc/templates');assert.equal(templates.length,3)
+  const templates=await api('/doc/templates');assert.equal(templates.length,6);assert.equal(new Set(templates.map(t=>t.id)).size,6);assert.ok(templates.every(t=>['collaboration','planning','learning'].includes(t.category)))
   await api('/doc','POST',{templateId:'nonexistent'},400)
   const template=templates.find(t=>t.id==='meeting'), title='TemplateSmoke-'+randomUUID()
   const doc=await api('/doc','POST',{title,templateId:template.id});created.push(doc.id)
@@ -37,7 +37,7 @@ try {
   assert.deepEqual((await api('/doc/'+doc.id)).content,template.content)
   const search=await api('/search?q='+encodeURIComponent(title))
   assert.ok(search.list.some(row=>row.id===doc.id),'template document is searchable')
-  console.log(JSON.stringify({docIds:created,templates:3,authenticated:true,independentDocuments:true,initialSnapshot:true,restore:true,search:true}))
+  console.log(JSON.stringify({docIds:created,templates:templates.length,authenticated:true,independentDocuments:true,initialSnapshot:true,restore:true,search:true}))
 } finally {
   socket?.close()
   for(const id of created)await api('/doc/'+id,'DELETE')

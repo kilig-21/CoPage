@@ -140,3 +140,7 @@ body { margin: 0; min-width: 0; }
   .project-page .ant-list-item-meta, .project-document-picker .ant-list-item-meta { flex-basis: 100%; }
   .project-page .ant-list-item-action, .project-document-picker .ant-list-item-action { margin-left: 0; display: flex; flex-wrap: wrap; }
 }
+
+.template-filters { margin: 16px 0; }
+.template-center .ant-card-head-title { overflow-wrap: anywhere; white-space: normal; }
+.template-center .ant-btn { max-width: 100%; height: auto; min-height: 32px; white-space: normal; }
