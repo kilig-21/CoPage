@@ -116,3 +116,16 @@ CREATE TABLE IF NOT EXISTS project_document (
  added_by BIGINT NOT NULL, create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
  PRIMARY KEY(project_id,doc_id), KEY idx_project_document_doc(doc_id,project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS personal_template_owner (
+ user_id BIGINT PRIMARY KEY
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS personal_template (
+ id BIGINT PRIMARY KEY AUTO_INCREMENT, owner_id BIGINT NOT NULL,
+ name VARCHAR(200) NOT NULL, description VARCHAR(300) NOT NULL DEFAULT '',
+ category VARCHAR(20) NOT NULL, content MEDIUMTEXT NOT NULL, content_bytes INT NOT NULL,
+ source_revision BIGINT NOT NULL, version BIGINT NOT NULL DEFAULT 1,
+ create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ KEY idx_personal_template_owner(owner_id,category,update_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

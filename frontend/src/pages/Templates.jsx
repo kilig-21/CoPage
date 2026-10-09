@@ -5,7 +5,7 @@ import request from '../api/request'
 import DocumentPreview from '../components/DocumentPreview'
 import UserGuide from '../components/UserGuide'
 
-const categories = { collaboration: '团队协作', planning: '计划与需求', learning: '学习与复盘' }
+import { templateCategories as categories } from '../templates/categories'
 export default function Templates() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -69,7 +69,7 @@ export default function Templates() {
   }
   return <Layout className="app-shell">
     <header className="topbar"><Typography.Title level={4}>模板中心</Typography.Title><Space wrap>
-      <Link to="/home">工作台</Link><Link to="/docs">我的文档</Link>
+      <Link to="/home">工作台</Link><Link to="/docs">我的文档</Link><Link to="/templates?source=personal">我的模板</Link>
       <Button onClick={() => setShowGuide(true)}>使用指南</Button>
     </Space></header>
     <main className="content-wrap template-center">

@@ -13,12 +13,12 @@ const Login = lazy(() => import('./pages/Login'))
 const DocList = lazy(() => import('./pages/DocList'))
 const Editor = lazy(() => import('./pages/Editor'))
 const Search = lazy(() => import('./pages/Search'))
-const Templates = lazy(() => import('./pages/Templates'))
+const Templates = lazy(() => import('./pages/TemplateCenter'))
 const Trash = lazy(() => import('./pages/Trash'))
 
 const PAGE_TITLES = {
   '/projects': '我的项目', '/groups': '我的小组', '/home': '工作台', '/account': '账号设置', '/login': '登录或注册', '/docs': '我的文档', '/search': '搜索文档',
-  '/templates': '文档模板', '/trash': '回收站',
+  '/templates': '模板中心', '/trash': '回收站',
 }
 
 class PageBoundary extends Component {

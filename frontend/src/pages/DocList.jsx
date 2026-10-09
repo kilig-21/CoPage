@@ -3,6 +3,7 @@ import { CloseCircleOutlined, FileTextOutlined, PlusOutlined, SearchOutlined } f
 import { Alert, Avatar, Button, Card, Empty, Input, Layout, List, Pagination, Popconfirm, Radio, Space, Tag, Typography, message } from 'antd'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
+import SavePersonalTemplateModal from '../components/SavePersonalTemplateModal'
 import CollaboratorModal from '../components/CollaboratorModal'
 import ImportModal from '../components/ImportModal'
 import CopyModal from '../components/CopyModal'
@@ -38,6 +39,8 @@ export default function DocList() {
   const createController = useRef(null)
   useEffect(() => () => createController.current?.abort(), [])
   const [importing, setImporting] = useState(false)
+  const [savingTemplate, setSavingTemplate] = useState(null)
+  const [templatePendingName, setTemplatePendingName] = useState(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -126,6 +129,8 @@ export default function DocList() {
           onChange={event => setFilter(event.target.value)} onSearch={applyFilter} />
         {keyword && <div className="filter-summary"><span>标题包含“{keyword}”</span>
           <Button type="link" onClick={() => applyFilter('')}>清除筛选</Button></div>}
+        {templatePendingName && <Alert type="warning" showIcon message="模板保存结果未确认，请先核对我的模板，再决定是否重试。"
+          action={<Button onClick={() => navigate('/templates?' + new URLSearchParams({ source: 'personal', keyword: templatePendingName }).toString())}>核对我的模板</Button>} />}
         <Card className="doc-list-card">
           {loadError && <Alert type="error" showIcon message={loadError}
             action={<Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>重试</Button>} />}
@@ -138,6 +143,7 @@ export default function DocList() {
               <List.Item actions={[
                 <Link key="open" to={'/docs/' + doc.id}>打开</Link>,
                 <Button key="copy" type="link" onClick={() => setCopying(doc)}>创建副本</Button>,
+                <Button key="template" type="link" disabled={Boolean(templatePendingName)} onClick={() => setSavingTemplate(doc)}>保存为模板</Button>,
                 doc.permission === 2 && <Button key="rename" type="link" onClick={() => setEditing(doc)}>重命名</Button>,
                 doc.isOwner && <Button key="members" type="link" onClick={() => setManaging(doc)}>协作者管理</Button>,
                 doc.isOwner && <Popconfirm key="delete" overlayClassName="document-action-confirm" title={`将“${doc.title}”移入回收站？`} description="协作者将停止访问，你可以在回收站恢复。" onConfirm={() => deleteDocument(doc.id)}>
@@ -153,6 +159,9 @@ export default function DocList() {
             disabled={loading} onChange={setPage} />}
         </Card>
       </main>
+      {savingTemplate && <SavePersonalTemplateModal key={savingTemplate.id} doc={savingTemplate} onClose={() => setSavingTemplate(null)} onUncertain={setTemplatePendingName}
+        onSaved={data => { message.success('已保存服务端版本 ' + data.sourceRevision + ' 的个人模板'); navigate('/templates?' + new URLSearchParams({ source: 'personal', keyword: data.name }).toString()) }}
+        onReview={name => navigate('/templates?' + new URLSearchParams({ source: 'personal', keyword: name }).toString())} />}
       {showGuide && <UserGuide onClose={() => setShowGuide(false)} />}
       {copying && <CopyModal doc={copying} onClose={() => setCopying(null)}
         onCreated={data => { message.success('已创建服务端版本 ' + data.sourceRevision + ' 的副本'); navigate('/docs/' + data.id) }} />}
