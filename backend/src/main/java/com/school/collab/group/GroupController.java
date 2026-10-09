@@ -11,7 +11,7 @@ public class GroupController {
     private final GroupService groups;
     public GroupController(GroupService groups) { this.groups=groups; }
     @GetMapping
-    public Result<GroupService.ListView> list(@RequestParam(defaultValue="false")boolean archived,@RequestParam(defaultValue="1")int page,@RequestParam(defaultValue="20")int size) { return Result.ok(groups.list(archived,page,size)); }
+    public Result<GroupService.ListView> list(@RequestParam(defaultValue="false")boolean archived,@RequestParam(defaultValue="")String keyword,@RequestParam(defaultValue="1")int page,@RequestParam(defaultValue="20")int size) { return Result.ok(groups.list(archived,keyword,page,size)); }
     @PostMapping
     public Result<GroupService.IdView> create(@RequestBody Fields body) { return Result.ok(groups.create(body.name(),body.description())); }
     @GetMapping("/invitations")

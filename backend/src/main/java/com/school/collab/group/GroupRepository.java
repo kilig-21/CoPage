@@ -42,20 +42,24 @@ public class GroupRepository {
         return jdbc.query("SELECT id,name,description,owner_id,is_archived FROM copage_group WHERE id=?" + (lock ? " FOR UPDATE" : ""),
                 (r,n) -> new Group(r.getLong("id"),r.getString("name"),r.getString("description"),r.getLong("owner_id"),r.getBoolean("is_archived")), id).stream().findFirst();
     }
-    public long count(long user, boolean archived) {
-        return jdbc.queryForObject("SELECT COUNT(*) FROM copage_group g JOIN group_member m ON m.group_id=g.id AND m.user_id=? WHERE g.is_archived=?",
-                Long.class,user,archived);
+    public long count(long user, boolean archived) { return count(user,archived,""); }
+    public long count(long user, boolean archived, String keyword) {
+        return jdbc.queryForObject("""
+            SELECT COUNT(*) FROM copage_group g JOIN group_member m ON m.group_id=g.id AND m.user_id=?
+            WHERE g.is_archived=? AND (?='' OR LOCATE(?,g.name)>0 OR LOCATE(?,g.description)>0)
+            """,Long.class,user,archived,keyword,keyword,keyword);
     }
-    public List<Summary> list(long user, boolean archived, int page, int size) {
+    public List<Summary> list(long user, boolean archived, String keyword, int page, int size) {
         return jdbc.query("""
             SELECT g.id,g.name,g.description,g.owner_id,g.is_archived,g.update_time,m.role,
               (SELECT COUNT(*) FROM group_member x WHERE x.group_id=g.id) member_count
             FROM copage_group g JOIN group_member m ON m.group_id=g.id AND m.user_id=?
-            WHERE g.is_archived=? ORDER BY g.update_time DESC,g.id DESC LIMIT ? OFFSET ?
+            WHERE g.is_archived=? AND (?='' OR LOCATE(?,g.name)>0 OR LOCATE(?,g.description)>0)
+            ORDER BY g.update_time DESC,g.id DESC LIMIT ? OFFSET ?
             """, (r,n) -> new Summary(r.getLong("id"),r.getString("name"),r.getString("description"),
                 r.getLong("owner_id"),r.getLong("owner_id")==user?"owner":r.getString("role"),
                 r.getLong("member_count"),r.getBoolean("is_archived"),r.getTimestamp("update_time").toLocalDateTime().format(TIME)),
-                user,archived,size,((long)page-1)*size);
+                user,archived,keyword,keyword,keyword,size,((long)page-1)*size);
     }
     public String role(long group, long user) {
         var roles=jdbc.query("SELECT role FROM group_member WHERE group_id=? AND user_id=?",(r,n)->r.getString(1),group,user);

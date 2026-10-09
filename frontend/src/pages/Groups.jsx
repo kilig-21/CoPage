@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Select, Space, Tag, Typography } from 'antd'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
 import LogoutButton from '../components/LogoutButton'
 import UserGuide from '../components/UserGuide'
@@ -16,7 +16,7 @@ function GroupFields({ fields, busy, uncertain, error, onClose, onReview, onSave
   return <Modal open title={fields.id ? '修改小组资料' : '创建小组'} closable={!busy}
     maskClosable={!busy} keyboard={!busy} onCancel={onClose} footer={[
       <Button key="cancel" disabled={busy} onClick={onClose}>取消</Button>,
-      uncertain && <Button key="review" disabled={busy} onClick={onReview}>核对当前列表</Button>,
+      uncertain && <Button key="review" disabled={busy} onClick={() => onReview({ name: name.trim() })}>核对当前列表</Button>,
       <Button key="save" type="primary" loading={busy} disabled={uncertain || !name.trim()}
         onClick={() => onSave({ name: name.trim(), description: description.trim() })}>{fields.id ? '保存资料' : '创建小组'}</Button>,
     ]}>
@@ -33,6 +33,9 @@ function GroupFields({ fields, busy, uncertain, error, onClose, onReview, onSave
 export default function Groups() {
   const [showGuide, setShowGuide] = useState(false)
   const [params, setParams] = useSearchParams()
+  const location = useLocation()
+  const keyword = (params.get('keyword') || '').slice(0, 200).trim()
+  const [input, setInput] = useState(keyword)
   const archived = params.get('archived') === 'true'
   const page = Math.min(validId(params.get('page')) || 1, 1000000)
   const selected = validId(params.get('group'))
@@ -51,27 +54,35 @@ export default function Groups() {
   const [busy, setBusy] = useState(false)
   const [uncertain, setUncertain] = useState(false)
   const mutation = useRef(null)
-  useEffect(() => () => mutation.current?.abort(), [])
-  const choose = (id, nextPage = page, nextArchived = archived) =>
-    setParams({ ...(nextArchived ? { archived: 'true' } : {}), page: String(nextPage), ...(id ? { group: String(id) } : {}) })
+  useEffect(() => {
+    mutation.current?.abort(); mutation.current = null; setBusy(false); setFields(null); setUncertain(false)
+    return () => mutation.current?.abort()
+  }, [location.key])
+  useEffect(() => setInput(keyword), [keyword])
+  const choose = (id, nextPage = page, nextArchived = archived, nextKeyword = keyword) =>
+    setParams({ ...(nextArchived ? { archived: 'true' } : {}), ...(nextKeyword ? { keyword: nextKeyword } : {}),
+      page: String(nextPage), ...(id ? { group: String(id) } : {}) })
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true); setGroups(null); setInbox(null); setError('')
     Promise.all([
-      request.get('/groups', { params: { page, size: SIZE, archived }, signal: controller.signal }),
+      request.get('/groups', { params: { page, size: SIZE, archived, keyword }, signal: controller.signal }),
       request.get('/groups/invitations', { params: { page: inboxPage, size: SIZE }, signal: controller.signal }),
     ]).then(([list, invitations]) => {
       if (controller.signal.aborted) return
       const last = Math.max(1, Math.ceil(list.data.total / SIZE))
       const inboxLast = Math.max(1, Math.ceil(invitations.data.total / SIZE))
-      if (page > last) { choose(selected, last); return }
+      if (page > last) {
+        setParams(current => { const next = new URLSearchParams(current); next.set('page', String(last)); return next }, { replace: true })
+        return
+      }
       if (inboxPage > inboxLast) { setInboxPage(inboxLast); return }
       setGroups(list.data); setInbox(invitations.data); setUncertain(false)
     }).catch(failure => {
       if (!controller.signal.aborted) setError(failure?.code === 403 ? failure.message : '小组列表未能加载，请刷新重试。')
     }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [page, archived, inboxPage, refresh])
+  }, [page, archived, keyword, selected, inboxPage, refresh])
   useEffect(() => {
     const controller = new AbortController()
     setDetail(null); setDetailError(''); setUsername('')
@@ -106,7 +117,7 @@ export default function Groups() {
       if (!controller.signal.aborted) setBusy(false)
     }
   }
-  const review = () => { const target = fields?.id || 0; setFields(null); choose(target, 1, false); setRefresh(n => n + 1) }
+  const review = values => { const target = fields?.id || 0; const filter = target ? keyword : values.name; setFields(null); choose(target, 1, false, filter.trim()); setRefresh(n => n + 1) }
   return <Layout className="app-shell">
     <header className="topbar"><Typography.Title level={4}>我的小组</Typography.Title>
       <Space wrap><Link to="/home">工作台</Link><Link to="/docs">我的文档</Link><Link to="/projects">我的项目</Link>
@@ -136,9 +147,19 @@ export default function Groups() {
       <Space className="group-section"><Radio.Group aria-label="小组状态" value={archived} disabled={busy}
         options={[{ label: '进行中', value: false }, { label: '已归档', value: true }]}
         onChange={e => choose(0, 1, e.target.value)} /></Space>
+      <div className="group-section">
+        <Input.Search aria-label="筛选小组名称或简介" maxLength={200} value={input} disabled={busy}
+          placeholder="按小组名称或简介筛选" enterButton="查找小组" style={{ width: '100%', maxWidth: 420 }}
+          onChange={e => setInput(e.target.value)} onSearch={value => choose(0, 1, archived, value.trim())} />
+        <Space wrap style={{ marginTop: 8, display: 'flex' }}>
+          {groups && <Typography.Text role="status">{keyword ? '匹配的小组：' : '小组合计：'}{groups.total}</Typography.Text>}
+          {keyword && <Button disabled={busy} onClick={() => choose(0, 1, archived, '')}>清除小组筛选</Button>}
+        </Space>
+        <Typography.Paragraph type="secondary">筛选当前账号加入的小组，不影响上方收到的邀请。</Typography.Paragraph>
+      </div>
       <Card title={archived ? '已归档小组' : '我加入的小组'} className="group-section">
         <List rowKey="id" loading={loading} dataSource={groups?.list || []}
-          locale={{ emptyText: loading ? '正在加载…' : !groups ? '小组暂不可用' : <Empty description={archived ? '暂无归档小组' : '创建小组，或接受同伴的邀请'} /> }}
+          locale={{ emptyText: loading ? '正在加载…' : !groups ? '小组暂不可用' : <Empty description={keyword ? '没有匹配的小组，请调整关键词或清除筛选' : archived ? '暂无归档小组' : '创建小组，或接受同伴的邀请'} /> }}
           renderItem={group => <List.Item actions={archived ? group.role === 'owner' ? [
             <Popconfirm overlayClassName="document-action-confirm" key="restore" title={'恢复“' + group.name + '”？'} description="原成员将重新获得小组访问权限；文档仍逐篇授权。"
               disabled={!ready} onConfirm={() => mutate(signal => request.post('/groups/' + group.id + '/restore', {}, { signal }), '小组已恢复')}>
@@ -197,7 +218,7 @@ export default function Groups() {
       onClose={() => { if (!busy) setFields(null) }} onReview={review}
       onSave={values => mutate(signal => fields.id ? request.put('/groups/' + fields.id, values, { signal }) :
         request.post('/groups', values, { signal }), fields.id ? '小组资料已保存' : '小组已创建',
-        data => { setFields(null); if (!fields.id) choose(data.id, 1, false) })} />}
+        data => { setFields(null); if (!fields.id) choose(data.id, 1, false, '') })} />}
     {showGuide && <UserGuide initialSection="groups" onClose={() => setShowGuide(false)} />}
   </Layout>
 }

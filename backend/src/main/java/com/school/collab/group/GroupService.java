@@ -13,9 +13,11 @@ public class GroupService {
     private final GroupRepository groups;
     public GroupService(GroupRepository groups) { this.groups=groups; }
     @Transactional(readOnly=true)
-    public ListView list(boolean archived,int page,int size) {
+    public ListView list(boolean archived,String keyword,int page,int size) {
         long user=user(); paging(page,size);
-        return new ListView(groups.count(user,archived),groups.list(user,archived,page,size));
+        String filter=keyword==null?"":keyword.trim();
+        if(filter.length()>200)throw bad("筛选最多200字符");
+        return new ListView(groups.count(user,archived,filter),groups.list(user,archived,filter,page,size));
     }
     @Transactional
     public IdView create(String name,String description) {

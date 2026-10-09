@@ -31,7 +31,7 @@ class GroupServiceTest {
         assertTrue(service.access(10,false).canManage());
     }
     @Test void anonymousNeverReadsOrCreatesAnything() {
-        code(ErrorCode.UNAUTHORIZED,()->service.list(false,1,20));
+        code(ErrorCode.UNAUTHORIZED,()->service.list(false,"",1,20));
         code(ErrorCode.UNAUTHORIZED,()->service.create("组",""));
         code(ErrorCode.UNAUTHORIZED,()->service.detail(10));
         code(ErrorCode.UNAUTHORIZED,()->service.respond(10,true,1));
@@ -47,10 +47,27 @@ class GroupServiceTest {
         verify(repo).add(20,7,"owner");
     }
     @Test void listAndInboxAreScopedAndBounded() {
-        UserContext.set(2L,"member");when(repo.list(2,false,1,20)).thenReturn(List.of());when(repo.inbox(2,1,20)).thenReturn(List.of());
-        assertEquals(0,service.list(false,1,20).total());assertEquals(0,service.inbox(1,20).total());
-        for(int[] args:new int[][]{{0,20},{1,101},{1000001,20}})code(ErrorCode.PARAM_ERROR,()->service.list(false,args[0],args[1]));
-        verify(repo).list(2,false,1,20);verify(repo).inbox(2,1,20);
+        UserContext.set(2L,"member");when(repo.list(2,false,"",1,20)).thenReturn(List.of());when(repo.inbox(2,1,20)).thenReturn(List.of());
+        assertEquals(0,service.list(false,"",1,20).total());assertEquals(0,service.inbox(1,20).total());
+        for(int[] args:new int[][]{{0,20},{1,101},{1000001,20}})code(ErrorCode.PARAM_ERROR,()->service.list(false,"",args[0],args[1]));
+        verify(repo).list(2,false,"",1,20);verify(repo).inbox(2,1,20);
+    }
+    @Test void groupFilterUsesOnlyCurrentIdentityAndSameLiteralForCountAndPage() {
+        UserContext.set(7L,"user7");
+        when(repo.count(7,true,"规划%_")).thenReturn(21L);
+        when(repo.list(7,true,"规划%_",2,20)).thenReturn(List.of());
+        var result=service.list(true," 规划%_ ",2,20);
+        assertEquals(21,result.total());assertTrue(result.list().isEmpty());
+        verify(repo).count(7,true,"规划%_");verify(repo).list(7,true,"规划%_",2,20);
+        verify(repo,never()).members(anyLong());
+    }
+    @Test void groupFilterRejectsOversizeBeforeAnyReadAndNullMeansNoFilter() {
+        UserContext.set(7L,"user7");
+        code(ErrorCode.PARAM_ERROR,()->service.list(false,"字".repeat(201),1,20));
+        verifyNoInteractions(repo);
+        when(repo.list(7,false,"",1,20)).thenReturn(List.of());
+        service.list(false,null,1,20);
+        verify(repo).count(7,false,"");verify(repo).list(7,false,"",1,20);
     }
     @Test void nonMemberCannotReadRosterOrCreateInvitation() {
         as(3,null);code(ErrorCode.FORBIDDEN,()->service.detail(10));code(ErrorCode.FORBIDDEN,()->service.invite(10,"member"));

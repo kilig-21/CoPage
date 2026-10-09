@@ -128,8 +128,8 @@ body { margin: 0; min-width: 0; }
 .group-page .ant-list-item-meta-title, .group-page .ant-list-item-meta-description { overflow-wrap: anywhere; }
 @media (max-width: 640px) {
   .group-page .ant-list-item { flex-wrap: wrap; gap: 12px; }
-  .group-page .ant-list-item-meta { flex-basis: 100%; }
-  .group-page .ant-list-item-action { margin-left: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+  .group-page .ant-list .ant-list-item .ant-list-item-meta { flex: 1 1 100%; min-width: 0; }
+  .group-page .ant-list .ant-list-item .ant-list-item-action { margin: 0; width: 100%; display: flex; flex-wrap: wrap; gap: 4px; }
 }
 
 .project-section { margin: 24px 0; }
