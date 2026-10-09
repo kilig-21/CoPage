@@ -130,6 +130,9 @@ body { margin: 0; min-width: 0; }
   .group-page .ant-list-item { flex-wrap: wrap; gap: 12px; }
   .group-page .ant-list .ant-list-item .ant-list-item-meta { flex: 1 1 100%; min-width: 0; }
   .group-page .ant-list .ant-list-item .ant-list-item-action { margin: 0; width: 100%; display: flex; flex-wrap: wrap; gap: 4px; }
+  .group-page .ant-alert { flex-wrap: wrap; }
+  .group-page .ant-alert .ant-alert-content { min-width: 0; overflow-wrap: anywhere; }
+  .group-page .ant-alert .ant-alert-action { flex: 0 0 100%; margin: 8px 0 0; padding-left: 22px; }
 }
 
 .project-section { margin: 24px 0; }
