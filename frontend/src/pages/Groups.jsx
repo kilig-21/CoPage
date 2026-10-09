@@ -103,10 +103,10 @@ export default function Groups() {
       if (!controller.signal.aborted) setBusy(false)
     }
   }
-  const review = () => { setFields(null); choose(0, 1); setRefresh(n => n + 1) }
+  const review = () => { const target = fields?.id || 0; setFields(null); choose(target, 1, false); setRefresh(n => n + 1) }
   return <Layout className="app-shell">
     <header className="topbar"><Typography.Title level={4}>我的小组</Typography.Title>
-      <Space wrap><Link to="/home">工作台</Link><Link to="/docs">我的文档</Link>
+      <Space wrap><Link to="/home">工作台</Link><Link to="/docs">我的文档</Link><Link to="/projects">我的项目</Link>
         <Button disabled={loading || busy} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
         <Button type="primary" disabled={!ready} onClick={() => { setError(''); setFields({}) }}>创建小组</Button></Space>
     </header>
@@ -150,6 +150,7 @@ export default function Groups() {
         {detail && detail.id === selected && <>
           <Typography.Paragraph>{detail.description || '尚未填写简介'}</Typography.Paragraph>
           <Space wrap className="group-section"><Tag>我的角色：{roles[detail.role]}</Tag>
+            <Link to={'/projects?scope=group&groupId=' + detail.id}>查看小组项目</Link>
             {manager && <Button disabled={!ready} onClick={() => { setError(''); setFields(detail) }}>修改小组资料</Button>}
             {detail.role === 'owner' ? <Popconfirm overlayClassName="document-action-confirm" title={'归档“' + detail.name + '”？'}
               description="取消未接受邀请，保留成员关系；原文档与单独授权继续保留。" disabled={!ready}

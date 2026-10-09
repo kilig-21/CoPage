@@ -19,6 +19,17 @@ class GroupServiceTest {
     private void as(long id,String role) { when(repo.invitationVersion(anyLong(),anyLong())).thenReturn(1L); UserContext.set(id,"user"+id);when(repo.find(eq(10L),anyBoolean())).thenReturn(Optional.of(group));when(repo.role(10,id)).thenReturn(role); }
     private void code(ErrorCode code,Runnable action) { assertEquals(code,assertThrows(BizException.class,action::run).getErrorCode()); }
 
+    @Test void lockedProjectAccessRejectsRemovedMembershipDespiteOlderSnapshot() {
+        as(2,"member");when(repo.roleForUpdate(10,2)).thenReturn(null);
+        code(ErrorCode.FORBIDDEN,()->service.access(10,true));
+        verify(repo).roleForUpdate(10,2);verify(repo,never()).role(10,2);
+    }
+    @Test void lockedProjectAccessUsesCurrentDemotionInsteadOfSnapshotAdminRole() {
+        as(2,"admin");when(repo.roleForUpdate(10,2)).thenReturn("member");
+        assertFalse(service.access(10,true).canManage());
+        verify(repo).roleForUpdate(10,2);verify(repo,never()).role(10,2);
+        assertTrue(service.access(10,false).canManage());
+    }
     @Test void anonymousNeverReadsOrCreatesAnything() {
         code(ErrorCode.UNAUTHORIZED,()->service.list(false,1,20));
         code(ErrorCode.UNAUTHORIZED,()->service.create("组",""));

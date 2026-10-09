@@ -30,7 +30,7 @@ export default function Home() {
     <header className="topbar">
       <Typography.Title level={4}>CoPage 工作台</Typography.Title>
       <nav aria-label="应用导航"><Space wrap>
-        <Link to="/docs">我的文档</Link><Link to="/groups">我的小组</Link><Link to="/templates">模板中心</Link>
+        <Link to="/docs">我的文档</Link><Link to="/groups">我的小组</Link><Link to="/projects">我的项目</Link><Link to="/templates">模板中心</Link>
         <Link to="/search">搜索</Link><Link to="/trash">回收站</Link><Link to="/account">账号设置</Link>
         <Button onClick={() => setShowGuide(true)}>使用指南</Button>
       </Space></nav>

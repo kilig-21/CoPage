@@ -102,6 +102,17 @@ public class GroupService {
     private void requireInvitationVersion(long group,long target,long expected) {
         if(expected<=0||groups.invitationVersion(group,target)!=expected)throw bad("邀请已更新或失效，请刷新当前邀请");
     }
+    /** Caller holds its read/write transaction; lock the group before project rows on writes. */
+    public Access access(long id,boolean lock) {
+        var g=active(id,lock);
+        // Project writes may already have a repeatable-read snapshot before waiting for this lock.
+        String role=lock?groups.roleForUpdate(g.id(),user()):groups.role(g.id(),user());
+        if(role==null)throw new BizException(ErrorCode.FORBIDDEN,"你不是此小组的成员");
+        return new Access(g.id(),g.name(),g.ownerId()==user()?"owner":role);
+    }
+    public record Access(long id,String name,String role) {
+        public boolean canManage() { return "owner".equals(role)||"admin".equals(role); }
+    }
     private GroupRepository.Group active(long id,boolean lock) {
         var g=existing(id,lock);if(g.archived())throw new BizException(ErrorCode.NOT_FOUND,"小组已归档");return g;
     }

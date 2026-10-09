@@ -61,6 +61,10 @@ public class GroupRepository {
         var roles=jdbc.query("SELECT role FROM group_member WHERE group_id=? AND user_id=?",(r,n)->r.getString(1),group,user);
         return roles.isEmpty()?null:roles.getFirst();
     }
+    public String roleForUpdate(long group, long user) {
+        var roles=jdbc.query("SELECT role FROM group_member WHERE group_id=? AND user_id=? FOR UPDATE",(r,n)->r.getString(1),group,user);
+        return roles.isEmpty()?null:roles.getFirst();
+    }
     public List<Member> members(long group) {
         return jdbc.query("""
             SELECT m.user_id,u.username,u.nickname,m.role,m.joined_at FROM group_member m JOIN user u ON u.id=m.user_id
