@@ -3,6 +3,7 @@ import { Alert, Button, Card, Col, Empty, Layout, List, Row, Space, Statistic, T
 import { Link } from 'react-router-dom'
 import request from '../api/request'
 import UserGuide from '../components/UserGuide'
+import WorkspaceOverview from '../components/WorkspaceOverview'
 
 export default function Home() {
   const [data, setData] = useState(null)
@@ -53,6 +54,7 @@ export default function Home() {
             <Link to="/docs?scope=shared">查看同伴共享的文档</Link></>}
         </Card></Col>
       </Row>
+      <WorkspaceOverview />
       <Card title="近期更新" className="workbench-recent" loading={loading}
         extra={<Link to="/docs">查看全部</Link>}>
         {data && <List rowKey="id" dataSource={data.recent}
