@@ -122,7 +122,18 @@ body { margin: 0; min-width: 0; }
 
 .workbench-recent { margin: 24px 0; }
 .workbench .ant-list-item-meta-title, .workbench .ant-list-item-meta-description { overflow-wrap: anywhere; }
+.workbench .ant-alert { margin-bottom: 16px; }
 @media (max-width: 640px) { .search-title { flex-wrap: wrap; } }
+@media (max-width: 640px) {
+  .workbench .workbench-documents .ant-card-head-wrapper { flex-wrap: wrap; gap: 8px; }
+  .workbench .workbench-documents .ant-card-head-title { flex: 1 1 100%; white-space: normal; }
+  .workbench .workbench-documents .ant-card-extra { margin: 0; max-width: 100%; }
+  .workbench .workbench-documents .ant-list-item { flex-wrap: wrap; gap: 12px; }
+  .workbench .workbench-documents .ant-list .ant-list-item .ant-list-item-meta { flex: 1 1 100%; min-width: 0; }
+  .workbench .ant-alert { flex-wrap: wrap; }
+  .workbench .ant-alert .ant-alert-content { min-width: 0; overflow-wrap: anywhere; }
+  .workbench .ant-alert .ant-alert-action { flex: 0 0 100%; margin: 8px 0 0; padding-left: 22px; }
+}
 
 .group-section { margin-bottom: 24px; }
 .group-page .ant-list-item-meta-title, .group-page .ant-list-item-meta-description { overflow-wrap: anywhere; }
