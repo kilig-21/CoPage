@@ -67,8 +67,8 @@ export default function Home() {
       </Card>
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12}><Card title="模板中心">
-          <Typography.Paragraph>会议纪要、项目计划和学习笔记，可预览后创建自己的文档。</Typography.Paragraph>
-          <Link to="/templates">挑选一份模板</Link>
+          <Typography.Paragraph>按用途选择六种内置框架，或复用自己的私人模板，预览后创建独立文档。</Typography.Paragraph>
+          <Space wrap><Link to="/templates">挑选内置模板</Link><Link to="/templates?source=personal">我的模板</Link></Space>
         </Card></Col>
         <Col xs={24} sm={12}><Card title="找到需要的资料">
           <Typography.Paragraph>按标题和正文检索你有权限访问的文档。</Typography.Paragraph>

@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
+import UserGuide from '../components/UserGuide'
 import DocumentPreview from '../components/DocumentPreview'
 import { templateCategories as categories } from '../templates/categories'
 
 const SIZE = 20
 export default function PersonalTemplates() {
+  const [showGuide, setShowGuide] = useState(false)
   const [params, setParams] = useSearchParams()
   const location = useLocation()
   const navigate = useNavigate()
@@ -89,6 +91,7 @@ export default function PersonalTemplates() {
   return <Layout className="app-shell">
     <header className="topbar"><Typography.Title level={4}>我的模板</Typography.Title><Space wrap>
       <Link to="/home">工作台</Link><Link to="/docs">我的文档</Link><Link to="/templates">内置模板</Link>
+      <Button onClick={() => setShowGuide(true)}>使用指南</Button>
       <Button disabled={busy || loading} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
     </Space></header>
     <main className="content-wrap template-center personal-template-page">
@@ -144,5 +147,6 @@ export default function PersonalTemplates() {
         <Input.TextArea aria-label="修改个人模板说明" maxLength={300} rows={3} showCount value={editing.description} disabled={busy || Boolean(uncertain)} onChange={e => setEditing(current => ({ ...current, description: e.target.value }))} />
       </>}
     </Modal>}
+    {showGuide && <UserGuide initialSection="templates" onClose={() => setShowGuide(false)} />}
   </Layout>
 }

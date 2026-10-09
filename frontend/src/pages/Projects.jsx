@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
+import UserGuide from '../components/UserGuide'
 import ProjectDocumentsModal from '../components/ProjectDocumentsModal'
 
 const idValue = value => Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Number(value) : 0
@@ -33,6 +34,7 @@ function Fields({ value, context, busy, uncertain, error, onSave, onClose, onRev
 }
 
 export default function Projects() {
+  const [showGuide, setShowGuide] = useState(false)
   const [params, setParams] = useSearchParams()
   const location = useLocation()
   const selected = idValue(params.get('project'))
@@ -140,6 +142,7 @@ export default function Projects() {
   return <Layout className="app-shell">
     <header className="topbar"><Typography.Title level={4}>我的项目</Typography.Title><Space wrap>
       <Link to="/home">工作台</Link><Link to="/docs">我的文档</Link><Link to="/groups">我的小组</Link>
+      <Button onClick={() => setShowGuide(true)}>使用指南</Button>
       <Button disabled={loading || busy} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
       <Button type="primary" disabled={!ready} onClick={() => { setError(''); setFields({ groupId: context && ['owner', 'admin'].includes(context.role) ? context.id : 0 }) }}>{context && !['owner', 'admin'].includes(context.role) ? '创建个人项目' : '创建项目'}</Button>
     </Space></header>
@@ -212,5 +215,6 @@ export default function Projects() {
     {adding && current && <ProjectDocumentsModal key={current.id} project={current} onClose={() => setAdding(false)}
       onReview={() => { setAdding(false); setRefresh(n => n + 1) }}
       onAdded={changed => { setAdding(false); setNotice(changed ? '文档已加入项目' : '文档已在项目中'); setRefresh(n => n + 1) }} />}
+    {showGuide && <UserGuide initialSection="projects" onClose={() => setShowGuide(false)} />}
   </Layout>
 }

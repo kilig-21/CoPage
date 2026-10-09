@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Select, Space, Tag, Typography } from 'antd'
 import { Link, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
+import UserGuide from '../components/UserGuide'
 
 const roles = { owner: '创建者', admin: '管理员', member: '成员' }
 const options = [{ value: 'member', label: '成员' }, { value: 'admin', label: '管理员' }]
@@ -29,6 +30,7 @@ function GroupFields({ fields, busy, uncertain, error, onClose, onReview, onSave
 }
 
 export default function Groups() {
+  const [showGuide, setShowGuide] = useState(false)
   const [params, setParams] = useSearchParams()
   const archived = params.get('archived') === 'true'
   const page = Math.min(validId(params.get('page')) || 1, 1000000)
@@ -107,6 +109,7 @@ export default function Groups() {
   return <Layout className="app-shell">
     <header className="topbar"><Typography.Title level={4}>我的小组</Typography.Title>
       <Space wrap><Link to="/home">工作台</Link><Link to="/docs">我的文档</Link><Link to="/projects">我的项目</Link>
+        <Button onClick={() => setShowGuide(true)}>使用指南</Button>
         <Button disabled={loading || busy} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
         <Button type="primary" disabled={!ready} onClick={() => { setError(''); setFields({}) }}>创建小组</Button></Space>
     </header>
@@ -193,5 +196,6 @@ export default function Groups() {
       onSave={values => mutate(signal => fields.id ? request.put('/groups/' + fields.id, values, { signal }) :
         request.post('/groups', values, { signal }), fields.id ? '小组资料已保存' : '小组已创建',
         data => { setFields(null); if (!fields.id) choose(data.id, 1, false) })} />}
+    {showGuide && <UserGuide initialSection="groups" onClose={() => setShowGuide(false)} />}
   </Layout>
 }
