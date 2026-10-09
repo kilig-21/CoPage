@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
+import LogoutButton from '../components/LogoutButton'
 import UserGuide from '../components/UserGuide'
 import DocumentPreview from '../components/DocumentPreview'
 import { templateCategories as categories } from '../templates/categories'
@@ -92,6 +93,7 @@ export default function PersonalTemplates() {
     <header className="topbar"><Typography.Title level={4}>我的模板</Typography.Title><Space wrap>
       <Link to="/home">工作台</Link><Link to="/docs">我的文档</Link><Link to="/templates">内置模板</Link>
       <Button onClick={() => setShowGuide(true)}>使用指南</Button>
+      <LogoutButton />
       <Button disabled={busy || loading} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
     </Space></header>
     <main className="content-wrap template-center personal-template-page">

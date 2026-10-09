@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Col, Empty, Layout, List, Row, Space, Statistic, Tag, Typography } from 'antd'
 import { Link } from 'react-router-dom'
 import request from '../api/request'
+import LogoutButton from '../components/LogoutButton'
 import UserGuide from '../components/UserGuide'
 import WorkspaceOverview from '../components/WorkspaceOverview'
 
@@ -34,6 +35,7 @@ export default function Home() {
         <Link to="/docs">我的文档</Link><Link to="/groups">我的小组</Link><Link to="/projects">我的项目</Link><Link to="/templates">模板中心</Link>
         <Link to="/search">搜索</Link><Link to="/trash">回收站</Link><Link to="/account">账号设置</Link>
         <Button onClick={() => setShowGuide(true)}>使用指南</Button>
+        <LogoutButton />
       </Space></nav>
     </header>
     <main className="content-wrap workbench">

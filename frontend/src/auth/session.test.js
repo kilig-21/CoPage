@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { safeReturnPath, saveSession, expireSession, subscribeSessionChanges, createReconnectSessionCheck } from './session.js'
+import { safeReturnPath, saveSession, logoutSession, expireSession, subscribeSessionChanges, createReconnectSessionCheck } from './session.js'
 
 test('login only returns to supported internal pages', () => {
   assert.equal(safeReturnPath('/docs/60'), '/docs/60')
@@ -159,4 +159,46 @@ test('不完整的登录响应在修改现有身份之前拒绝', () => {
     assert.throws(() => saveSession(storage, response), /登录信息不完整/)
     assert.equal(writes, 0)
   }
+})
+
+test('主动退出只移除身份键，保留两个账号的草稿和客户端标识', () => {
+  const data = new Map([['collab-token', 'A'], ['collab-user', 'testA'],
+    ['copage-draft:v1:testA:377:x', 'draft-A'], ['copage-draft:v1:testB:378:y', 'draft-B'],
+    ['copage-client-id', 'client']])
+  const removed = []
+  assert.deepEqual(logoutSession({ removeItem: key => { removed.push(key); data.delete(key) } }), { usernameCleared: true })
+  assert.deepEqual(removed, ['collab-token', 'collab-user'])
+  assert.deepEqual([...data], [['copage-draft:v1:testA:377:x', 'draft-A'],
+    ['copage-draft:v1:testB:378:y', 'draft-B'], ['copage-client-id', 'client']])
+})
+
+test('退出无法清除令牌时不删账号名、不假称成功，解除失败后可重试', () => {
+  const data = new Map([['collab-token', 'A'], ['collab-user', 'testA'], ['copage-draft:v1:testA:377:x', 'draft']])
+  let blocked = true
+  const storage = { removeItem: key => {
+    if (blocked && key === 'collab-token') throw new DOMException('blocked', 'SecurityError')
+    data.delete(key)
+  } }
+  assert.throws(() => logoutSession(storage), /无法清除登录信息.*草稿仍保留/)
+  assert.equal(data.get('collab-token'), 'A')
+  assert.equal(data.get('collab-user'), 'testA')
+  assert.equal(data.get('copage-draft:v1:testA:377:x'), 'draft')
+  blocked = false
+  assert.deepEqual(logoutSession(storage), { usernameCleared: true })
+  assert.equal(data.get('copage-draft:v1:testA:377:x'), 'draft')
+})
+
+test('退出已清除令牌但账号名失败仍无登录，后续新登录身份正确且原草稿不变', () => {
+  const data = new Map([['collab-token', 'A'], ['collab-user', 'testA'], ['copage-draft:v1:testA:377:x', 'draft']])
+  const storage = {
+    removeItem: key => { if (key === 'collab-user') throw new DOMException('blocked', 'SecurityError'); data.delete(key) },
+    setItem: (key, value) => data.set(key, value),
+  }
+  assert.deepEqual(logoutSession(storage), { usernameCleared: false })
+  assert.equal(data.has('collab-token'), false)
+  assert.equal(data.get('collab-user'), 'testA')
+  saveSession(storage, { token: 'B', username: 'testB' })
+  assert.equal(data.get('collab-token'), 'B')
+  assert.equal(data.get('collab-user'), 'testB')
+  assert.equal(data.get('copage-draft:v1:testA:377:x'), 'draft')
 })

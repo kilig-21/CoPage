@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Radio, Space, Spin, Tag, Typography } from 'antd'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
+import LogoutButton from '../components/LogoutButton'
 import DocumentPreview from '../components/DocumentPreview'
 import UserGuide from '../components/UserGuide'
 
@@ -71,6 +72,7 @@ export default function Templates() {
     <header className="topbar"><Typography.Title level={4}>模板中心</Typography.Title><Space wrap>
       <Link to="/home">工作台</Link><Link to="/docs">我的文档</Link><Link to="/templates?source=personal">我的模板</Link>
       <Button onClick={() => setShowGuide(true)}>使用指南</Button>
+      <LogoutButton />
     </Space></header>
     <main className="content-wrap template-center">
       <Typography.Title level={2}>选一个适合这次工作的框架</Typography.Title>

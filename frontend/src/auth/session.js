@@ -17,6 +17,15 @@ export function saveSession(storage, { token, username }) {
   }
 }
 
+// 主动退出当前浏览器：先移除登录令牌，草稿和其它站点数据保持原样。
+// 令牌清除失败不能宣称已退出；账号名清理失败时，当前浏览器也已无登录令牌。
+export function logoutSession(storage) {
+  try { storage.removeItem('collab-token') }
+  catch { throw new Error('浏览器无法清除登录信息，请允许本站保存数据后重试退出；原账号的本地草稿仍保留。') }
+  try { storage.removeItem('collab-user'); return { usernameCleared: true } }
+  catch { return { usernameCleared: false } }
+}
+
 // 只处理当前请求所属的会话，避免迟到的 401 退出刚登录的新账号；草稿键保持原样。
 export function expireSession(storage, requestToken, notify) {
   if (!requestToken || storage.getItem('collab-token') !== requestToken) return false

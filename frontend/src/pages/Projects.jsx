@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
+import LogoutButton from '../components/LogoutButton'
 import UserGuide from '../components/UserGuide'
 import ProjectDocumentsModal from '../components/ProjectDocumentsModal'
 
@@ -150,6 +151,7 @@ export default function Projects() {
     <header className="topbar"><Typography.Title level={4}>我的项目</Typography.Title><Space wrap>
       <Link to="/home">工作台</Link><Link to="/docs">我的文档</Link><Link to="/groups">我的小组</Link>
       <Button onClick={() => setShowGuide(true)}>使用指南</Button>
+      <LogoutButton />
       <Button disabled={loading || busy} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
       {chooseGroup ? <Link className="ant-btn ant-btn-primary" to="/groups">选择小组创建项目</Link>
         : <Button type="primary" disabled={!ready} onClick={() => { setError(''); setFields({ groupId: canCreateGroup ? context.id : 0 }) }}>

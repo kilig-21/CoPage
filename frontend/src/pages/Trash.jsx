@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Alert, Button, Card, Empty, Layout, List, Pagination, Popconfirm, Space, Typography } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import request from '../api/request'
+import LogoutButton from '../components/LogoutButton'
 
 const PAGE_SIZE=20
 export default function Trash() {
@@ -35,7 +36,7 @@ export default function Trash() {
     finally {setRestoring(null)}
   }
   return <Layout className="app-shell">
-    <header className="topbar"><Typography.Title level={4}>回收站</Typography.Title><Space wrap><Button onClick={() => navigate('/home')}>工作台</Button><Button onClick={() => navigate('/docs')}>返回我的文档</Button></Space></header>
+    <header className="topbar"><Typography.Title level={4}>回收站</Typography.Title><Space wrap><Button onClick={() => navigate('/home')}>工作台</Button><Button onClick={() => navigate('/docs')}>返回我的文档</Button><LogoutButton /></Space></header>
     <main className="content-wrap">
       <Typography.Title level={2}>找回删除的文档</Typography.Title>
       <Typography.Paragraph type="secondary">这里只显示你拥有的已删除文档。恢复保留正文、版本与原协作者权限；已清理的普通历史不会重建。</Typography.Paragraph>

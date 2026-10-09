@@ -3,6 +3,7 @@ import { CloseCircleOutlined, FileTextOutlined, PlusOutlined, SearchOutlined } f
 import { Alert, Avatar, Button, Card, Empty, Input, Layout, List, Pagination, Popconfirm, Radio, Space, Tag, Typography, message } from 'antd'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
+import LogoutButton from '../components/LogoutButton'
 import SavePersonalTemplateModal from '../components/SavePersonalTemplateModal'
 import CollaboratorModal from '../components/CollaboratorModal'
 import ImportModal from '../components/ImportModal'
@@ -89,12 +90,6 @@ export default function DocList() {
     }
   }
 
-  function logout() {
-    localStorage.removeItem('collab-token')
-    localStorage.removeItem('collab-user')
-    navigate('/login', { replace: true })
-  }
-
   return (
     <Layout className="app-shell">
       <header className="topbar">
@@ -108,7 +103,7 @@ export default function DocList() {
           <Button onClick={() => setShowGuide(true)}>使用指南</Button>
           <Avatar>{(localStorage.getItem('collab-user') || 'A').slice(0, 1).toUpperCase()}</Avatar>
           <Button onClick={() => navigate('/account')}>账号设置</Button>
-          <Button type="text" onClick={logout}>退出</Button>
+          <LogoutButton />
         </Space>
       </header>
       <main className="content-wrap">

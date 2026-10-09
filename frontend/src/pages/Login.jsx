@@ -57,6 +57,8 @@ export default function Login() {
       <Card className="auth-card" bordered={false}>
         <Typography.Title level={2}>协同文档</Typography.Title>
         <Typography.Paragraph type="secondary">多人实时协作，从一篇文档开始。</Typography.Paragraph>
+        {location.state?.loggedOut && <Alert type="info" showIcon message="已退出当前浏览器账号；原账号的本地草稿仍保留" />}
+        {location.state?.logoutCleanupFailed && <Alert type="warning" showIcon message="浏览器未能清除显示用的账号名，请允许本站保存数据后重新登录" />}
         {location.state?.passwordChanged && <Alert type="success" showIcon message="密码已更新，请用新密码重新登录；已有本地草稿仍保留" />}
         {location.state?.storageFailed && <Alert type="warning" showIcon message="浏览器未能清除旧登录信息，请允许本站保存数据后重新登录；密码更新已成功" />}
         {location.state?.expired && <Alert type="warning" showIcon message="登录已失效，请重新登录；未确认的本地草稿仍保留在此浏览器中" />}
