@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync, unlinkSync, rmdirSync } from 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { openRecoveryChannel } from './recovery-channel.mjs'
+import { createOrganizationFixture, verifyOrganizationRecovery, organizationSnapshotSql } from './organization-recovery-check.mjs'
 
 // 仅由生产配置验收脚本调用，输入是该脚本新建的随机临时项目。
 export async function runRecoveryCheck({ docker, base, env, source, sql, port, username, password }) {
@@ -94,6 +95,8 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
       SELECT revision,HEX(content) FROM doc_snapshot WHERE doc_id=${docId} ORDER BY revision;
       SELECT user_id,permission FROM doc_collaborator WHERE doc_id=${docId} ORDER BY user_id;`
     const durableHistory = readSql(source, query)
+    const organization = await createOrganizationFixture({ port, owner: { username, password }, viewer, outsider, document: original })
+    const durableOrganization = readSql(source, organizationSnapshotSql)
 
     // 对应部署说明的维护窗口：先停写入，再导出 SQL，停 MinIO 后只读归档。
     source(['stop', 'backend'])
@@ -165,6 +168,8 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
     assert.equal(restored.revision, original.revision)
     assert.deepEqual(restored.content, original.content)
     assert.equal(readSql(destination, query), durableHistory, '操作历史、幂等收据和快照必须完整恢复')
+    assert.equal(readSql(destination, organizationSnapshotSql), durableOrganization, '七张组织/模板表的完整数据和时间字段必须恢复')
+    await verifyOrganizationRecovery({ port: restoredPort, fixture: organization })
     const searchPath = q => '/search?q=' + encodeURIComponent(q)
     const assertSearchHit = result => {
       assert.equal(result.total, 1)
@@ -213,6 +218,7 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
     assert.equal((await api(restoredPort, '/doc/' + docId)).revision, 20)
     assert.equal((await socket.submit(randomUUID(), 20, { ops: [{ insert: '恢复后继续编辑 ' }] })).revision, 21)
     assert.equal((await api(restoredPort, '/doc/' + docId)).revision, 21)
+    await verifyOrganizationRecovery({ port: restoredPort, fixture: organization, readOnly: false })
     verified = true
     console.log('PASS: 新卷恢复登录、正文/revision、20 条历史及收据、revision=20 快照、图片 SHA-256、只读/无权边界；冷 Redis 追赶、去重及继续编辑到 revision=21')
   } finally {
