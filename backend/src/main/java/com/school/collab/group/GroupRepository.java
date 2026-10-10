@@ -58,7 +58,7 @@ public class GroupRepository {
             ORDER BY g.update_time DESC,g.id DESC LIMIT ? OFFSET ?
             """, (r,n) -> new Summary(r.getLong("id"),r.getString("name"),r.getString("description"),
                 r.getLong("owner_id"),r.getLong("owner_id")==user?"owner":r.getString("role"),
-                r.getLong("member_count"),r.getBoolean("is_archived"),r.getTimestamp("update_time").toLocalDateTime().format(TIME)),
+                r.getLong("member_count"),r.getBoolean("is_archived"),r.getObject("update_time", LocalDateTime.class).format(TIME)),
                 user,archived,keyword,keyword,keyword,size,((long)page-1)*size);
     }
     public String role(long group, long user) {
@@ -74,7 +74,7 @@ public class GroupRepository {
             SELECT m.user_id,u.username,u.nickname,m.role,m.joined_at FROM group_member m JOIN user u ON u.id=m.user_id
             WHERE m.group_id=? ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,m.joined_at,m.user_id
             """,(r,n)->new Member(r.getLong("user_id"),r.getString("username"),r.getString("nickname"),r.getString("role"),
-                r.getTimestamp("joined_at").toLocalDateTime().format(TIME)),group);
+                r.getObject("joined_at", LocalDateTime.class).format(TIME)),group);
     }
     public long memberCount(long group) { return jdbc.queryForObject("SELECT COUNT(*) FROM group_member WHERE group_id=?",Long.class,group); }
     public long pendingCount(long group) { return jdbc.queryForObject("SELECT COUNT(*) FROM group_invitation WHERE group_id=? AND status='pending'",Long.class,group); }
@@ -105,7 +105,7 @@ public class GroupRepository {
         return jdbc.query("""
             SELECT i.user_id,u.username,u.nickname,i.create_time,i.invitation_version FROM group_invitation i JOIN user u ON u.id=i.user_id
             WHERE i.group_id=? AND i.status='pending' ORDER BY i.create_time DESC,i.user_id
-            """,(r,n)->new Pending(r.getLong(1),r.getString(2),r.getString(3),r.getTimestamp(4).toLocalDateTime().format(TIME),r.getLong(5)),group);
+            """,(r,n)->new Pending(r.getLong(1),r.getString(2),r.getString(3),r.getObject(4, LocalDateTime.class).format(TIME),r.getLong(5)),group);
     }
     public long inboxCount(long user) {
         return jdbc.queryForObject("""
@@ -119,7 +119,7 @@ public class GroupRepository {
             FROM group_invitation i JOIN copage_group g ON g.id=i.group_id JOIN user u ON u.id=i.inviter_id
             WHERE i.user_id=? AND i.status='pending' AND g.is_archived=0 ORDER BY i.create_time DESC,g.id DESC LIMIT ? OFFSET ?
             """,(r,n)->new Invitation(r.getLong(1),r.getString(2),r.getString(3),r.getString(4),r.getString(5),
-                r.getTimestamp(6).toLocalDateTime().format(TIME),r.getLong(7)),user,size,((long)page-1)*size);
+                r.getObject(6, LocalDateTime.class).format(TIME),r.getLong(7)),user,size,((long)page-1)*size);
     }
     public void rename(long id,String name,String description) { jdbc.update("UPDATE copage_group SET name=?,description=? WHERE id=?",name,description,id); }
     public void archive(long id,boolean archived) {

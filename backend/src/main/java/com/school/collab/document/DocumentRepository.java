@@ -28,7 +28,7 @@ public class DocumentRepository {
             rs.getLong("owner_id"),
             rs.getString("owner_name"),
             rs.getLong("parent_id"),
-            rs.getTimestamp("update_time").toLocalDateTime()
+            rs.getObject("update_time", LocalDateTime.class)
     );
 
     private final JdbcTemplate jdbc;
@@ -137,7 +137,7 @@ public class DocumentRepository {
                 LIMIT ? OFFSET ?
                 """, (rs, index) -> new VisibleSummaryRow(rs.getLong("id"), rs.getString("title"),
                 rs.getLong("owner_id"), rs.getString("owner_name"), rs.getLong("parent_id"),
-                rs.getTimestamp("update_time").toLocalDateTime(), rs.getInt("permission")),
+                rs.getObject("update_time", LocalDateTime.class), rs.getInt("permission")),
                 userId, userId, userId, keyword, keyword, scope, scope, userId, scope, userId, size, offset);
     }
 
@@ -181,7 +181,7 @@ public class DocumentRepository {
         return jdbc.query("""
             SELECT id,title,update_time FROM document WHERE owner_id=? AND is_deleted=1
             ORDER BY update_time DESC,id DESC LIMIT ? OFFSET ?
-            """, (rs,n) -> new TrashRow(rs.getLong("id"),rs.getString("title"),rs.getTimestamp("update_time").toLocalDateTime()),
+            """, (rs,n) -> new TrashRow(rs.getLong("id"),rs.getString("title"),rs.getObject("update_time", LocalDateTime.class)),
             userId,size,((long)page-1)*size);
     }
 

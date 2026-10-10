@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Repository;
 import java.sql.Statement;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -52,7 +53,7 @@ public class ProjectRepository {
             """+FROM+FILTER+" ORDER BY p.update_time DESC,p.id DESC LIMIT ? OFFSET ?",
             (r,n)->new Summary(r.getLong("id"),r.getString("name"),r.getString("description"),r.getLong("owner_id"),
                 r.getLong("group_id"),r.getString("group_name"),r.getBoolean("is_archived"),r.getBoolean("can_manage"),
-                r.getLong("visible_count"),r.getTimestamp("update_time").toLocalDateTime().format(TIME)),
+                r.getLong("visible_count"),r.getObject("update_time", LocalDateTime.class).format(TIME)),
             user,user,user,user,user,archived,scope,scope,scope,group,group,keyword,keyword,size,((long)page-1)*size);
     }
     public void rename(long id,String name,String description) { jdbc.update("UPDATE copage_project SET name=?,description=? WHERE id=?",name,description,id); }
@@ -94,7 +95,7 @@ public class ProjectRepository {
             AND (?='' OR LOCATE(?,d.title)>0)
             ORDER BY d.update_time DESC,d.id DESC LIMIT ? OFFSET ?
             """,(r,n)->new DocumentSummary(r.getLong(1),r.getString(2),r.getLong(3),r.getString(4),r.getString(5),
-                r.getTimestamp(6).toLocalDateTime().format(TIME),r.getInt(7),r.getBoolean(8)),
+                r.getObject(6, LocalDateTime.class).format(TIME),r.getInt(7),r.getBoolean(8)),
             user,user,manage,user,project,user,keyword,keyword,size,((long)page-1)*size);
     }
     private static final String CANDIDATES="""

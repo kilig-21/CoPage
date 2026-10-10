@@ -7,6 +7,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Repository;
 import java.sql.Statement;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Objects;
@@ -35,7 +36,7 @@ public class PersonalTemplateRepository {
     }
     public List<Summary> list(long user,String category,String keyword,int page,int size) {
         return jdbc.query("SELECT id,name,description,category,source_revision,version,update_time FROM personal_template"+FILTER+" ORDER BY update_time DESC,id DESC LIMIT ? OFFSET ?",
-            (r,n)->new Summary(r.getLong(1),r.getString(2),r.getString(3),r.getString(4),r.getLong(5),r.getLong(6),r.getTimestamp(7).toLocalDateTime().format(TIME)),
+            (r,n)->new Summary(r.getLong(1),r.getString(2),r.getString(3),r.getString(4),r.getLong(5),r.getLong(6),r.getObject(7, LocalDateTime.class).format(TIME)),
             user,category,category,keyword,keyword,keyword,size,((long)page-1)*size);
     }
     public Optional<Template> find(long id,boolean lock) {
