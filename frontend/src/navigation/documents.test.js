@@ -6,7 +6,7 @@ import { safeReturnPath } from '../auth/session.js'
 test('打开文档、刷新与登录返回保留来源的中文关键词、分页和锚点', () => {
   for (const from of ['/docs?scope=shared&keyword=中文%26%25&page=2#list',
     '/search?q=会议%2B计划&page=2', '/projects?scope=group&groupId=3&project=8&docKeyword=资料&docPage=2',
-    '/home', '/templates?category=planning&keyword=需求']) {
+    '/home', '/trash?page=2', '/templates?category=planning&keyword=需求']) {
     const href = documentHref(26, from)
     assert.equal(safeReturnPath(href), href)
     assert.equal(documentReturn(href.slice(href.indexOf('?'))).path, from)
@@ -18,6 +18,7 @@ test('返回入口说明真实来源，私人模板与内置模板区分', () =>
     '/home': '返回工作台', '/docs?scope=owned': '返回文档列表', '/search?q=资料': '返回搜索结果',
     '/projects?project=8': '返回项目', '/templates': '返回模板中心',
     '/templates?source=personal&category=learning': '返回我的模板',
+    '/trash': '返回回收站',
   }
   for (const [from, label] of Object.entries(labels)) {
     const href = documentHref(26, from)

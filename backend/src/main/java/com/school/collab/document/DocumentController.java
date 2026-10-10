@@ -85,6 +85,11 @@ public class DocumentController {
         return Result.ok(documents.detail(id));
     }
 
+    @GetMapping("/{id}/state")
+    public Result<DocumentService.StateView> state(@PathVariable long id) {
+        return Result.ok(documents.state(id));
+    }
+
     @GetMapping("/{id}/metadata")
     public Result<DocumentService.RenameView> metadata(@PathVariable long id) {
         return Result.ok(documents.metadata(id));

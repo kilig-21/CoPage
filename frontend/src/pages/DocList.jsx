@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { documentHref } from '../navigation/documents'
 import request from '../api/request'
 import createDocumentRequest from '../api/createDocument'
+import useDocumentLifecycle from '../api/useDocumentLifecycle'
 import LogoutButton from '../components/LogoutButton'
 import SavePersonalTemplateModal from '../components/SavePersonalTemplateModal'
 import CollaboratorModal from '../components/CollaboratorModal'
@@ -14,6 +15,11 @@ import RenameModal from '../components/RenameModal'
 import UserGuide from '../components/UserGuide'
 
 const PAGE_SIZE = 20
+
+function accountInitial() {
+  try { return (localStorage.getItem('collab-user') || 'A').slice(0, 1).toUpperCase() }
+  catch { return 'A' }
+}
 
 export default function DocList() {
   const [managing, setManaging] = useState(null)
@@ -45,6 +51,10 @@ export default function DocList() {
   const [importing, setImporting] = useState(false)
   const [savingTemplate, setSavingTemplate] = useState(null)
   const [templatePendingName, setTemplatePendingName] = useState(null)
+  const [loadedFrom, setLoadedFrom] = useState(null)
+  const listKey = JSON.stringify([page, keyword, scope, refresh])
+  const deletion = useDocumentLifecycle({ operation: 'delete', ready: loadedFrom === listKey && !loading && !loadError,
+    onConfirmed: () => setRefresh(value => value + 1) })
 
   useEffect(() => {
     setCopying(null); setImporting(false)
@@ -56,6 +66,7 @@ export default function DocList() {
     const controller = new AbortController()
     setLoading(true)
     setLoadError('')
+    setDocs([]); setTotal(0)
     request.get('/doc/list', { params: { page, size: PAGE_SIZE, keyword, scope }, signal: controller.signal })
       .then((response) => {
         if (controller.signal.aborted) return
@@ -63,6 +74,7 @@ export default function DocList() {
         if (page > lastPage) { setPage(lastPage); return }
         setDocs(response.data.list)
         setTotal(response.data.total)
+        setLoadedFrom(listKey)
       })
       .catch((error) => {
         if (!controller.signal.aborted) { setDocs([]); setTotal(0); setLoadError(error?.message || '文档列表加载失败') }
@@ -90,15 +102,6 @@ export default function DocList() {
     }
   }
 
-  async function deleteDocument(id) {
-    try {
-      await request.delete('/doc/' + id)
-      setRefresh((value) => value + 1)
-    } catch (error) {
-      message.error(error?.message || '删除失败')
-    }
-  }
-
   return (
     <Layout className="app-shell">
       <header className="topbar">
@@ -110,7 +113,7 @@ export default function DocList() {
           <Button icon={<SearchOutlined />} onClick={() => navigate('/search')}>搜索</Button>
           <Button onClick={() => navigate('/trash')}>回收站</Button>
           <Button onClick={() => setShowGuide(true)}>使用指南</Button>
-          <Avatar>{(localStorage.getItem('collab-user') || 'A').slice(0, 1).toUpperCase()}</Avatar>
+          <Avatar>{accountInitial()}</Avatar>
           <Button onClick={() => navigate('/account')}>账号设置</Button>
           <LogoutButton />
         </Space>
@@ -119,22 +122,29 @@ export default function DocList() {
         <div className="page-heading">
           <div><Typography.Title level={2}>我的文档</Typography.Title><Typography.Text type="secondary">编辑时可查看连接与保存状态，删除的文档可从回收站找回</Typography.Text></div>
           <Space wrap>
+            <Button disabled={loading || deletion.busy} onClick={() => setRefresh(value => value + 1)}>刷新文档列表</Button>
             <Button onClick={() => setImporting(true)}>导入文档</Button>
             <Button onClick={() => navigate('/templates')}>从模板新建</Button>
             <Button type="primary" icon={<PlusOutlined />} loading={creating} onClick={createDocument}>新建文档</Button>
           </Space>
         </div>
         <Space wrap style={{ marginBottom: 16 }}>
-          <Radio.Group aria-label="文档分类" value={scope} onChange={event => applyScope(event.target.value)}
+          <Radio.Group aria-label="文档分类" value={scope} disabled={deletion.busy} onChange={event => applyScope(event.target.value)}
             options={[{ label: '全部', value: 'all' }, { label: '我创建', value: 'owned' }, { label: '与我协作', value: 'shared' }]} />
         </Space>
         <Input.Search className="search-box" aria-label="按文档标题筛选" placeholder="按标题筛选当前分类"
-          maxLength={200} value={filter} allowClear={{ clearIcon: <CloseCircleOutlined aria-label="清除标题输入" /> }} enterButton="筛选"
+          maxLength={200} value={filter} disabled={deletion.busy} allowClear={{ clearIcon: <CloseCircleOutlined aria-label="清除标题输入" /> }} enterButton="筛选"
           onChange={event => setFilter(event.target.value)} onSearch={applyFilter} />
         {keyword && <div className="filter-summary"><span>标题包含“{keyword}”</span>
           <Button type="link" onClick={() => applyFilter('')}>清除筛选</Button></div>}
         {templatePendingName && <Alert type="warning" showIcon message="模板保存结果未确认，请先核对我的模板，再决定是否重试。"
           action={<Button onClick={() => navigate('/templates?' + new URLSearchParams({ source: 'personal', keyword: templatePendingName }).toString())}>核对我的模板</Button>} />}
+        {deletion.uncertain && <Alert className="lifecycle-review-alert" type="warning" showIcon
+          message={deletion.error || '删除结果未确认，请先核对当前状态。'} description={'待核对文档：' + deletion.uncertain.title}
+          action={<Button loading={deletion.checking} disabled={deletion.busy} onClick={deletion.review}>核对删除结果</Button>} />}
+        {deletion.error && !deletion.uncertain && <Alert type="error" showIcon message={deletion.error} />}
+        {deletion.notice && <Alert className="lifecycle-review-alert" type={deletion.notice.type} showIcon message={deletion.notice.message}
+          action={<Button onClick={() => navigate('/trash')}>查看回收站</Button>} />}
         <Card className="doc-list-card">
           {loadError && <Alert type="error" showIcon message={loadError}
             action={<Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>重试</Button>} />}
@@ -150,8 +160,9 @@ export default function DocList() {
                 <Button key="template" type="link" disabled={Boolean(templatePendingName)} onClick={() => setSavingTemplate(doc)}>保存为模板</Button>,
                 doc.permission === 2 && <Button key="rename" type="link" onClick={() => setEditing(doc)}>重命名</Button>,
                 doc.isOwner && <Button key="members" type="link" onClick={() => setManaging(doc)}>协作者管理</Button>,
-                doc.isOwner && <Popconfirm key="delete" overlayClassName="document-action-confirm" title={`将“${doc.title}”移入回收站？`} description="协作者将停止访问，你可以在回收站恢复。" onConfirm={() => deleteDocument(doc.id)}>
-                  <Button type="link" danger>删除</Button>
+                doc.isOwner && <Popconfirm key="delete" overlayClassName="document-action-confirm" title={`将“${doc.title}”移入回收站？`} description="协作者将停止访问，你可以在回收站恢复。"
+                  disabled={deletion.blocked} onConfirm={() => deletion.run(doc)}>
+                  <Button type="link" danger disabled={deletion.blocked} loading={deletion.pendingId === doc.id}>删除</Button>
                 </Popconfirm>,
               ].filter(Boolean)}>
                 <List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={<Link to={documentHref(doc.id, sourcePath)}>{doc.title}</Link>}
@@ -160,7 +171,7 @@ export default function DocList() {
             )}
           />
           {total > PAGE_SIZE && <Pagination current={page} pageSize={PAGE_SIZE} total={total} showSizeChanger={false}
-            disabled={loading} onChange={setPage} />}
+            disabled={loading || deletion.busy} onChange={setPage} />}
         </Card>
       </main>
       {savingTemplate && <SavePersonalTemplateModal key={savingTemplate.id} doc={savingTemplate} onClose={() => setSavingTemplate(null)} onUncertain={setTemplatePendingName}

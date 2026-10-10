@@ -154,6 +154,76 @@ class DocumentServiceTest {
     }
 
     @Test
+    void ownerStateIncludesActiveAndDeletedDocumentsWithOnlyTheThreePublicFields() {
+        UserContext.set(1L, "owner");
+        for (boolean deleted : new boolean[]{false, true}) {
+            when(repository.findOwnedStatus(5L, 1L)).thenReturn(Optional.of(
+                    new DocumentRepository.OwnedStatus(5L, "需求😀", deleted)));
+            var json = new ObjectMapper().valueToTree(service.state(5L));
+            assertEquals(3, json.size());
+            assertEquals(5L, json.get("id").asLong());
+            assertEquals("需求😀", json.get("title").asText());
+            assertEquals(deleted, json.get("deleted").asBoolean());
+        }
+        verify(repository, times(2)).findOwnedStatus(5L, 1L);
+        verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void ownerStateRejectsAnonymousAndInvalidIdentifiersBeforeAnyRead() {
+        assertEquals(ErrorCode.UNAUTHORIZED,
+                assertThrows(BizException.class, () -> service.state(5L)).getErrorCode());
+        UserContext.set(0L, "invalid-user");
+        assertEquals(ErrorCode.UNAUTHORIZED,
+                assertThrows(BizException.class, () -> service.state(5L)).getErrorCode());
+        UserContext.set(1L, "owner");
+        for (long id : new long[]{0L, -1L, Long.MIN_VALUE}) {
+            assertEquals(ErrorCode.PARAM_ERROR,
+                    assertThrows(BizException.class, () -> service.state(id)).getErrorCode());
+        }
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void ownerStateHidesMissingDocumentsAndDoesNotGrantAccessToCollaborators() {
+        for (long userId : new long[]{1L, 2L, 3L}) {
+            UserContext.set(userId, userId == 1L ? "owner" : "member");
+            when(repository.findOwnedStatus(5L, userId)).thenReturn(Optional.empty());
+            assertEquals(ErrorCode.NOT_FOUND,
+                    assertThrows(BizException.class, () -> service.state(5L)).getErrorCode());
+            verify(repository).findOwnedStatus(5L, userId);
+        }
+        verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void ownerStateRepositoryFiltersOwnerAndReadsNoBodyMembersOrWriteLock() throws Exception {
+        var jdbc = mock(org.springframework.jdbc.core.JdbcTemplate.class);
+        var stateRepository = new DocumentRepository(jdbc);
+        var resultSet = mock(java.sql.ResultSet.class);
+        when(resultSet.getLong("id")).thenReturn(5L);
+        when(resultSet.getString("title")).thenReturn("需求😀");
+        when(jdbc.query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), eq(5L), eq(1L)))
+                .thenAnswer(invocation -> {
+                    String sql = invocation.getArgument(0);
+                    assertEquals("SELECT id, title, is_deleted FROM document WHERE id = ? AND owner_id = ?", sql);
+                    org.springframework.jdbc.core.RowMapper<?> mapper = invocation.getArgument(1);
+                    return java.util.List.of(mapper.mapRow(resultSet, 0));
+                });
+        for (boolean deleted : new boolean[]{false, true}) {
+            when(resultSet.getBoolean("is_deleted")).thenReturn(deleted);
+            assertEquals(new DocumentRepository.OwnedStatus(5L, "需求😀", deleted),
+                    stateRepository.findOwnedStatus(5L, 1L).orElseThrow());
+        }
+        verify(resultSet, times(2)).getLong("id");
+        verify(resultSet, times(2)).getString("title");
+        verify(resultSet, times(2)).getBoolean("is_deleted");
+        verifyNoMoreInteractions(resultSet);
+        verify(jdbc, times(2)).query(anyString(), any(org.springframework.jdbc.core.RowMapper.class), eq(5L), eq(1L));
+        verifyNoMoreInteractions(jdbc);
+    }
+
+    @Test
     void metadataRequiresCurrentVisibilityAndNeverReturnsBody() throws Exception {
         when(repository.find(5L)).thenReturn(Optional.of(row));
         assertEquals(ErrorCode.UNAUTHORIZED, assertThrows(BizException.class, () -> service.metadata(5)).getErrorCode());

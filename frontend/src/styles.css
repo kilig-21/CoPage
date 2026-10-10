@@ -169,9 +169,9 @@ body { margin: 0; min-width: 0; }
 .template-center .ant-btn { max-width: 100%; height: auto; min-height: 32px; white-space: normal; }
 
 @media (max-width: 640px) {
-  .creation-review-alert { flex-wrap: wrap; }
-  .creation-review-alert .ant-alert-content { min-width: 0; overflow-wrap: anywhere; }
-  .creation-review-alert .ant-alert-action { flex: 0 0 100%; margin: 8px 0 0; padding-left: 22px; }
+  .creation-review-alert, .lifecycle-review-alert { flex-wrap: wrap; }
+  .creation-review-alert .ant-alert-content, .lifecycle-review-alert .ant-alert-content { min-width: 0; overflow-wrap: anywhere; }
+  .creation-review-alert .ant-alert-action, .lifecycle-review-alert .ant-alert-action { flex: 0 0 100%; margin: 8px 0 0; padding-left: 22px; }
 }
 
 .personal-template-modal .ant-modal-title, .personal-template-page .ant-list-item-meta-title { overflow-wrap: anywhere; }

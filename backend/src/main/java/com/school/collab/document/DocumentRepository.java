@@ -185,6 +185,15 @@ public class DocumentRepository {
             userId,size,((long)page-1)*size);
     }
 
+    /** 只投影当前所有者的状态，包含软删除行；核对结果不读取正文或成员。 */
+    public Optional<OwnedStatus> findOwnedStatus(long docId, long ownerId) {
+        return jdbc.query("SELECT id, title, is_deleted FROM document WHERE id = ? AND owner_id = ?",
+                (rs, index) -> new OwnedStatus(rs.getLong("id"), rs.getString("title"),
+                        rs.getBoolean("is_deleted")), docId, ownerId).stream().findFirst();
+    }
+
+    public record OwnedStatus(long id, String title, boolean deleted) { }
+
     /** 只锁当前所有者自己的文档，包含已删除行；并发/重试恢复不会改写正文。 */
     public Optional<OwnedState> findOwnedForUpdate(long docId, long userId) {
         return jdbc.query("""

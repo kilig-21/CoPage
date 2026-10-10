@@ -157,6 +157,19 @@ public class DocumentService {
         }
     }
 
+    /** 所有者核对删除/恢复结果；不以协作者权限授予状态访问。 */
+    @Transactional(readOnly = true)
+    public StateView state(long docId) {
+        long userId = currentUserId();
+        if (userId <= 0) throw new BizException(ErrorCode.UNAUTHORIZED);
+        if (docId <= 0) throw new BizException(ErrorCode.PARAM_ERROR);
+        var status = documents.findOwnedStatus(docId, userId)
+                .orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
+        return new StateView(status.id(), status.title(), status.deleted());
+    }
+
+    public record StateView(long id, String title, boolean deleted) { }
+
     public RenameView metadata(long docId) {
         DocumentRow row = requireVisible(docId, currentUserId());
         return new RenameView(row.id(), row.title(), format(row.updateTime()));
