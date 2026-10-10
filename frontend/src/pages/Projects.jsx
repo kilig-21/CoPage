@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
-import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import request from '../api/request'
-import LogoutButton from '../components/LogoutButton'
+import WorkspaceHeader from '../components/WorkspaceHeader'
 import UserGuide from '../components/UserGuide'
 import ProjectDocumentsModal from '../components/ProjectDocumentsModal'
 
@@ -36,6 +36,7 @@ function Fields({ value, context, busy, uncertain, error, onSave, onClose, onRev
 }
 
 export default function Projects() {
+  const goTo = useNavigate()
   const [showGuide, setShowGuide] = useState(false)
   const [params, setParams] = useSearchParams()
   const location = useLocation()
@@ -157,15 +158,12 @@ export default function Projects() {
     setRefresh(n => n + 1)
   }
   return <Layout className="app-shell">
-    <header className="topbar"><Typography.Title level={4}>我的项目</Typography.Title><Space wrap>
-      <Link to="/home">工作台</Link><Link to="/docs">我的文档</Link><Link to="/groups">我的小组</Link>
-      <Button onClick={() => setShowGuide(true)}>使用指南</Button>
-      <LogoutButton />
+    <WorkspaceHeader title="我的项目" onGuide={() => setShowGuide(true)}><Space wrap>
       <Button disabled={loading || busy} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
-      {chooseGroup ? <Link className="ant-btn ant-btn-primary" to="/groups">选择小组创建项目</Link>
+      {chooseGroup ? <Button type="primary" onClick={() => goTo('/groups')}>选择小组创建项目</Button>
         : <Button type="primary" disabled={!ready} onClick={() => { setError(''); setFields({ groupId: canCreateGroup ? context.id : 0 }) }}>
           {canCreateGroup ? '创建小组项目' : '创建个人项目'}</Button>}
-    </Space></header>
+    </Space></WorkspaceHeader>
     <main className="content-wrap project-page">
       <Typography.Title level={2}>{context ? context.name + '的项目' : '把资料整理成项目'}</Typography.Title>
       <Typography.Paragraph type="secondary">整理个人或小组工作，关联保留同一份原文档。项目内只显示你有权限访问的资料。</Typography.Paragraph>

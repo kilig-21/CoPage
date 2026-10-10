@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { documentHref } from '../navigation/documents'
 import request from '../api/request'
 import createDocument from '../api/createDocument'
-import LogoutButton from '../components/LogoutButton'
+import WorkspaceHeader from '../components/WorkspaceHeader'
 import DocumentPreview from '../components/DocumentPreview'
 import UserGuide from '../components/UserGuide'
 
@@ -80,11 +80,9 @@ export default function Templates() {
     }
   }
   return <Layout className="app-shell">
-    <header className="topbar"><Typography.Title level={4}>模板中心</Typography.Title><Space wrap>
-      <Link to="/home">工作台</Link><Link to="/docs">我的文档</Link><Link to="/templates?source=personal">我的模板</Link>
-      <Button onClick={() => setShowGuide(true)}>使用指南</Button>
-      <LogoutButton />
-    </Space></header>
+    <WorkspaceHeader title="模板中心" onGuide={() => setShowGuide(true)}>
+      <Button onClick={() => navigate('/templates?source=personal')}>我的模板</Button>
+    </WorkspaceHeader>
     <main className="content-wrap template-center">
       <Typography.Title level={2}>选一个适合这次工作的框架</Typography.Title>
       <Typography.Paragraph type="secondary">先预览内容，再创建独立文档。内置模板只提供通用框架，不读取其他用户的资料。</Typography.Paragraph>

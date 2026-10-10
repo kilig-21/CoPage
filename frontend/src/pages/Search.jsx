@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeftOutlined, FileTextOutlined } from '@ant-design/icons'
-import { Alert, Button, Card, Empty, Input, List, Space, Typography } from 'antd'
+import { Alert, Button, Card, Empty, Input, Layout, List, Space, Typography } from 'antd'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import request from '../api/request'
-import LogoutButton from '../components/LogoutButton'
+import WorkspaceHeader from '../components/WorkspaceHeader'
 import { snippetParts } from '../search/snippet'
 
 const PAGE_SIZE = 10
@@ -59,8 +59,11 @@ export default function Search() {
   }
 
   return (
+    <Layout className="app-shell"><WorkspaceHeader title="搜索" />
     <main className="content-wrap">
-      <Space className="search-title"><Button type="text" aria-label="返回文档列表" icon={<ArrowLeftOutlined />} onClick={() => navigate('/docs')} /><Typography.Title level={2}>搜索文档</Typography.Title><Button onClick={() => navigate('/home')}>工作台</Button><LogoutButton /></Space>
+      <div className="page-heading"><div><Typography.Title level={2}>搜索文档</Typography.Title>
+        <Typography.Paragraph type="secondary">从有权限访问的标题和正文中，找到需要的资料。</Typography.Paragraph></div>
+        <Button type="text" aria-label="返回文档列表" icon={<ArrowLeftOutlined />} onClick={() => navigate('/docs')}>返回文档列表</Button></div>
       <Input.Search aria-label="搜索标题和正文" placeholder="搜索标题和正文" value={input} maxLength={100} onChange={(event) => setInput(event.target.value)} onSearch={search} loading={loading} size="large" enterButton="搜索" className="search-box" />
       {error && <Alert type="error" showIcon message={error} action={<Button size="small" onClick={() => setRetry((value) => value + 1)}>重试</Button>} />}
       <Card className="search-results-card">
@@ -71,6 +74,6 @@ export default function Search() {
           pagination={total > PAGE_SIZE ? { current: page, pageSize: PAGE_SIZE, total: Math.min(total, 10000), showSizeChanger: false, onChange: (next) => setParams({ q: query, page: String(next) }) } : false}
           renderItem={(item) => <List.Item><List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={<Link to={documentHref(item.id, sourcePath)}>{item.title}</Link>} description={<span>{snippetParts(item.snippet).map((part, index) => part.highlighted ? <strong key={index}>{part.text}</strong> : part.text)}</span>} /></List.Item>} />
       </Card>
-    </main>
+    </main></Layout>
   )
 }

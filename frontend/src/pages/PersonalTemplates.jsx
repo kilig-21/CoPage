@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { documentHref } from '../navigation/documents'
 import request from '../api/request'
 import createDocument from '../api/createDocument'
-import LogoutButton from '../components/LogoutButton'
+import WorkspaceHeader from '../components/WorkspaceHeader'
 import UserGuide from '../components/UserGuide'
 import DocumentPreview from '../components/DocumentPreview'
 import { templateCategories as categories } from '../templates/categories'
@@ -108,12 +108,10 @@ export default function PersonalTemplates() {
   }
   const open = template => { setSelected(template); setEditing(null); setError('') }
   return <Layout className="app-shell">
-    <header className="topbar"><Typography.Title level={4}>我的模板</Typography.Title><Space wrap>
-      <Link to="/home">工作台</Link><Link to="/docs">我的文档</Link><Link to="/templates">内置模板</Link>
-      <Button onClick={() => setShowGuide(true)}>使用指南</Button>
-      <LogoutButton />
+    <WorkspaceHeader title="我的模板" onGuide={() => setShowGuide(true)}><Space wrap>
+      <Button onClick={() => navigate('/templates')}>内置模板</Button>
       <Button disabled={busy || loading} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
-    </Space></header>
+    </Space></WorkspaceHeader>
     <main className="content-wrap template-center personal-template-page">
       <Typography.Title level={2}>复用自己的工作框架</Typography.Title>
       <Typography.Paragraph>在“我的文档”里选择“保存为模板”，保留已保存的内容。模板只供本人使用，使用时新建独立文档；修改资料不替换模板正文。</Typography.Paragraph>

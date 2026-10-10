@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Select, Space, Tag, Typography } from 'antd'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
-import LogoutButton from '../components/LogoutButton'
+import WorkspaceHeader from '../components/WorkspaceHeader'
 import UserGuide from '../components/UserGuide'
 
 const roles = { owner: '创建者', admin: '管理员', member: '成员' }
@@ -165,13 +165,11 @@ export default function Groups() {
     }
   }
   return <Layout className="app-shell">
-    <header className="topbar"><Typography.Title level={4}>我的小组</Typography.Title>
-      <Space wrap><Link to="/home">工作台</Link><Link to="/docs">我的文档</Link><Link to="/projects">我的项目</Link>
-        <Button onClick={() => setShowGuide(true)}>使用指南</Button>
-        <LogoutButton />
+    <WorkspaceHeader title="我的小组" onGuide={() => setShowGuide(true)}>
+      <Space wrap>
         <Button disabled={busy} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
         <Button type="primary" disabled={!groupsReady} onClick={() => { setError(''); setFields({}) }}>创建小组</Button></Space>
-    </header>
+    </WorkspaceHeader>
     <main className="content-wrap group-page">
       <Typography.Title level={2}>和同伴组织工作</Typography.Title>
       <Typography.Paragraph type="secondary">在小组管理成员与角色。加入小组不会自动获得文档权限，资料仍逐篇共享。</Typography.Paragraph>

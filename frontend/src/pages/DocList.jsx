@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { CloseCircleOutlined, FileTextOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
-import { Alert, Avatar, Button, Card, Empty, Input, Layout, List, Pagination, Popconfirm, Radio, Space, Tag, Typography, message } from 'antd'
+import { CloseCircleOutlined, FileTextOutlined, PlusOutlined, MoreOutlined } from '@ant-design/icons'
+import { Alert, Button, Card, Dropdown, Empty, Input, Layout, List, Pagination, Popconfirm, Radio, Space, Tag, Typography, message } from 'antd'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import request from '../api/request'
 import createDocumentRequest from '../api/createDocument'
 import useDocumentLifecycle from '../api/useDocumentLifecycle'
-import LogoutButton from '../components/LogoutButton'
+import WorkspaceHeader from '../components/WorkspaceHeader'
 import SavePersonalTemplateModal from '../components/SavePersonalTemplateModal'
 import CollaboratorModal from '../components/CollaboratorModal'
 import ImportModal from '../components/ImportModal'
@@ -15,11 +15,6 @@ import RenameModal from '../components/RenameModal'
 import UserGuide from '../components/UserGuide'
 
 const PAGE_SIZE = 20
-
-function accountInitial() {
-  try { return (localStorage.getItem('collab-user') || 'A').slice(0, 1).toUpperCase() }
-  catch { return 'A' }
-}
 
 export default function DocList() {
   const [managing, setManaging] = useState(null)
@@ -104,20 +99,7 @@ export default function DocList() {
 
   return (
     <Layout className="app-shell">
-      <header className="topbar">
-        <Typography.Title level={4}>协同文档</Typography.Title>
-        <Space wrap>
-          <Button onClick={() => navigate('/home')}>工作台</Button>
-          <Button onClick={() => navigate('/groups')}>我的小组</Button>
-          <Button onClick={() => navigate('/projects')}>我的项目</Button>
-          <Button icon={<SearchOutlined />} onClick={() => navigate('/search')}>搜索</Button>
-          <Button onClick={() => navigate('/trash')}>回收站</Button>
-          <Button onClick={() => setShowGuide(true)}>使用指南</Button>
-          <Avatar>{accountInitial()}</Avatar>
-          <Button onClick={() => navigate('/account')}>账号设置</Button>
-          <LogoutButton />
-        </Space>
-      </header>
+      <WorkspaceHeader title="我的文档" onGuide={() => setShowGuide(true)} />
       <main className="content-wrap">
         <div className="page-heading">
           <div><Typography.Title level={2}>我的文档</Typography.Title><Typography.Text type="secondary">编辑时可查看连接与保存状态，删除的文档可从回收站找回</Typography.Text></div>
@@ -155,14 +137,18 @@ export default function DocList() {
             locale={{ emptyText: loading ? '正在加载…' : loadError ? '列表暂不可用' : <Empty description={keyword ? '没有匹配的标题，试试其他关键词' : scope === 'shared' ? '还没有共享给你的文档，请文档所有者添加你为协作者' : '还没有文档，先新建一篇吧'} /> }}
             renderItem={(doc) => (
               <List.Item actions={[
-                <Link key="open" to={documentHref(doc.id, sourcePath)}>打开</Link>,
-                <Button key="copy" type="link" onClick={() => setCopying(doc)}>创建副本</Button>,
-                <Button key="template" type="link" disabled={Boolean(templatePendingName)} onClick={() => setSavingTemplate(doc)}>保存为模板</Button>,
-                doc.permission === 2 && <Button key="rename" type="link" onClick={() => setEditing(doc)}>重命名</Button>,
-                doc.isOwner && <Button key="members" type="link" onClick={() => setManaging(doc)}>协作者管理</Button>,
+                <Link key="open" className="document-open-link" to={documentHref(doc.id, sourcePath)}>打开</Link>,
+                <Dropdown key="more" trigger={['click']} autoFocus menu={{ items: [
+                  { key: 'copy', label: '创建副本', onClick: () => setCopying(doc) },
+                  { key: 'template', label: '保存为模板', disabled: Boolean(templatePendingName), onClick: () => setSavingTemplate(doc) },
+                  ...(doc.permission === 2 ? [{ key: 'rename', label: '重命名', onClick: () => setEditing(doc) }] : []),
+                  ...(doc.isOwner ? [{ key: 'members', label: '协作者管理', onClick: () => setManaging(doc) }] : []),
+                ] }}>
+                  <Button type="text" icon={<MoreOutlined />} disabled={loading || deletion.busy} aria-label={'更多操作：' + doc.title}>更多</Button>
+                </Dropdown>,
                 doc.isOwner && <Popconfirm key="delete" overlayClassName="document-action-confirm" title={`将“${doc.title}”移入回收站？`} description="协作者将停止访问，你可以在回收站恢复。"
                   disabled={deletion.blocked} onConfirm={() => deletion.run(doc)}>
-                  <Button type="link" danger disabled={deletion.blocked} loading={deletion.pendingId === doc.id}>删除</Button>
+                  <Button type="text" danger disabled={deletion.blocked} loading={deletion.pendingId === doc.id}>删除</Button>
                 </Popconfirm>,
               ].filter(Boolean)}>
                 <List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={<Link to={documentHref(doc.id, sourcePath)}>{doc.title}</Link>}

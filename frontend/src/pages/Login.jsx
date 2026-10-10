@@ -54,9 +54,15 @@ export default function Login() {
 
   return (
     <main className="auth-page">
+      <section className="auth-story" aria-label="CoPage 协同文档">
+        <div className="auth-brand"><img src="/favicon.svg" width="34" height="34" alt="" />CoPage</div>
+        <h1>一页文档，<br />把工作连起来。</h1>
+        <p>整理想法，分享资料，和同伴一起写。每篇文档都有明确的权限和保存状态，让你安心继续手上的工作。</p>
+        <div className="auth-capabilities"><span>实时共同编辑</span><span>资料按项目整理</span><span>历史版本与找回</span></div>
+      </section>
       <Card className="auth-card" bordered={false}>
-        <Typography.Title level={2}>协同文档</Typography.Title>
-        <Typography.Paragraph type="secondary">多人实时协作，从一篇文档开始。</Typography.Paragraph>
+        <Typography.Title level={2}>{registering ? '从这里开始协作' : '欢迎回来'}</Typography.Title>
+        <Typography.Paragraph type="secondary">{registering ? '创建你的账号，开始整理第一篇文档。' : '登录账号，继续你的文档与协作。'}</Typography.Paragraph>
         {location.state?.loggedOut && <Alert type="info" showIcon message="已退出当前浏览器账号；原账号的本地草稿仍保留" />}
         {location.state?.logoutCleanupFailed && <Alert type="warning" showIcon message="浏览器未能清除显示用的账号名，请允许本站保存数据后重新登录" />}
         {location.state?.passwordChanged && <Alert type="success" showIcon message="密码已更新，请用新密码重新登录；已有本地草稿仍保留" />}

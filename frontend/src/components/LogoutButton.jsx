@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react'
 import { Button, Modal, Typography } from 'antd'
+import { LogoutOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { logoutSession } from '../auth/session'
 
-export default function LogoutButton() {
+export default function LogoutButton({ compact = false }) {
   const navigate = useNavigate()
   const [failed, setFailed] = useState(false)
   const exiting = useRef(false)
@@ -19,7 +20,9 @@ export default function LogoutButton() {
     } })
   }
   return <>
-    <Button type="text" onClick={logout}>退出账号</Button>
+    <Button type="text" onClick={logout} aria-label="退出账号" icon={compact ? <LogoutOutlined /> : undefined}>
+      {compact ? <span className="workspace-utility-label">退出账号</span> : '退出账号'}
+    </Button>
     <Modal title="暂时无法退出" open={failed} onCancel={() => setFailed(false)} footer={[
       <Button key="continue" onClick={() => setFailed(false)}>继续使用</Button>,
       <Button key="retry" type="primary" onClick={logout}>重试退出</Button>,
