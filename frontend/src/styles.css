@@ -53,6 +53,13 @@ body { margin: 0; min-width: 0; }
 .editor-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 300px; }
 .editor-title { overflow-wrap: anywhere; min-width: 0; }
 .editor-title-row > .ant-btn { flex-shrink: 0; }
+@media (max-width: 480px) {
+  .editor-title-row { flex-wrap: wrap; }
+  .editor-title-row .editor-title { flex: 1 1 100%; order: 1; }
+  .document-copy-modal .ant-alert { flex-wrap: wrap; }
+  .document-copy-modal .ant-alert .ant-alert-content { min-width: 0; overflow-wrap: anywhere; }
+  .document-copy-modal .ant-alert .ant-alert-action { flex: 0 0 100%; margin: 8px 0 0; padding-left: 22px; }
+}
 .editor-status-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
 .filter-summary { display: flex; align-items: center; flex-wrap: wrap; overflow-wrap: anywhere; margin-bottom: 16px; }
 .doc-list-card .ant-list-item-meta-title,
@@ -160,6 +167,12 @@ body { margin: 0; min-width: 0; }
 .template-filters { margin: 16px 0; }
 .template-center .ant-card-head-title { overflow-wrap: anywhere; white-space: normal; }
 .template-center .ant-btn { max-width: 100%; height: auto; min-height: 32px; white-space: normal; }
+
+@media (max-width: 640px) {
+  .creation-review-alert { flex-wrap: wrap; }
+  .creation-review-alert .ant-alert-content { min-width: 0; overflow-wrap: anywhere; }
+  .creation-review-alert .ant-alert-action { flex: 0 0 100%; margin: 8px 0 0; padding-left: 22px; }
+}
 
 .personal-template-modal .ant-modal-title, .personal-template-page .ant-list-item-meta-title { overflow-wrap: anywhere; }
 .template-center .ant-radio-group, .personal-template-modal .ant-radio-group { display: flex; flex-wrap: wrap; row-gap: 8px; }

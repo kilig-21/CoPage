@@ -130,7 +130,7 @@ public class DocumentService {
         return title.substring(0, end) + suffix;
     }
 
-    public record CopyView(long id, String title, long sourceRevision) { }
+    public record CopyView(long id, String title, long sourceRevision) implements DocumentCreationRequests.CreatedDocument { }
 
     public DetailView detail(long docId) {
         long userId = currentUserId();
@@ -290,7 +290,7 @@ public class DocumentService {
     public record SummaryView(
             long id, String title, long ownerId, String ownerName, long parentId, String updateTime,
             int permission, boolean isOwner
-    ) {
+    ) implements DocumentCreationRequests.CreatedDocument {
     }
 
     public record ListView(long total, List<SummaryView> list) {

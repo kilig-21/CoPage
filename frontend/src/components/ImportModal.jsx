@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Input, Modal, Typography } from 'antd'
-import request from '../api/request'
+import createDocument from '../api/createDocument'
 
 export default function ImportModal({ onClose, onCreated }) {
   const [file, setFile] = useState(null)
@@ -26,10 +26,10 @@ export default function ImportModal({ onClose, onCreated }) {
     const form = new FormData(); form.append('file', file)
     if (title.trim()) form.append('title', title.trim())
     try {
-      const result = await request.post('/doc/import', form, { signal: controller.signal })
+      const result = await createDocument('/doc/import', form, { signal: controller.signal })
       if (!controller.signal.aborted) onCreated(result.data.id)
     } catch (ex) {
-      if (!controller.signal.aborted) setError(ex?.code === 400 ? ex.message : '导入结果未确认，请先回到列表检查是否已创建，再决定是否重试')
+      if (!controller.signal.aborted) setError(ex?.code === 400 ? ex.message : '导入结果未确认，可以重试相同文件和标题，也可先核对列表；相同请求不会重复创建文档。')
     } finally {
       if (importController.current === controller) importController.current = null
       if (!controller.signal.aborted) setBusy(false)

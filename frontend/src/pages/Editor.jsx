@@ -41,7 +41,7 @@ export default function Editor() {
     if (!isOwner || permission !== 2) setManaging(false)
   }, [isOwner, permission])
   useEffect(() => {
-    if (permission <= 0) setShowHistory(false)
+    if (permission <= 0) { setShowHistory(false); setShowCopy(false) }
     if (permission !== 2) setRenaming(false)
   }, [permission])
   useEffect(() => {

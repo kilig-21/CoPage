@@ -4,6 +4,7 @@ import { Alert, Avatar, Button, Card, Empty, Input, Layout, List, Pagination, Po
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import request from '../api/request'
+import createDocumentRequest from '../api/createDocument'
 import LogoutButton from '../components/LogoutButton'
 import SavePersonalTemplateModal from '../components/SavePersonalTemplateModal'
 import CollaboratorModal from '../components/CollaboratorModal'
@@ -41,10 +42,15 @@ export default function DocList() {
   const [loadError, setLoadError] = useState('')
   const [creating, setCreating] = useState(false)
   const createController = useRef(null)
-  useEffect(() => () => createController.current?.abort(), [])
   const [importing, setImporting] = useState(false)
   const [savingTemplate, setSavingTemplate] = useState(null)
   const [templatePendingName, setTemplatePendingName] = useState(null)
+
+  useEffect(() => {
+    setCopying(null); setImporting(false)
+    createController.current?.abort(); createController.current = null; setCreating(false)
+    return () => createController.current?.abort()
+  }, [location.key])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -73,11 +79,11 @@ export default function DocList() {
     createController.current = controller
     setCreating(true)
     try {
-      const response = await request.post('/doc', { title: '未命名文档' }, { signal: controller.signal })
+      const response = await createDocumentRequest('/doc', { title: '未命名文档' }, { signal: controller.signal })
       if (controller.signal.aborted) return
       navigate(documentHref(response.data.id, sourcePath))
     } catch (error) {
-      if (!controller.signal.aborted) message.error(error?.code === 400 ? error.message : '创建结果未确认，请先刷新列表检查是否已创建，再决定是否重试')
+      if (!controller.signal.aborted) message.error(error?.code === 400 ? error.message : '创建结果未确认，可以重试本次创建，也可先刷新列表核对；相同请求不会重复创建文档。')
     } finally {
       if (createController.current === controller) createController.current = null
       if (!controller.signal.aborted) setCreating(false)

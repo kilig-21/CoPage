@@ -12,6 +12,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  image:
+    name: Docker source build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build default Dockerfile from source
+        run: docker build -f backend/Dockerfile -t copage-backend:ci backend
+      - name: Check runtime user and JAR
+        run: |
+          test "$(docker image inspect copage-backend:ci --format '{{.Config.User}}')" = app
+          docker run --rm --network none --entrypoint sh copage-backend:ci -ec 'test "$(id -un)" = app; test -r /app/app.jar'
   backend:
     name: Java tests and package
     runs-on: ubuntu-latest
@@ -51,7 +65,7 @@ jobs:
         run: npm test
       - name: Verify recovery channel diagnostics
         working-directory: .
-        run: node --test scripts/recovery-channel.test.mjs
+        run: node --test scripts/recovery-channel.test.mjs scripts/smoke-join.test.mjs
       - name: Check dependency advisories
         run: npm audit --registry=https://registry.npmjs.org --audit-level=moderate
       - name: Build production frontend

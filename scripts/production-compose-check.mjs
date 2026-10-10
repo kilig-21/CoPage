@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync, unlinkSync, rmdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -64,6 +64,22 @@ const recoverySmoke = process.argv.includes('--recovery-smoke')
 const proxySmoke = process.argv.includes('--proxy-smoke')
 const expirySmoke = process.argv.includes('--session-expiry-smoke')
 const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke
+const runtimeImages = process.argv.filter(value => value.startsWith('--runtime-image='))
+assert.ok(runtimeImages.length <= 1, '预构建运行时镜像只能指定一次')
+const runtimeImage = runtimeImages[0]?.slice('--runtime-image='.length)
+let runtimeDirectory, runtimeOverride
+if (runtimeImages.length) {
+  assert.ok(runtimeImage, '预构建运行时镜像标签不能为空')
+  assert.ok(fullSmoke, '指定运行时镜像必须执行完整验收')
+  assert.match(runtimeImage, /^copage-backend:[a-z0-9][a-z0-9.-]*$/, '只接受显式本地CoPage镜像标签')
+  const image = JSON.parse(docker(['image', 'inspect', runtimeImage]).stdout)[0]
+  assert.equal(image.Config.User, 'app', '预构建运行时须非root')
+  runtimeDirectory = mkdtempSync(join(tmpdir(), 'copage-runtime-config-'))
+  runtimeOverride = join(runtimeDirectory, 'compose.yml')
+  writeFileSync(runtimeOverride, `services:\n  backend:\n    image: ${runtimeImage}\n`, { mode: 0o600 })
+  base.push('-f', runtimeOverride)
+  console.log(`运行时镜像显式验收：${image.Id}；不代表默认Dockerfile源码构建通过`)
+}
 if (process.argv.includes('--smoke') || fullSmoke) {
   // 随机项目名只属于本次验收，不触及开发或实际生产项目的数据卷。
   const project = 'copage-prod-qa-' + randomBytes(6).toString('hex')
@@ -74,12 +90,12 @@ if (process.argv.includes('--smoke') || fullSmoke) {
   const sql = (statement, root = false, allowFailure = false) => qaDocker([
     'exec', '-T', 'mysql', 'sh', '-ec',
     root
-      ? 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -N -D collab_doc'
-      : 'MYSQL_PWD="$MYSQL_PASSWORD" mysql -h127.0.0.1 -u"$MYSQL_USER" -N -D collab_doc',
+      ? 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --default-character-set=utf8mb4 -uroot -N -D collab_doc'
+      : 'MYSQL_PWD="$MYSQL_PASSWORD" mysql --default-character-set=utf8mb4 -h127.0.0.1 -u"$MYSQL_USER" -N -D collab_doc',
   ], { input: statement, allowFailure })
   try {
     if (fullSmoke) {
-      qaDocker(['build', 'backend'])
+      if (!runtimeImage) qaDocker(['build', 'backend'])
       qaDocker(['up', '-d', '--no-build', '--wait', '--wait-timeout', '150', '--scale', 'backend=2'])
     } else {
       qaDocker(['up', '-d', '--wait', '--wait-timeout', '90', 'mysql', 'redis'])
@@ -88,7 +104,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
     assert.equal(initial[0], '0', '生产初始化不得创建演示账号')
     assert.ok(initial[1].startsWith('copage@'), '应用必须使用独立数据库账号')
     for (const table of ['user', 'document', 'doc_operation', 'doc_operation_receipt', 'doc_snapshot', 'doc_collaborator', 'doc_history_boundary', 'doc_named_version',
-      'copage_group', 'group_member', 'group_invitation', 'copage_project', 'project_document', 'personal_template_owner', 'personal_template']) {
+      'copage_group', 'group_member', 'group_invitation', 'copage_project', 'project_document', 'personal_template_owner', 'personal_template', 'doc_creation_receipt']) {
       assert.ok(initial.slice(2).includes(table), `缺少表 ${table}`)
     }
     assert.notEqual(sql('SELECT * FROM mysql.user;', false, true).status, 0, '应用账号不应读取系统账号表')
@@ -96,7 +112,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
     assert.ok(redisNoAuth.includes('NOAUTH'), 'Redis 无凭据请求必须拒绝')
     const redisAuth = qaDocker(['exec', '-T', 'redis', 'sh', '-ec', 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping']).stdout.trim()
     assert.equal(redisAuth, 'PONG')
-    console.log('PASS: 全新 MySQL 无演示账号、十五张表齐全、数据库权限隔离、Redis 认证')
+    console.log('PASS: 全新 MySQL 无演示账号、十六张表齐全、数据库权限隔离、Redis 认证')
     if (fullSmoke) {
       const ports = [1, 2].map(index => {
         const address = qaDocker(['port', '--index', String(index), 'backend', '8080']).stdout.trim()
@@ -150,7 +166,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
         await runProxyCheck({ docker, source: qaDocker, username, password })
       }
       if (recoverySmoke) {
-        await runRecoveryCheck({ docker, base, env: qaEnv, source: qaDocker, sql, port: ports[0], username, password })
+        await runRecoveryCheck({ docker, base, env: qaEnv, source: qaDocker, sql, port: ports[0], peerPort: ports[1], username, password })
       }
     } else {
       // 在临时库单独应用开发种子，核对拆分后本地演示仍可初始化。
@@ -173,6 +189,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       assert.equal(label, project, '清理前必须确认测试容器项目归属')
     }
     qaDocker(['down', '--volumes', '--remove-orphans'])
+    if (runtimeOverride) { unlinkSync(runtimeOverride); rmdirSync(runtimeDirectory) }
     console.log('临时验收容器、网络和数据卷已清理')
   }
 }

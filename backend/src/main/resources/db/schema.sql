@@ -129,3 +129,13 @@ CREATE TABLE IF NOT EXISTS personal_template (
  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
  KEY idx_personal_template_owner(owner_id,category,update_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS doc_creation_receipt (
+ user_id BIGINT NOT NULL,
+ request_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ kind VARCHAR(80) NOT NULL,
+ request_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ doc_id BIGINT NOT NULL, response_json TEXT NOT NULL,
+ create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ PRIMARY KEY(user_id,request_id), KEY idx_doc_creation_document(doc_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

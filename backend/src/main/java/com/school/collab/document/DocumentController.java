@@ -12,15 +12,17 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/doc")
 public class DocumentController {
     private final DocumentService documents;
+    private final DocumentCreationRequests creations;
 
-    public DocumentController(DocumentService documents) {
-        this.documents = documents;
+    public DocumentController(DocumentService documents, DocumentCreationRequests creations) {
+        this.documents = documents; this.creations = creations;
     }
 
     @GetMapping("/list")
@@ -39,11 +41,13 @@ public class DocumentController {
     }
 
     @PostMapping
-    public Result<DocumentService.SummaryView> create(@RequestBody(required = false) CreateRequest request) {
-        return Result.ok(documents.create(
-                request == null ? null : request.title(),
+    public Result<DocumentService.SummaryView> create(@RequestBody(required = false) CreateRequest request,
+            @RequestHeader(value="Idempotency-Key", required=false) String key) {
+        var input = new CreateRequest(request == null ? null : request.title(),
                 request == null || request.parentId() == null ? 0 : request.parentId(),
-                request == null ? null : request.templateId()));
+                request == null ? null : request.templateId());
+        return Result.ok(creations.execute(key, "document", input, DocumentService.SummaryView.class,
+                () -> documents.create(input.title(), input.parentId(), input.templateId())));
     }
 
     @GetMapping("/trash")
@@ -67,8 +71,11 @@ public class DocumentController {
 
     @PostMapping("/{id}/copy")
     public Result<DocumentService.CopyView> copy(@PathVariable long id,
-            @RequestBody(required = false) CopyRequest request) {
-        return Result.ok(documents.copy(id, request == null ? null : request.title()));
+            @RequestBody(required = false) CopyRequest request,
+            @RequestHeader(value="Idempotency-Key", required=false) String key) {
+        var input = new CopyRequest(request == null ? null : request.title());
+        return Result.ok(creations.execute(key, "copy:" + id, input, DocumentService.CopyView.class,
+                () -> documents.copy(id, input.title())));
     }
 
     public record CopyRequest(String title) { }

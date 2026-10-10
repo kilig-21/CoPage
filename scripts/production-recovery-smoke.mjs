@@ -5,9 +5,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { openRecoveryChannel } from './recovery-channel.mjs'
 import { createOrganizationFixture, verifyOrganizationRecovery, organizationSnapshotSql } from './organization-recovery-check.mjs'
+import { createCreationFixture, verifyCreationRecovery, creationSnapshotSql } from './document-creation-check.mjs'
 
 // 仅由生产配置验收脚本调用，输入是该脚本新建的随机临时项目。
-export async function runRecoveryCheck({ docker, base, env, source, sql, port, username, password }) {
+export async function runRecoveryCheck({ docker, base, env, source, sql, port, peerPort, username, password }) {
   const restoredProject = 'copage-recovery-qa-' + randomBytes(6).toString('hex')
   const destination = (args, options = {}) => docker([...base, '-p', restoredProject, ...args], { ...options, customEnv: env })
   const backupDir = mkdtempSync(join(tmpdir(), 'copage-recovery-backup-'))
@@ -35,7 +36,7 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
   })
   const readSql = (stack, query) => stack([
     'exec', '-T', 'mysql', 'sh', '-ec',
-    'MYSQL_PWD="$MYSQL_PASSWORD" mysql -h127.0.0.1 -u"$MYSQL_USER" -N -D collab_doc',
+    'MYSQL_PWD="$MYSQL_PASSWORD" mysql --default-character-set=utf8mb4 -h127.0.0.1 -u"$MYSQL_USER" -N -D collab_doc',
   ], { input: query }).stdout.trim()
   const assertProject = (container, project) => {
     const label = docker(['inspect', '--format', '{{index .Config.Labels "com.docker.compose.project"}}', container]).stdout.trim()
@@ -50,7 +51,8 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
     password = currentPassword
     token = (await api(port, '/auth/login', 'POST', { username, password })).token
     assert.equal(JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).credentialVersion, 1)
-    const title = '恢复演练-' + randomUUID()
+    // 唯一单一词项，避免新增模板正文的中文分词命中污染原恢复搜索断言。
+    const title = 'recoverytitle' + randomBytes(12).toString('hex')
     const document = await api(port, '/doc', 'POST', { title })
     const docId = document.id
     const viewer = { username: 'view' + randomBytes(6).toString('hex'), password: randomBytes(32).toString('hex') }
@@ -96,7 +98,10 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
       SELECT user_id,permission FROM doc_collaborator WHERE doc_id=${docId} ORDER BY user_id;`
     const durableHistory = readSql(source, query)
     const organization = await createOrganizationFixture({ port, owner: { username, password }, viewer, outsider, document: original })
+    const creation = await createCreationFixture({ port, peerPort, owner: { username, password }, viewer,
+      sql: query => readSql(source, query) })
     const durableOrganization = readSql(source, organizationSnapshotSql)
+    const durableCreation = readSql(source, creationSnapshotSql)
 
     // 对应部署说明的维护窗口：先停写入，再导出 SQL，停 MinIO 后只读归档。
     source(['stop', 'backend'])
@@ -169,6 +174,8 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, u
     assert.deepEqual(restored.content, original.content)
     assert.equal(readSql(destination, query), durableHistory, '操作历史、幂等收据和快照必须完整恢复')
     assert.equal(readSql(destination, organizationSnapshotSql), durableOrganization, '七张组织/模板表的完整数据和时间字段必须恢复')
+    assert.equal(readSql(destination, creationSnapshotSql), durableCreation, '创建收据与首次摘要须完整恢复')
+    await verifyCreationRecovery({ port: restoredPort, fixture: creation })
     await verifyOrganizationRecovery({ port: restoredPort, fixture: organization })
     const searchPath = q => '/search?q=' + encodeURIComponent(q)
     const assertSearchHit = result => {

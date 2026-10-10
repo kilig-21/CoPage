@@ -3,6 +3,7 @@ import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Pop
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import request from '../api/request'
+import createDocument from '../api/createDocument'
 import LogoutButton from '../components/LogoutButton'
 import UserGuide from '../components/UserGuide'
 import DocumentPreview from '../components/DocumentPreview'
@@ -36,7 +37,12 @@ export default function PersonalTemplates() {
   const [busy, setBusy] = useState(false)
   const [uncertain, setUncertain] = useState(null)
   const mutation = useRef(null)
+  const instance = useRef(null)
   useEffect(() => {
+    if (instance.current) {
+      setUncertain({ kind: 'instance', ...instance.current })
+      setError('创建结果未确认，可安全重试本次创建，或先核对我的文档。')
+    }
     mutation.current?.abort(); mutation.current = null; setBusy(false); setSelected(null); setEditing(null)
     return () => mutation.current?.abort()
   }, [location.key])
@@ -53,7 +59,7 @@ export default function PersonalTemplates() {
         const last = Math.max(1, Math.ceil(data.total / SIZE))
         if (page > last) { setParams(current => { const next = new URLSearchParams(current); next.set('page', String(last)); return next }, { replace: true }); return }
         setData(data); setUncertain(current => current?.kind === 'instance' ? current : null)
-        if (uncertain?.kind !== 'instance') setError('')
+        if (!instance.current) setError('')
       }).catch(failure => { if (!controller.signal.aborted) setLoadError([400, 403, 404].includes(failure?.code) ? failure.message : '个人模板未能加载，请重试。') })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
@@ -62,24 +68,27 @@ export default function PersonalTemplates() {
     const controller = new AbortController()
     setDetail(null); setDetailError(''); setDetailLoading(Boolean(selected))
     if (selected) request.get('/personal-templates/' + selected.id, { signal: controller.signal })
-      .then(({ data }) => { if (!controller.signal.aborted) { setDetail(data); setTitle(data.name) } })
+      .then(({ data }) => { if (!controller.signal.aborted) { setDetail(data); if (!instance.current) setTitle(data.name) } })
       .catch(failure => { if (!controller.signal.aborted) setDetailError([400, 403, 404].includes(failure?.code) ? failure.message : '模板内容未能加载，请重新读取。') })
       .finally(() => { if (!controller.signal.aborted) setDetailLoading(false) })
     return () => controller.abort()
   }, [selected?.id, detailRefresh])
   const ready = Boolean(data && !loading && !busy && !uncertain)
   async function mutate(kind, action, onSuccess, reviewTarget) {
-    if (mutation.current || !ready) return
+    const confirming = kind === 'instance' && uncertain?.kind === 'instance' && instance.current
+    if (mutation.current || !(kind === 'instance' ? !busy && (!uncertain || confirming) && (confirming || (data && !loading)) : ready)) return
     const controller = new AbortController(); mutation.current = controller
+    if (kind === 'instance') instance.current = reviewTarget
     setBusy(true); setError(''); setNotice('')
     try {
       const result = await action(controller.signal)
-      if (!controller.signal.aborted) onSuccess(result.data)
+      if (!controller.signal.aborted) { instance.current = null; onSuccess(result.data) }
     } catch (failure) {
       if (!controller.signal.aborted) {
         const rejected = [400, 401, 403, 404].includes(failure?.code)
+        if (rejected) instance.current = null
         setUncertain(rejected ? null : { kind, ...(typeof reviewTarget === 'string' ? { title: reviewTarget } : reviewTarget) })
-        setError(rejected ? failure.message : kind === 'instance' ? '创建结果未确认，请核对我的文档，再决定是否重试。' : '操作结果未确认，请核对当前模板列表，再决定是否重试。')
+        setError(rejected ? failure.message : kind === 'instance' ? '创建结果未确认，可安全重试本次创建，或先核对我的文档。' : '操作结果未确认，请核对当前模板列表，再决定是否重试。')
       }
     } finally {
       if (mutation.current === controller) mutation.current = null
@@ -89,6 +98,13 @@ export default function PersonalTemplates() {
   const review = () => {
     if (uncertain?.kind === 'instance') navigate('/docs?' + new URLSearchParams({ scope: 'owned', keyword: uncertain.title }).toString())
     else { setSelected(null); setEditing(null); filter(uncertain?.category || 'all', uncertain?.name || ''); setRefresh(n => n + 1) }
+  }
+  const retryInstance = () => {
+    const target = instance.current
+    if (!target) return
+    mutate('instance', signal => createDocument('/personal-templates/' + target.templateId + '/documents',
+      { title: target.title, expectedVersion: target.expectedVersion }, { signal }),
+      result => navigate(documentHref(result.id, sourcePath)), target)
   }
   const open = template => { setSelected(template); setEditing(null); setError('') }
   return <Layout className="app-shell">
@@ -102,8 +118,12 @@ export default function PersonalTemplates() {
       <Typography.Title level={2}>复用自己的工作框架</Typography.Title>
       <Typography.Paragraph>在“我的文档”里选择“保存为模板”，保留已保存的内容。模板只供本人使用，使用时新建独立文档；修改资料不替换模板正文。</Typography.Paragraph>
       {loadError && <Alert type="error" showIcon message={loadError} action={<Button disabled={busy || loading} onClick={() => setRefresh(n => n + 1)}>重试读取</Button>} />}
-      {error && <Alert type={uncertain ? 'warning' : 'error'} showIcon message={error}
-        action={<Button disabled={busy || loading} onClick={uncertain ? review : () => setRefresh(n => n + 1)}>{uncertain?.kind === 'instance' ? '核对我的文档' : uncertain ? '核对模板列表' : '重试读取'}</Button>} />}
+      {error && <Alert className="creation-review-alert" type={uncertain ? 'warning' : 'error'} showIcon message={error}
+        description={uncertain?.kind === 'instance' ? '待确认文档：' + uncertain.title : undefined}
+        action={<Space wrap>
+          {uncertain?.kind === 'instance' && !selected && <Button disabled={busy} loading={busy} onClick={retryInstance}>重试本次创建</Button>}
+          <Button disabled={busy || loading} onClick={uncertain ? review : () => setRefresh(n => n + 1)}>{uncertain?.kind === 'instance' ? '核对我的文档' : uncertain ? '核对模板列表' : '重试读取'}</Button>
+        </Space>} />}
       {notice && <Alert type="success" showIcon message={notice} />}
       {data && <Typography.Paragraph type="secondary">已保存 {data.usage.count} / {data.countLimit} 份 · 模板正文 {(data.usage.bytes / 1024 / 1024).toFixed(2)} / {(data.byteLimit / 1024 / 1024).toFixed(0)} MiB</Typography.Paragraph>}
       <Radio.Group className="template-filters" aria-label="个人模板分类" value={category} disabled={busy}
@@ -129,8 +149,12 @@ export default function PersonalTemplates() {
         <Button key="close" disabled={busy} onClick={() => { setSelected(null); setEditing(null) }}>关闭</Button>,
         uncertain && <Button key="review" disabled={busy} onClick={review}>{uncertain.kind === 'instance' ? '核对我的文档' : '核对模板列表'}</Button>,
         detail && !editing && <Button key="edit" disabled={!ready} onClick={() => setEditing({ name: detail.name, description: detail.description, category: detail.category, version: detail.version })}>修改资料</Button>,
-        detail && !editing && <Button key="create" type="primary" loading={busy} disabled={!ready || !title.trim()}
-          onClick={() => mutate('instance', signal => request.post('/personal-templates/' + detail.id + '/documents', { title: title.trim(), expectedVersion: detail.version }, { signal }), data => navigate(documentHref(data.id, sourcePath)), title.trim())}>创建文档</Button>,
+        detail && !editing && <Button key="create" type="primary" loading={busy} disabled={!data || loading || busy || (uncertain && uncertain.kind !== 'instance') || !title.trim()}
+          onClick={() => {
+            const target = instance.current || { templateId: detail.id, title: title.trim(), expectedVersion: detail.version }
+            mutate('instance', signal => createDocument('/personal-templates/' + target.templateId + '/documents',
+              { title: target.title, expectedVersion: target.expectedVersion }, { signal }), data => navigate(documentHref(data.id, sourcePath)), target)
+          }}>{uncertain?.kind === 'instance' ? '重试本次创建' : '创建文档'}</Button>,
         detail && editing && <Button key="save" type="primary" loading={busy} disabled={!ready || !editing.name.trim()}
           onClick={() => mutate('update', signal => request.put('/personal-templates/' + detail.id, { name: editing.name.trim(), description: editing.description.trim(), category: editing.category, expectedVersion: editing.version }, { signal }), () => { setSelected(null); setEditing(null); setNotice('模板资料已保存'); filter(editing.category, editing.name.trim()); setRefresh(n => n + 1) }, { name: editing.name.trim(), category: editing.category })}>保存资料</Button>,
       ]}>

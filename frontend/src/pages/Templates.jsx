@@ -3,6 +3,7 @@ import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Radio, Space, S
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import request from '../api/request'
+import createDocument from '../api/createDocument'
 import LogoutButton from '../components/LogoutButton'
 import DocumentPreview from '../components/DocumentPreview'
 import UserGuide from '../components/UserGuide'
@@ -28,7 +29,12 @@ export default function Templates() {
   const [uncertain, setUncertain] = useState(false)
   const [submittedTitle, setSubmittedTitle] = useState('')
   const createController = useRef(null)
+  const attempted = useRef(null)
   useEffect(() => {
+    if (attempted.current) {
+      setUncertain(true); setSubmittedTitle(attempted.current.title)
+      setCreateError('创建结果未确认，可安全重试本次创建，或先核对我的文档。')
+    }
     createController.current?.abort(); createController.current = null
     setSelected(null); setCreating(false)
     return () => createController.current?.abort()
@@ -51,19 +57,22 @@ export default function Templates() {
   })
   const review = () => navigate('/docs?' + new URLSearchParams({ scope: 'owned', keyword: submittedTitle }).toString())
   async function create() {
-    if (createController.current || uncertain || !selected || !templates || loading) return
-    if (!title.trim()) { setCreateError('请输入文档标题'); return }
+    const target = attempted.current || (selected ? { templateId: selected.id, title: title.trim() } : null)
+    if (createController.current || !target || (!attempted.current && (!templates || loading))) return
+    if (!target.title) { setCreateError('请输入文档标题'); return }
     const controller = new AbortController()
     createController.current = controller
-    setCreating(true); setCreateError(''); setSubmittedTitle(title.trim())
+    attempted.current = target
+    setCreating(true); setCreateError(''); setSubmittedTitle(target.title)
     try {
-      const response = await request.post('/doc', { title: title.trim(), templateId: selected.id }, { signal: controller.signal })
-      if (!controller.signal.aborted) navigate(documentHref(response.data.id, sourcePath))
+      const response = await createDocument('/doc', { title: target.title, templateId: target.templateId }, { signal: controller.signal })
+      if (!controller.signal.aborted) { attempted.current = null; navigate(documentHref(response.data.id, sourcePath)) }
     } catch (ex) {
       if (!controller.signal.aborted) {
         const rejected = [400, 401, 403, 404].includes(ex?.code)
+        if (rejected && ex.code !== 401) attempted.current = null
         setUncertain(!rejected)
-        setCreateError(rejected ? ex.message : '创建结果未确认，请核对我的文档，确认是否已创建后再继续。')
+        setCreateError(rejected ? ex.message : '创建结果未确认，可安全重试本次创建，或先核对我的文档。')
       }
     } finally {
       if (createController.current === controller) createController.current = null
@@ -80,8 +89,11 @@ export default function Templates() {
       <Typography.Title level={2}>选一个适合这次工作的框架</Typography.Title>
       <Typography.Paragraph type="secondary">先预览内容，再创建独立文档。内置模板只提供通用框架，不读取其他用户的资料。</Typography.Paragraph>
       {loadError && <Alert type="error" showIcon message={loadError} action={<Button disabled={loading} onClick={() => setRefresh(n => n + 1)}>重试读取</Button>} />}
-      {uncertain && !selected && <Alert type="warning" showIcon message={createError}
-        action={<Button onClick={review}>核对我的文档</Button>} />}
+      {uncertain && !selected && <Alert className="creation-review-alert" type="warning" showIcon message={createError}
+        description={'待确认文档：' + submittedTitle} action={<Space wrap>
+          <Button disabled={creating} loading={creating} onClick={create}>重试本次创建</Button>
+          <Button disabled={creating} onClick={review}>核对我的文档</Button>
+        </Space>} />}
       <Space wrap className="template-filters">
         <Radio.Group aria-label="模板分类" value={category} disabled={creating}
           options={[{ label: '全部', value: 'all' }, ...Object.entries(categories).map(([value, label]) => ({ value, label }))]}
@@ -95,7 +107,7 @@ export default function Templates() {
         dataSource={filtered} locale={{ emptyText: loading ? '正在加载…' : !templates ? '模板列表暂不可用' : <Empty description="没有匹配的模板，试试其他分类或关键词" /> }}
         renderItem={template => <List.Item><Card title={template.title}>
           <Tag>{categories[template.category] || '通用'}</Tag><Typography.Paragraph>{template.description}</Typography.Paragraph>
-          <Button disabled={loading || uncertain} onClick={() => { setSelected(template); setTitle(template.title); setCreateError('') }}>预览并使用{template.title}</Button>
+          <Button disabled={loading || creating || uncertain} onClick={() => { setSelected(template); setTitle(template.title); setCreateError('') }}>预览并使用{template.title}</Button>
         </Card></List.Item>} /></Spin>
       <Link to="/docs">也可以返回我的文档创建空白文档</Link>
     </main>
@@ -105,7 +117,7 @@ export default function Templates() {
       closable={!creating} maskClosable={!creating} keyboard={!creating} footer={[
         <Button key="close" disabled={creating} onClick={() => { setSelected(null); if (!uncertain) setCreateError('') }}>关闭</Button>,
         uncertain && <Button key="review" onClick={review}>核对我的文档</Button>,
-        <Button key="create" type="primary" loading={creating} disabled={uncertain || !title.trim() || !templates || loading} onClick={create}>创建文档</Button>,
+        <Button key="create" type="primary" loading={creating} disabled={!title.trim() || !templates || loading} onClick={create}>{uncertain ? '重试本次创建' : '创建文档'}</Button>,
       ]}>
       {createError && selected && <Alert type={uncertain ? 'warning' : 'error'} showIcon message={createError} />}
       <Typography.Paragraph>创建后可自由编辑；模板内容会作为文档的初始版本保留。</Typography.Paragraph>

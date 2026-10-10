@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
+import { joinForSmoke } from './smoke-join.mjs'
 
 const primaryPort = Number(process.env.COPAGE_SMOKE_PORT_A ?? 8080)
 const secondaryPort = Number(process.env.COPAGE_SMOKE_PORT_B ?? 8081)
@@ -83,9 +84,7 @@ async function join(client, clientId, lastRevision, pending) {
     requestMessage.pendingBaseRevision = pending.baseRevision
     requestMessage.pendingOp = pending.op
   }
-  const after = client.messages.length
-  client.send(requestMessage)
-  return client.waitFor(message => message.type === 'sync' && message.syncId === syncId, after)
+  return joinForSmoke(client, requestMessage)
 }
 
 async function submit(client, clientId, opId, baseRevision, op) {

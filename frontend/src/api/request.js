@@ -8,6 +8,9 @@ const request = axios.create({
 
 request.interceptors.request.use((config) => {
   const token = localStorage.getItem('collab-token')
+  if (Object.hasOwn(config, 'copageExpectedSessionToken') && config.copageExpectedSessionToken !== token) {
+    throw new axios.CanceledError('账号已变更，创建已取消')
+  }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
     config.copageSessionToken = token
