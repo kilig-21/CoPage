@@ -1,0 +1,11 @@
+.project-read-alert { margin-bottom: 16px; overflow-wrap: anywhere; }
+.project-page .ant-card-head-title { white-space: normal; overflow-wrap: anywhere; }
+.project-page .ant-list-item-meta-title { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .project-read-alert { flex-wrap: wrap; gap: 8px; }
+  .project-read-alert .ant-alert-content { min-width: 0; }
+  .project-read-alert .ant-alert-action { flex-basis: 100%; margin-inline-start: 0; padding-inline-start: 28px; }
+  .project-page .ant-card-head-wrapper { flex-wrap: wrap; gap: 8px; }
+  .project-page .ant-card-extra { margin-inline-start: 0; }
+  .project-page .ant-btn, .project-read-alert .ant-btn { min-height: 44px; }
+}
