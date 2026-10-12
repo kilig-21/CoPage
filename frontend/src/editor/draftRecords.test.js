@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import Delta from 'quill-delta'
 import CollabClient from '../ws/CollabClient.js'
-import { readDraftRecords, draftRecordsJson } from './draftRecords.js'
+import { readDraftRecords, draftRecordsJson, validateDraftRecord } from './draftRecords.js'
 
 const prefix = 'copage-draft:v1:testA:217:'
 function storage(entries) {
@@ -53,4 +53,15 @@ test('原始记录副本逐字保留无法解析的中文、换行和特殊字�
   assert.equal(file.format, 'copage-draft-records')
   assert.equal(file.docId, 217)
   assert.deepEqual(file.records, records)
+})
+
+test('单槽位校验可复用且保持旧读取对缺失保存时间的兼容', () => {
+  const draft = actualDraft()
+  delete draft.savedAt
+  const key = prefix + draft.clientId, raw = JSON.stringify(draft)
+  assert.deepEqual(validateDraftRecord({ key, raw, prefix, docId: 217, Delta }), JSON.parse(raw))
+  const result = readDraftRecords({ storage: storage({ [key]: raw }), prefix, docId: 217, Delta })
+  assert.equal(result.drafts.length, 1)
+  assert.equal(result.unreadable.length, 0)
+  assert.throws(() => validateDraftRecord({ key: prefix + 'other', raw, prefix, docId: 217, Delta }))
 })

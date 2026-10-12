@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Layout, List, Space, Tag, Typography } from 'antd'
 import { ArrowRightOutlined, FileTextOutlined } from '@ant-design/icons'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -7,6 +7,7 @@ import request from '../api/request'
 import UserGuide from '../components/UserGuide'
 import WorkspaceOverview from '../components/WorkspaceOverview'
 import WorkspaceHeader from '../components/WorkspaceHeader'
+import AccountDraftsDrawer from '../components/AccountDraftsDrawer'
 import '../styles/workbench.css'
 
 export default function Home() {
@@ -22,6 +23,12 @@ export default function Home() {
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [showGuide, setShowGuide] = useState(false)
+  const [showDrafts, setShowDrafts] = useState(false)
+  const draftsButton = useRef(null)
+  function closeDrafts() {
+    setShowDrafts(false)
+    queueMicrotask(() => draftsButton.current?.focus())
+  }
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true); setError(''); setData(null)
@@ -90,9 +97,14 @@ export default function Home() {
             <Typography.Paragraph type="secondary">按标题和正文，检索你有权限访问的文档。</Typography.Paragraph>
             <Link to="/search">搜索文档 <ArrowRightOutlined /></Link>
           </section>
+          <section className="cp-workbench-tool"><Typography.Title level={3}>保存在此浏览器的草稿</Typography.Title>
+            <Typography.Paragraph type="secondary">找回当前账号的本地编辑记录，下载副本或回到文档继续处理。</Typography.Paragraph>
+            <Button ref={draftsButton} onClick={() => setShowDrafts(true)}>查看本地草稿</Button>
+          </section>
         </aside>
       </div>
     </main>
     {showGuide && <UserGuide onClose={() => setShowGuide(false)} />}
+    {showDrafts && <AccountDraftsDrawer sourcePath={sourcePath} onClose={closeDrafts} />}
   </Layout>
 }

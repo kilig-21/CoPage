@@ -1,0 +1,13 @@
+.cp-local-drafts .ant-drawer-title { font-size: 22px; }
+.cp-local-drafts .ant-drawer-extra { margin-inline-start: 12px; }
+.cp-local-drafts .ant-alert { margin-bottom: 16px; }
+.cp-local-drafts .cp-local-draft-record { display: block; padding: 24px 0; overflow-wrap: anywhere; }
+.cp-local-drafts .cp-local-draft-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.cp-local-drafts .cp-local-draft-heading h3 { margin: 0; font-size: 17px; }
+.cp-local-drafts .cp-local-draft-heading .ant-tag { flex-shrink: 0; margin: 0; }
+.cp-local-drafts .cp-local-draft-actions { margin-bottom: 4px; }
+.cp-local-drafts .ant-btn:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 2px; }
+@media (max-width: 640px) {
+  .cp-local-drafts .ant-drawer-body { padding: 20px; }
+  .cp-local-drafts .ant-btn { min-height: 44px; }
+}
