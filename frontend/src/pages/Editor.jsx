@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeftOutlined, CloudOutlined, TeamOutlined } from '@ant-design/icons'
-import { Alert, Avatar, Button, Layout, Modal, Space, Tag, Tooltip, Typography } from 'antd'
+import { ArrowLeftOutlined, CloudOutlined, MoreOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons'
+import { Alert, Avatar, Button, Dropdown, Layout, Modal, Popover, Space, Tag, Tooltip, Typography } from 'antd'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { documentHref, documentReturn } from '../navigation/documents'
 import useQuillCollab from '../editor/useQuillCollab'
@@ -16,6 +16,7 @@ import { downloadTextFile } from '../editor/downloadTextFile'
 import DraftBackupDownloads from '../components/DraftBackupDownloads'
 import DocumentFindPanel from '../components/DocumentFindPanel'
 import UserGuide from '../components/UserGuide'
+import '../styles/editor-workspace.css'
 
 export default function Editor() {
   const { id } = useParams()
@@ -32,11 +33,32 @@ export default function Editor() {
   const [showCopy, setShowCopy] = useState(false)
   const [showFind, setShowFind] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
+  const [titleOpen, setTitleOpen] = useState(false)
   const [findFocusEpoch, setFindFocusEpoch] = useState(0)
   const [draftDownloadNotice, setDraftDownloadNotice] = useState('')
   const { editorHostRef, connection, users, error, title, permission, isOwner,
     saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, unreadableDrafts, unavailableDrafts, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor } = useQuillCollab(docId)
   const isConnected = connection === '已连接'
+  const displayTitle = title || '协同文档 #' + id
+  const documentTools = [
+    ...(permission === 2 ? [{ key: 'rename', label: '重命名' }] : []),
+    { key: 'history', label: '历史版本' }, { key: 'copy', label: '创建副本' },
+    { key: 'export', label: '导出文档' }, { key: 'print', label: '打印 / PDF' },
+  ]
+  const tools = [
+    ...(permission > 0 ? [{ type: 'group', label: '文档', children: documentTools }] : []),
+    ...(isOwner && permission === 2 ? [{ type: 'group', label: '协作', children: [{ key: 'manage', label: '协作者管理' }] }] : []),
+    ...(permission > 0 ? [{ type: 'divider' }] : []),
+    { key: 'guide', label: '使用指南' },
+  ]
+  function selectTool({ key }) {
+    setToolsOpen(false)
+    const actions = { rename: setRenaming, history: setShowHistory, copy: setShowCopy,
+      export: setShowExport, print: setShowPrint, manage: setManaging, guide: setShowGuide }
+    actions[key]?.(true)
+  }
+  useEffect(() => { setToolsOpen(false); setTitleOpen(false) }, [docId, permission])
   useEffect(() => {
     if (!isOwner || permission !== 2) setManaging(false)
   }, [isOwner, permission])
@@ -49,6 +71,7 @@ export default function Editor() {
   }, [title, permission])
   useEffect(() => setDraftDownloadNotice(''), [docId])
   function openFind() {
+    setToolsOpen(false)
     startDocumentFind()
     setShowFind(true)
     setFindFocusEpoch(value => value + 1)
@@ -63,7 +86,7 @@ export default function Editor() {
       if (permission <= 0 || recoveryDraft || renaming || sharing || managing || showHistory || showExport || showPrint || showCopy || showGuide ||
           event.isComposing || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || !['f', 'p'].includes(event.key.toLowerCase())) return
       event.preventDefault()
-      if (event.key.toLowerCase() === 'p') setShowPrint(true)
+      if (event.key.toLowerCase() === 'p') { setToolsOpen(false); setShowPrint(true) }
       else openFind()
     }
     window.addEventListener('keydown', shortcut)
@@ -79,35 +102,42 @@ export default function Editor() {
   }
 
   return (
-    <Layout className="app-shell">
+    <Layout className="app-shell editor-workspace">
       <header className="topbar editor-topbar">
         <div className="editor-title-row">
-          <Button type="text" aria-label={returnTarget.label} icon={<ArrowLeftOutlined />} onClick={() => navigate(returnTarget.path)}>{returnTarget.label}</Button>
-          <Typography.Text className="editor-title" strong>{title || '协同文档 #' + id}</Typography.Text>
-          {permission === 2 && <Button onClick={() => setRenaming(true)}>重命名</Button>}
+          <Tooltip title={returnTarget.label}><Button type="text" className="editor-return" aria-label={returnTarget.label}
+            icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={() => navigate(returnTarget.path)}><span className="editor-action-label">{returnTarget.label}</span></Button></Tooltip>
+          <div className="editor-document-context">
+            <span className="editor-brand">CoPage</span>
+            <h1 className="editor-title"><Popover title="文档标题" content={<p className="editor-full-title">{displayTitle}</p>}
+              trigger="click" open={titleOpen} onOpenChange={setTitleOpen} placement="bottom" overlayClassName="editor-title-popover">
+              <Button className="editor-title-reveal" type="text" aria-label={'查看完整标题：' + displayTitle} aria-expanded={titleOpen}
+                onBlur={() => setTitleOpen(false)} onKeyDown={event => { if (event.key === 'Escape') setTitleOpen(false) }}><span>{displayTitle}</span></Button>
+            </Popover></h1>
+          </div>
         </div>
-        <Space wrap className="editor-actions">
-          <Button onClick={() => setShowGuide(true)}>使用指南</Button>
-          {permission > 0 && <Button aria-label="文档内查找" title="文档内查找（Ctrl/⌘+F）" onClick={openFind}>文档内查找</Button>}
-          {permission > 0 && <Button onClick={() => setSharing(true)}>分享链接</Button>}
-          {permission > 0 && <Button onClick={() => setShowHistory(true)}>历史版本</Button>}
-          {permission > 0 && <Button onClick={() => setShowExport(true)}>导出文档</Button>}
-          {permission > 0 && <Button onClick={() => setShowCopy(true)}>创建副本</Button>}
-          {permission > 0 && <Button title="打印 / PDF（Ctrl/⌘+P）" onClick={() => setShowPrint(true)}>打印 / PDF</Button>}
-          {isOwner && permission === 2 && <Button icon={<TeamOutlined />} onClick={() => setManaging(true)}>协作者管理</Button>}
+        <Space className="editor-actions" size={4}>
+          {permission > 0 && <Tooltip title="文档内查找（Ctrl/⌘+F）"><Button type="text" aria-label="文档内查找"
+            icon={<SearchOutlined aria-hidden="true" />} onClick={openFind}><span className="editor-action-label">查找</span></Button></Tooltip>}
+          {permission > 0 && <Tooltip title="分享链接"><Button type="text" aria-label="分享链接" icon={<ShareAltOutlined aria-hidden="true" />}
+            onClick={() => setSharing(true)}><span className="editor-action-label">分享</span></Button></Tooltip>}
+          <Dropdown trigger={['click']} autoFocus open={toolsOpen} onOpenChange={setToolsOpen} menu={{ items: tools, onClick: selectTool }}>
+            <Button type="text" aria-label="更多文档操作" aria-haspopup="menu" aria-expanded={toolsOpen} icon={<MoreOutlined aria-hidden="true" />}>
+              <span className="editor-action-label">更多</span></Button>
+          </Dropdown>
         </Space>
       </header>
       <main className="editor-wrap">
         <div className="editor-status-row">
-          <Space wrap>
+          <Space wrap className="editor-save-state">
             <Tag color={isConnected ? 'green' : 'gold'} icon={<CloudOutlined />}>{connection}</Tag>
-            <Typography.Text role="status" aria-live="polite">{saveStatus}</Typography.Text>
+            <Typography.Text className="editor-save-status" role="status" aria-live="polite">{saveStatus}</Typography.Text>
           </Space>
-          <Avatar.Group max={{ count: 4 }}>
-            {users.map(user => <Tooltip key={user.userId} title={user.nickname}>
-              <Avatar style={{ backgroundColor: user.color }}>{user.nickname?.slice(0, 1).toUpperCase()}</Avatar>
+          {isConnected && <div className="editor-presence" role="group" aria-label="在线协作者"><Avatar.Group size={28} max={{ count: 2 }}>
+            {users.map(user => <Tooltip key={user.userId} title={user.nickname} trigger={['hover', 'focus']}>
+              <Avatar tabIndex={0} aria-label={user.nickname} style={{ backgroundColor: user.color }}>{user.nickname?.slice(0, 1).toUpperCase()}</Avatar>
             </Tooltip>)}
-          </Avatar.Group>
+          </Avatar.Group></div>}
         </div>
         {titleError && <Alert className="editor-alert" type="warning" message={titleError}
           action={<Button onClick={refreshTitle}>重试标题</Button>} />}
