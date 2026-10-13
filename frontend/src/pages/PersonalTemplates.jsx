@@ -38,12 +38,19 @@ export default function PersonalTemplates() {
   const [uncertain, setUncertain] = useState(null)
   const mutation = useRef(null)
   const instance = useRef(null)
+  const selection = useRef(null)
+  const detailRequest = useRef(null)
+  function closeTemplate() {
+    selection.current = null
+    detailRequest.current?.abort(); detailRequest.current = null
+    setSelected(null); setEditing(null); setDetail(null); setDetailError(''); setDetailLoading(false); setTitle('')
+  }
   useEffect(() => {
     if (instance.current) {
       setUncertain({ kind: 'instance', ...instance.current })
       setError('创建结果未确认，可安全重试本次创建，或先核对我的文档。')
     }
-    mutation.current?.abort(); mutation.current = null; setBusy(false); setSelected(null); setEditing(null)
+    mutation.current?.abort(); mutation.current = null; setBusy(false); closeTemplate()
     return () => mutation.current?.abort()
   }, [location.key])
   useEffect(() => setInput(keyword), [keyword])
@@ -66,13 +73,33 @@ export default function PersonalTemplates() {
   }, [category, keyword, page, refresh])
   useEffect(() => {
     const controller = new AbortController()
-    setDetail(null); setDetailError(''); setDetailLoading(Boolean(selected))
-    if (selected) request.get('/personal-templates/' + selected.id, { signal: controller.signal })
-      .then(({ data }) => { if (!controller.signal.aborted) { setDetail(data); if (!instance.current) setTitle(data.name) } })
-      .catch(failure => { if (!controller.signal.aborted) setDetailError([400, 403, 404].includes(failure?.code) ? failure.message : '模板内容未能加载，请重新读取。') })
-      .finally(() => { if (!controller.signal.aborted) setDetailLoading(false) })
-    return () => controller.abort()
-  }, [selected?.id, detailRefresh])
+    const session = selected?.session
+    detailRequest.current = controller
+    const current = () => !controller.signal.aborted && detailRequest.current === controller &&
+      session && selection.current === session
+    setDetail(null); setDetailError(''); setDetailLoading(Boolean(session && selection.current === session))
+    if (session && selection.current === session) request.get('/personal-templates/' + session.templateId, { signal: controller.signal })
+      .then(({ data }) => {
+        if (!current()) return
+        if (data?.id !== session.templateId || !Number.isSafeInteger(data.version) || data.version <= 0 ||
+            typeof data.name !== 'string' || typeof data.description !== 'string' || !Object.hasOwn(categories, data.category))
+          throw new Error('模板响应与当前选择不一致，请重新读取。')
+        setDetail(data)
+        // 仅本次打开的首次成功读取初始化标题；重读不替换用户输入或原创建目标。
+        if (!session.titleInitialized) {
+          session.titleInitialized = true
+          if (!instance.current) setTitle(data.name)
+        }
+      })
+      .catch(failure => { if (current()) setDetailError([400, 403, 404].includes(failure?.code) ? failure.message :
+        failure.message === '模板响应与当前选择不一致，请重新读取。' ? failure.message : '模板内容未能加载，请重新读取。') })
+      .finally(() => { if (current()) setDetailLoading(false) })
+    return () => { controller.abort(); if (detailRequest.current === controller) detailRequest.current = null }
+  }, [selected?.session, detailRefresh])
+  const currentDetail = selected?.session === selection.current && detail?.id === selected?.id ? detail : null
+  const detailReady = Boolean(currentDetail && !detailLoading && !detailError)
+  const currentEditing = editing?.session === selected?.session && editing?.templateId === selected?.id ? editing : null
+  const changedVersion = Boolean(currentEditing && currentDetail && currentEditing.version !== currentDetail.version)
   const ready = Boolean(data && !loading && !busy && !uncertain)
   async function mutate(kind, action, onSuccess, reviewTarget) {
     const confirming = kind === 'instance' && uncertain?.kind === 'instance' && instance.current
@@ -97,7 +124,7 @@ export default function PersonalTemplates() {
   }
   const review = () => {
     if (uncertain?.kind === 'instance') navigate('/docs?' + new URLSearchParams({ scope: 'owned', keyword: uncertain.title }).toString())
-    else { setSelected(null); setEditing(null); filter(uncertain?.category || 'all', uncertain?.name || ''); setRefresh(n => n + 1) }
+    else { closeTemplate(); filter(uncertain?.category || 'all', uncertain?.name || ''); setRefresh(n => n + 1) }
   }
   const retryInstance = () => {
     const target = instance.current
@@ -106,7 +133,17 @@ export default function PersonalTemplates() {
       { title: target.title, expectedVersion: target.expectedVersion }, { signal }),
       result => navigate(documentHref(result.id, sourcePath)), target)
   }
-  const open = template => { setSelected(template); setEditing(null); setError('') }
+  const open = template => {
+    detailRequest.current?.abort(); detailRequest.current = null
+    const session = { templateId: template.id, titleInitialized: false }
+    selection.current = session
+    setSelected({ ...template, session }); setEditing(null); setDetail(null); setDetailError(''); setDetailLoading(true); setTitle(''); setError('')
+  }
+  const reread = () => {
+    if (busy || detailLoading || selection.current !== selected?.session) return
+    detailRequest.current?.abort(); detailRequest.current = null
+    setDetail(null); setDetailError(''); setDetailLoading(true); setDetailRefresh(n => n + 1)
+  }
   return <Layout className="app-shell">
     <WorkspaceHeader title="我的模板" onGuide={() => setShowGuide(true)}><Space wrap>
       <Button onClick={() => navigate('/templates')}>内置模板</Button>
@@ -135,37 +172,47 @@ export default function PersonalTemplates() {
           <Button key="open" disabled={!ready} onClick={() => open(template)}>预览并使用</Button>,
           <Popconfirm key="delete" overlayClassName="document-action-confirm" title={'删除模板“' + template.name + '”？'}
             description="删除后无法恢复此模板，并释放模板容量；来源及已创建的文档保留。" disabled={!ready}
-            onConfirm={() => mutate('delete', signal => request.delete('/personal-templates/' + template.id, { signal, params: { expectedVersion: template.version } }), () => { setSelected(null); setEditing(null); setNotice('模板已删除，原文档保留'); setRefresh(n => n + 1) }, { name: template.name, category: template.category })}>
+            onConfirm={() => mutate('delete', signal => request.delete('/personal-templates/' + template.id, { signal, params: { expectedVersion: template.version } }), () => { closeTemplate(); setNotice('模板已删除，原文档保留'); setRefresh(n => n + 1) }, { name: template.name, category: template.category })}>
             <Button disabled={!ready} danger>删除模板</Button></Popconfirm>,
         ]}><List.Item.Meta title={template.name} description={<Space wrap><Tag>{categories[template.category]}</Tag><span>{template.description || '未填写说明'}</span><span>{template.updateTime}</span></Space>} /></List.Item>} />
         {data?.total > SIZE && <Pagination current={page} total={data.total} pageSize={SIZE} showSizeChanger={false} disabled={!ready} onChange={next => filter(category, keyword, next)} />}
       </Card>
     </main>
-    {selected && <Modal open title={(editing ? '修改模板资料：' : '使用模板：') + (detail?.name || selected.name)} className="personal-template-modal" width={720}
-      closable={!busy} maskClosable={!busy} keyboard={!busy} onCancel={busy ? undefined : () => { setSelected(null); setEditing(null) }}
+    {selected && <Modal open title={(currentEditing ? '修改模板资料：' : '使用模板：') + (currentDetail?.name || selected.name)} className="personal-template-modal" width={720}
+      closable={!busy} maskClosable={!busy} keyboard={!busy} onCancel={busy ? undefined : closeTemplate}
       footer={[
-        <Button key="close" disabled={busy} onClick={() => { setSelected(null); setEditing(null) }}>关闭</Button>,
+        <Button key="close" disabled={busy} onClick={closeTemplate}>关闭</Button>,
         uncertain && <Button key="review" disabled={busy} onClick={review}>{uncertain.kind === 'instance' ? '核对我的文档' : '核对模板列表'}</Button>,
-        detail && !editing && <Button key="edit" disabled={!ready} onClick={() => setEditing({ name: detail.name, description: detail.description, category: detail.category, version: detail.version })}>修改资料</Button>,
-        detail && !editing && <Button key="create" type="primary" loading={busy} disabled={!data || loading || busy || (uncertain && uncertain.kind !== 'instance') || !title.trim()}
+        currentDetail && !currentEditing && <Button key="edit" disabled={!ready || !detailReady} onClick={() => {
+          if (!detailReady || !ready || selection.current !== selected.session) return
+          setEditing({ templateId: currentDetail.id, session: selected.session, name: currentDetail.name,
+            description: currentDetail.description, category: currentDetail.category, version: currentDetail.version })
+        }}>修改资料</Button>,
+        currentDetail && !currentEditing && <Button key="create" type="primary" loading={busy} disabled={!detailReady || !data || loading || busy || (uncertain && uncertain.kind !== 'instance') || !title.trim()}
           onClick={() => {
-            const target = instance.current || { templateId: detail.id, title: title.trim(), expectedVersion: detail.version }
+            if (!detailReady || selection.current !== selected.session) return
+            const target = instance.current || { templateId: currentDetail.id, title: title.trim(), expectedVersion: currentDetail.version }
             mutate('instance', signal => createDocument('/personal-templates/' + target.templateId + '/documents',
               { title: target.title, expectedVersion: target.expectedVersion }, { signal }), data => navigate(documentHref(data.id, sourcePath)), target)
           }}>{uncertain?.kind === 'instance' ? '重试本次创建' : '创建文档'}</Button>,
-        detail && editing && <Button key="save" type="primary" loading={busy} disabled={!ready || !editing.name.trim()}
-          onClick={() => mutate('update', signal => request.put('/personal-templates/' + detail.id, { name: editing.name.trim(), description: editing.description.trim(), category: editing.category, expectedVersion: editing.version }, { signal }), () => { setSelected(null); setEditing(null); setNotice('模板资料已保存'); filter(editing.category, editing.name.trim()); setRefresh(n => n + 1) }, { name: editing.name.trim(), category: editing.category })}>保存资料</Button>,
+        currentEditing && <Button key="save" type="primary" loading={busy} disabled={!ready || !detailReady || changedVersion || !currentEditing.name.trim()}
+          onClick={() => {
+            if (!ready || !detailReady || changedVersion || selection.current !== currentEditing.session) return
+            const draft = currentEditing
+            mutate('update', signal => request.put('/personal-templates/' + draft.templateId, { name: draft.name.trim(), description: draft.description.trim(), category: draft.category, expectedVersion: draft.version }, { signal }), () => { closeTemplate(); setNotice('模板资料已保存'); filter(draft.category, draft.name.trim()); setRefresh(n => n + 1) }, { name: draft.name.trim(), category: draft.category })
+          }}>保存资料</Button>,
       ]}>
       {error && <Alert type={uncertain ? 'warning' : 'error'} showIcon message={error} />}
-      {detailError && <Alert type="error" showIcon message={detailError} />}
-      <Button disabled={busy || detailLoading} onClick={() => { setEditing(null); setDetailRefresh(n => n + 1) }}>重新读取模板</Button>
+      {detailError && <Alert className="template-detail-notice" type="error" showIcon message={detailError} />}
+      <Button disabled={busy || detailLoading} onClick={reread}>重新读取模板</Button>
+      {changedVersion && <Alert className="template-detail-notice" type="warning" showIcon message="模板资料已变化，当前修改仍保留。请先复制要保留的输入，再关闭并重新打开模板，按最新资料修改。" />}
       {detailLoading && <Typography.Paragraph>正在读取模板内容…</Typography.Paragraph>}
-      {detail && !editing && <>
+      {!currentEditing && selected.session.titleInitialized && <>
         <Typography.Paragraph>模板保留保存时的正文，不会随来源文档变化；每次使用都创建独立文档，初始内容作为版本0保留。</Typography.Paragraph>
         <Input aria-label="个人模板新文档标题" maxLength={200} value={title} disabled={busy || Boolean(uncertain)} onChange={e => setTitle(e.target.value)} />
-        <DocumentPreview content={detail.content} label="个人模板预览" />
+        {currentDetail && <DocumentPreview content={currentDetail.content} label="个人模板预览" />}
       </>}
-      {detail && editing && <>
+      {currentEditing && <>
         <Typography.Paragraph>修改名称、用途和说明；模板正文保持不变。</Typography.Paragraph>
         <Input aria-label="修改个人模板名称" maxLength={200} value={editing.name} disabled={busy || Boolean(uncertain)} onChange={e => setEditing(current => ({ ...current, name: e.target.value }))} />
         <Radio.Group className="template-filters" aria-label="修改个人模板用途" value={editing.category} disabled={busy || Boolean(uncertain)}

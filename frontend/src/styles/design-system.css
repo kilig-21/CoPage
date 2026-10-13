@@ -124,6 +124,14 @@ body { background: var(--cp-paper); }
   .document-transfer-modal .ant-modal-close { width: 44px; height: 44px; }
   .document-transfer-modal .ant-radio-wrapper { min-height: 44px; align-items: center; }
   .document-transfer-modal input[type='file'] { max-width: 100%; }
+  .personal-template-modal .ant-btn, .personal-template-modal .ant-input { min-height: 44px; }
+  .personal-template-modal .ant-modal-close { width: 44px; height: 44px; }
+  .personal-template-modal .ant-radio-wrapper { min-height: 44px; align-items: center; }
+  .personal-template-modal .ant-modal-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .personal-template-modal .ant-modal-footer .ant-btn { margin-inline-start: 0; }
+  .personal-template-modal { top: 24px; }
+  .personal-template-page .ant-list .ant-list-item .ant-list-item-meta { flex: 1 1 100%; min-width: 0; }
+  .personal-template-page .ant-list .ant-list-item .ant-list-item-action { margin: 0; width: 100%; display: flex; flex-wrap: wrap; gap: 4px; }
   .trash-list-card .ant-card-body { padding: 16px; }
   .trash-list-card .ant-list .ant-list-item { flex-wrap: wrap; gap: 12px; }
   .trash-list-card .ant-list .ant-list-item .ant-list-item-meta { flex-basis: 100%; }
@@ -131,6 +139,9 @@ body { background: var(--cp-paper); }
   .trash-list-card .ant-pagination .ant-pagination-item, .trash-list-card .ant-pagination .ant-pagination-prev,
   .trash-list-card .ant-pagination .ant-pagination-next { min-width: 44px; height: 44px; line-height: 42px; }
 }
+.personal-template-modal .ant-modal-title { padding-inline-end: 40px; }
+.personal-template-modal .template-detail-notice { margin-block: 12px; }
+.personal-template-modal .ant-input-textarea-show-count { margin-bottom: 20px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important;
     animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
