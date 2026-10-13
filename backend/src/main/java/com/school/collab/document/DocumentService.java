@@ -205,10 +205,18 @@ public class DocumentService {
         if (lifecycle != null) lifecycle.publishEvent(new DocumentDeleted(docId));
     }
 
+    @Transactional(readOnly = true)
     public TrashView trash(int page, int size) {
+        return trash(page, size, "");
+    }
+
+    @Transactional(readOnly = true)
+    public TrashView trash(int page, int size, String keyword) {
         if (page < 1 || size < 1 || size > 100) throw new BizException(ErrorCode.PARAM_ERROR);
         long userId = currentUserId();
-        return new TrashView(documents.countDeletedOwned(userId), documents.listDeletedOwned(userId,page,size)
+        String filter = keyword == null ? "" : keyword.trim();
+        if (filter.length() > 200) throw new BizException(ErrorCode.PARAM_ERROR);
+        return new TrashView(documents.countDeletedOwned(userId,filter), documents.listDeletedOwned(userId,filter,page,size)
             .stream().map(row->new TrashItem(row.id(),row.title(),format(row.deletedAt()))).toList());
     }
 

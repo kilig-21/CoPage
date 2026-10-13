@@ -380,14 +380,54 @@ class DocumentServiceTest {
     @Test
     void trashUsesOnlyCurrentOwnerAndDoesNotExposeBody() {
         UserContext.set(2L,"member");
-        when(repository.countDeletedOwned(2L)).thenReturn(1L);
-        when(repository.listDeletedOwned(2L,1,20)).thenReturn(java.util.List.of(new DocumentRepository.TrashRow(5,"标题",row.updateTime())));
+        when(repository.countDeletedOwned(2L,"")).thenReturn(1L);
+        when(repository.listDeletedOwned(2L,"",1,20)).thenReturn(java.util.List.of(new DocumentRepository.TrashRow(5,"标题",row.updateTime())));
         var trash=service.trash(1,20);
         assertEquals(1L,trash.total());
         assertEquals("标题",trash.list().getFirst().title());
         assertEquals("2026-09-26 15:00:00",trash.list().getFirst().deletedAt());
         assertFalse(trash.toString().contains("正文"));
-        verify(repository,never()).listDeletedOwned(eq(1L),anyInt(),anyInt());
+        verify(repository).countDeletedOwned(2L,"");
+        verify(repository).listDeletedOwned(2L,"",1,20);
+        verifyNoMoreInteractions(repository);
         assertThrows(BizException.class,()->service.trash(0,20));
+    }
+
+    @Test
+    void trashTrimsOneLiteralTitleFilterForCountAndPageAndProjectsOnlySummary() {
+        UserContext.set(2L,"member");
+        when(repository.countDeletedOwned(2L,"50%_方案")).thenReturn(3L);
+        when(repository.listDeletedOwned(2L,"50%_方案",2,1)).thenReturn(java.util.List.of(
+                new DocumentRepository.TrashRow(5,"50%_方案",row.updateTime())));
+        var result=service.trash(2,1," 50%_方案 ");
+        assertEquals(3,result.total());
+        var json=new ObjectMapper().valueToTree(result.list().getFirst());
+        assertEquals(3,json.size());
+        assertEquals(5,json.path("id").asLong());
+        assertEquals("50%_方案",json.path("title").asText());
+        assertEquals("2026-09-26 15:00:00",json.path("deletedAt").asText());
+        verify(repository).countDeletedOwned(2L,"50%_方案");
+        verify(repository).listDeletedOwned(2L,"50%_方案",2,1);
+        verifyNoMoreInteractions(repository);
+    }
+
+    @Test
+    void trashValidatesLoginPagingAndTrimmedKeywordBeforeAnyRead() {
+        assertEquals(ErrorCode.UNAUTHORIZED,assertThrows(BizException.class,()->service.trash(1,20,"标题")).getErrorCode());
+        UserContext.set(2L,"member");
+        for(int[] paging:new int[][]{{0,20},{-1,20},{1,0},{1,101}}) {
+            assertEquals(ErrorCode.PARAM_ERROR,assertThrows(BizException.class,()->service.trash(paging[0],paging[1],"")).getErrorCode());
+        }
+        assertEquals(ErrorCode.PARAM_ERROR,assertThrows(BizException.class,()->service.trash(1,20,"名".repeat(201))).getErrorCode());
+        verifyNoInteractions(repository);
+        String boundary="名".repeat(200);
+        service.trash(1,20," "+boundary+" ");
+        verify(repository).countDeletedOwned(2L,boundary);
+        verify(repository).listDeletedOwned(2L,boundary,1,20);
+        service.trash(1,20,null);
+        service.trash(1,20,"   ");
+        verify(repository,times(2)).countDeletedOwned(2L,"");
+        verify(repository,times(2)).listDeletedOwned(2L,"",1,20);
+        verifyNoMoreInteractions(repository);
     }
 }

@@ -13,6 +13,7 @@ import java.util.Optional;
 
 @Repository
 public class DocumentRepository {
+    private static final String DELETED_OWNED_FILTER = "owner_id = ? AND is_deleted = 1 AND (? = '' OR LOCATE(?, title) > 0)";
     private static final String VISIBLE_FILTER = """
             d.is_deleted = 0 AND
             (d.owner_id = ? OR c.user_id IS NOT NULL)
@@ -174,15 +175,26 @@ public class DocumentRepository {
     }
 
     public long countDeletedOwned(long userId) {
-        return jdbc.queryForObject("SELECT COUNT(*) FROM document WHERE owner_id=? AND is_deleted=1", Long.class, userId);
+        return countDeletedOwned(userId, "");
+    }
+
+    public long countDeletedOwned(long userId, String keyword) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM document WHERE " + DELETED_OWNED_FILTER,
+                Long.class, userId, keyword, keyword);
     }
 
     public List<TrashRow> listDeletedOwned(long userId, int page, int size) {
+        return listDeletedOwned(userId, "", page, size);
+    }
+
+    /** 当前所有者的回收站只按标题字面匹配；不读取正文或协作者。 */
+    public List<TrashRow> listDeletedOwned(long userId, String keyword, int page, int size) {
         return jdbc.query("""
-            SELECT id,title,update_time FROM document WHERE owner_id=? AND is_deleted=1
+            SELECT id,title,update_time FROM document WHERE
+            """ + DELETED_OWNED_FILTER + "\n" + """
             ORDER BY update_time DESC,id DESC LIMIT ? OFFSET ?
             """, (rs,n) -> new TrashRow(rs.getLong("id"),rs.getString("title"),rs.getObject("update_time", LocalDateTime.class)),
-            userId,size,((long)page-1)*size);
+            userId,keyword,keyword,size,((long)page-1)*size);
     }
 
     /** 只投影当前所有者的状态，包含软删除行；核对结果不读取正文或成员。 */

@@ -52,8 +52,13 @@ public class DocumentController {
 
     @GetMapping("/trash")
     public Result<DocumentService.TrashView> trash(@RequestParam(defaultValue="1") int page,
-                                                   @RequestParam(defaultValue="20") int size) {
-        return Result.ok(documents.trash(page,size));
+                                                   @RequestParam(defaultValue="20") int size,
+                                                   @RequestParam(defaultValue="") String keyword) {
+        return Result.ok(documents.trash(page,size,keyword));
+    }
+
+    public Result<DocumentService.TrashView> trash(int page, int size) {
+        return trash(page, size, "");
     }
 
     @PostMapping("/{id}/restore")

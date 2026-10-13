@@ -43,3 +43,16 @@ test('直接分享地址及重复返回参数使用确定的安全默认入口�
   assert.deepEqual(documentReturn('?returnTo=%252Fhome'), fallback)
   assert.deepEqual(documentReturn('?returnTo=%2F%2Fexample.com'), fallback)
 })
+
+test('恢复文档打开及重登后返回回收站，完整保留200字标题查找和页码', () => {
+  for (const keyword of ['周报 中文😀 %_&+?#', '中文'.repeat(100)]) {
+    const from='/trash?'+new URLSearchParams({keyword,page:'12'})+'#list'
+    const href=documentHref(41,from)
+    assert.equal(safeReturnPath(href),href)
+    const returned=documentReturn(href.slice(href.indexOf('?')))
+    assert.deepEqual(returned,{path:from,label:'返回回收站'})
+    const params=new URLSearchParams(returned.path.split('?')[1].split('#')[0])
+    assert.equal(params.get('keyword'),keyword)
+    assert.equal(params.get('page'),'12')
+  }
+})
