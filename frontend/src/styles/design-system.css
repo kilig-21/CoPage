@@ -88,6 +88,7 @@ body { background: var(--cp-paper); }
 @media (max-width: 1200px) {
   .workspace-header { gap: 0 16px; }
   .workspace-context { display: none; }
+  .workspace-navigation { justify-content: flex-start; }
   .workspace-nav-link { padding-inline: 10px; }
 }
 @media (max-width: 900px) {

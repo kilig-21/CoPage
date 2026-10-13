@@ -15,9 +15,43 @@ export default function WorkspaceHeader({ title, onGuide, children }) {
   const navigation = useRef(null)
   const [showGuide, setShowGuide] = useState(false)
   useEffect(() => {
-    const active = navigation.current?.querySelector('[aria-current="page"]')
-    if (active && navigation.current.scrollWidth > navigation.current.clientWidth) {
-      navigation.current.scrollLeft = Math.max(0, active.offsetLeft - navigation.current.clientWidth / 2 + active.offsetWidth / 2)
+    const nav = navigation.current
+    if (!nav) return
+    let disposed = false, frame = null, observedWidth = nav.clientWidth
+    const revealActive = () => {
+      frame = null
+      if (disposed || navigation.current !== nav) return
+      const width = nav.clientWidth, max = nav.scrollWidth - width
+      const active = nav.querySelector('[aria-current="page"]')
+      if (!width || max <= 0 || !active) return
+      const bounds = nav.getBoundingClientRect(), target = active.getBoundingClientRect()
+      const left = bounds.left + nav.clientLeft, right = left + width
+      let delta
+      if (target.width > width) delta = target.left - left // 宽入口始终左对齐，避免两端来回调整。
+      else {
+        if (target.left >= left - 1 && target.right <= right + 1) return
+        delta = target.left < left ? target.left - left : target.right - right
+      }
+      const next = Math.min(max, Math.max(0, nav.scrollLeft + delta))
+      if (Math.abs(next - nav.scrollLeft) > 1) nav.scrollLeft = next
+    }
+    const schedule = () => {
+      if (!disposed && frame === null) frame = requestAnimationFrame(revealActive)
+    }
+    const resized = () => {
+      if (disposed || nav.clientWidth === observedWidth) return
+      observedWidth = nav.clientWidth
+      schedule()
+    }
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(resized) : null
+    if (observer) observer.observe(nav)
+    else window.addEventListener('resize', resized)
+    schedule()
+    return () => {
+      disposed = true
+      observer?.disconnect()
+      if (!observer) window.removeEventListener('resize', resized)
+      if (frame !== null) cancelAnimationFrame(frame)
     }
   }, [location.pathname])
   return <>
