@@ -6,11 +6,14 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/projects")
 public class ProjectController {
     private final ProjectService projects;
-    public ProjectController(ProjectService projects) {this.projects=projects;}
+    private final ProjectCreationRequests creations;
+    public ProjectController(ProjectService projects,ProjectCreationRequests creations) {this.projects=projects;this.creations=creations;}
     @GetMapping public Result<ProjectService.ListView> list(@RequestParam(defaultValue="all")String scope,@RequestParam(defaultValue="0")long groupId,
         @RequestParam(defaultValue="false")boolean archived,@RequestParam(defaultValue="")String keyword,
         @RequestParam(defaultValue="1")int page,@RequestParam(defaultValue="20")int size) {return Result.ok(projects.list(scope,groupId,archived,keyword,page,size));}
-    @PostMapping public Result<ProjectService.IdView> create(@RequestBody Create body) {return Result.ok(projects.create(body.name(),body.description(),body.groupId()==null?0:body.groupId()));}
+    @PostMapping public Result<ProjectService.IdView> create(@RequestBody Create body,@RequestHeader(value="Idempotency-Key",required=false) String key) {
+        return Result.ok(creations.execute(key,body.name(),body.description(),body.groupId()==null?0:body.groupId()));
+    }
     @GetMapping("/{id}") public Result<ProjectService.Detail> detail(@PathVariable long id,@RequestParam(defaultValue="")String keyword,@RequestParam(defaultValue="1")int page,@RequestParam(defaultValue="20")int size) {return Result.ok(projects.detail(id,keyword,page,size));}
     @GetMapping("/{id}/state") public Result<ProjectService.StateView> state(@PathVariable long id) {return Result.ok(projects.state(id));}
     @GetMapping("/{id}/documents/{docId}/state") public Result<ProjectService.AssociationStateView> associationState(@PathVariable long id,@PathVariable long docId) {return Result.ok(projects.associationState(id,docId));}

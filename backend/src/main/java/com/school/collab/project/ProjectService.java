@@ -29,6 +29,15 @@ public class ProjectService {
         if(group>0&&!groups.access(group,true).canManage())throw new BizException(ErrorCode.FORBIDDEN,"创建小组项目需要管理权限");
         return new IdView(projects.create(normalized,about,user,group),group);
     }
+    /** 首次创建回执不替代当前权限；降权成员可确认原项目，但不可创建新项目。 */
+    @Transactional(readOnly=true)
+    public IdView replayCreation(long id,long group) {
+        long user=user();
+        if(id<=0||group<0)throw new IllegalStateException("项目创建回执编号无效");
+        var p=access(id,false,true).project();
+        if(p.id()!=id||p.ownerId()!=user||p.groupId()!=group)throw new IllegalStateException("项目创建回执归属不一致");
+        return new IdView(id,group);
+    }
     @Transactional(readOnly=true)
     public Detail detail(long id,String keyword,int page,int size) {
         user();paging(page,size);var access=access(id,false,false);var p=access.project();String filter=filter(keyword);

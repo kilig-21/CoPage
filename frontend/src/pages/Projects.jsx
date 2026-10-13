@@ -7,7 +7,7 @@ import WorkspaceHeader from '../components/WorkspaceHeader'
 import UserGuide from '../components/UserGuide'
 import ProjectDocumentsModal from '../components/ProjectDocumentsModal'
 import useProjectOperation from '../api/useProjectOperation'
-import { canAcknowledgeProjectCreation } from '../api/projectOperation'
+import useProjectCreations from '../api/useProjectCreations'
 import '../styles/project-workspace.css'
 
 const idValue = value => Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Number(value) : 0
@@ -19,7 +19,7 @@ function Fields({ value, context, ready, busy, uncertain, error, notice, onSave,
   return <Modal open title={value.id ? '修改项目资料' : '创建项目'} closable={!busy} maskClosable={!busy} keyboard={!busy}
     onCancel={busy ? undefined : onClose} footer={[
       <Button key="close" disabled={busy} onClick={onClose}>取消</Button>,
-      uncertain && <Button key="review" disabled={busy} onClick={() => onReview({ groupId, name: name.trim() })}>核对项目列表</Button>,
+      uncertain && <Button key="review" disabled={busy} onClick={onReview}>{value.id ? '核对操作结果' : '确认原创建'}</Button>,
       <Button key="save" type="primary" disabled={!ready || uncertain || !name.trim() || (!value.id && groupId > 0 &&
         !(context?.id === groupId && ['owner', 'admin'].includes(context.role)))} loading={busy}
         onClick={() => onSave({ name: name.trim(), description: description.trim(), groupId })}>{value.id ? '保存项目' : '创建项目'}</Button>,
@@ -84,6 +84,7 @@ export default function Projects() {
   const busy = operation.busy
   const uncertain = Boolean(operation.uncertain)
   const operationError = operation.error
+  const creations = useProjectCreations(busy)
   const automaticPageChange = useRef(null)
   const waitingConfirmation = useRef(null)
   const listKey = JSON.stringify([scope, groupId, archived, keyword, page, refresh, listRefresh])
@@ -186,13 +187,18 @@ export default function Projects() {
   const mutate = (target, action, onSuccess, available = detailReady) => {
     if (available) return operation.run(target, action, onSuccess)
   }
+  const openCreated = result => {
+    setFields(null)
+    setParams({ project: String(result.id), ...(result.groupId ? { groupId: String(result.groupId), scope: 'group' } : { scope: 'personal' }) })
+  }
+  const confirmCreation = record => operation.run({ kind: 'create', name: record.name, groupId: record.groupId, requestId: record.requestId },
+    (config, prepared) => creations.retry(record, config, prepared), openCreated, { retryCreation: true, trackedCreation: true })
   const review = async () => {
     if (operation.uncertain?.kind === 'create') {
       const original = operation.uncertain
-      setFields(null); setAdding(false)
-      automaticPageChange.current = null
-      setParams({ scope: original.groupId ? 'group' : 'personal', ...(original.groupId ? { groupId: String(original.groupId) } : {}), keyword: original.name, page: '1' })
-      setRefresh(value => value + 1)
+      const record = creations.records?.find(value => value.requestId === original.requestId)
+      if (record) await confirmCreation(record)
+      else creations.reportMissing()
     } else await operation.review()
   }
   return <Layout className="app-shell">
@@ -217,7 +223,8 @@ export default function Projects() {
         description={uncertain && (operation.uncertain.kind === 'create'
           ? '原创建：' + operation.uncertain.name + ' · ' + (operation.uncertain.groupId ? '小组 #' + operation.uncertain.groupId : '个人项目')
           : '原项目 #' + operation.uncertain.projectId + (operation.uncertain.docId ? ' · 文档 #' + operation.uncertain.docId + '：' + operation.uncertain.title : '：' + operation.uncertain.name))}
-        action={uncertain && <Space wrap><Button loading={operation.checking} disabled={busy} onClick={review}>核对操作结果</Button>
+        action={uncertain && <Space wrap><Button loading={operation.checking} disabled={busy || (operation.uncertain.kind === 'create' && creations.loading)} onClick={review}>
+          {operation.uncertain.kind === 'create' ? '确认原创建' : '核对操作结果'}</Button>
           {operation.reviewFailed && operation.uncertain.kind !== 'create' && <Popconfirm overlayClassName="document-action-confirm"
             title="结束这次操作的等待？" description={'原项目 #' + operation.uncertain.projectId + (operation.uncertain.docId ? '、文档 #' + operation.uncertain.docId : '') +
               ' 的结果仍未知。这只解除当前标签的等待，请自行查看原资料后再决定是否重新操作。'}
@@ -225,8 +232,8 @@ export default function Projects() {
             onOpenChange={open => { if (open) waitingConfirmation.current = operation.uncertain }}
             onConfirm={() => { const original = waitingConfirmation.current; waitingConfirmation.current = null; operation.endWaiting(original) }}>
             <Button disabled={busy}>结束本次等待</Button></Popconfirm>}
-          {operation.uncertain.kind === 'create' && <Button disabled={!canAcknowledgeProjectCreation(operation.uncertain, { busy, loading, listed, archived, scope, groupId, keyword })}
-            onClick={operation.acknowledgeCreate}>已人工核对</Button>}</Space>} />}
+          {operation.uncertain.kind === 'create' && operation.uncertain.requestId && <Button disabled={busy}
+            onClick={() => { operation.pauseCreation(operation.uncertain); setFields(null) }}>稍后确认</Button>}</Space>} />}
       {operation.notice && <Alert className="project-read-alert" type={operation.notice.type} showIcon message={operation.notice.message}
         action={operation.notice.target && <Button disabled={busy} onClick={() => {
           const target = operation.notice.target, result = operation.notice.data
@@ -235,6 +242,19 @@ export default function Projects() {
           setParams(wasArchived ? { archived: 'true', ...(originalGroup ? { scope: 'group', groupId: String(originalGroup) } :
             originalGroup === 0 ? { scope: 'personal' } : {}), ...(result.name ? { keyword: result.name } : {}) } : { project: String(target.projectId) })
         }}>{(operation.notice.data.archived ?? operation.notice.data.projectArchived) ? '查看归档列表' : '查看核对项目'}</Button>} />}
+      {(creations.loading || creations.error || creations.records?.length > 0) && <Card title="待确认的创建" className="project-section"
+        extra={<Button disabled={busy || creations.loading} onClick={creations.reload}>重新读取</Button>}>
+        <Typography.Paragraph type="secondary">原名称、简介和归属保存在当前浏览器。确认原请求会找回或完成同一次创建，仍按当前权限访问项目。</Typography.Paragraph>
+        {creations.error && <Alert className="project-read-alert" type="warning" showIcon message={creations.error} />}
+        <List rowKey="key" loading={creations.loading} dataSource={creations.records || []}
+          locale={{ emptyText: creations.loading ? '正在读取…' : creations.error ? '创建记录暂不可用' : '没有待确认创建' }}
+          pagination={creations.records?.length > 10 ? { pageSize: 10, size: 'small', showSizeChanger: false, responsive: true } : false}
+          renderItem={record => <List.Item actions={[<Button key="confirm" disabled={busy || (uncertain &&
+            (operation.uncertain.kind !== 'create' || operation.uncertain.requestId !== record.requestId))} onClick={() => confirmCreation(record)}>确认原创建</Button>]}>
+            <List.Item.Meta title={record.name} description={<Space wrap><Tag>{record.groupId ? '小组 #' + record.groupId : '个人项目'}</Tag>
+              <span>{new Date(record.createdAt).toLocaleString()}</span></Space>} />
+          </List.Item>} />
+      </Card>}
       <Space wrap className="project-section">
         <Radio.Group aria-label="项目分类" value={scope} disabled={busy} options={[
           { label: '全部', value: 'all' }, { label: '个人', value: 'personal' }, { label: '小组', value: 'group' },
@@ -296,10 +316,12 @@ export default function Projects() {
       error={operationError || (fields.id ? detailError : contextError || error)} notice={operation.notice?.target?.projectId === fields.id ? operation.notice : null}
       onRetry={() => { if (fields.id) setDetailRefresh(n => n + 1); else { setListRefresh(n => n + 1); setContextRefresh(n => n + 1) } }}
       onClose={() => { if (!busy) setFields(null) }} onReview={review}
-      onSave={values => mutate({ kind: fields.id ? 'rename' : 'create', projectId: fields.id, name: values.name, description: values.description, groupId: values.groupId }, config => fields.id ? request.put('/projects/' + fields.id, { name: values.name, description: values.description }, config) :
-        request.post('/projects', values, config), result => {
-          setFields(null); if (!fields.id) setParams({ project: String(result.id), ...(result.groupId ? { groupId: String(result.groupId), scope: 'group' } : { scope: 'personal' }) })
-        }, fields.id ? detailReady && manage : createReady && (values.groupId === 0 || (values.groupId === context?.id && canCreateGroup)))} />}
+      onSave={values => {
+        const target = { kind: fields.id ? 'rename' : 'create', projectId: fields.id, name: values.name, description: values.description, groupId: values.groupId }
+        if (fields.id) mutate(target, config => request.put('/projects/' + fields.id, { name: values.name, description: values.description }, config), () => setFields(null), detailReady && manage)
+        else if (createReady && (values.groupId === 0 || (values.groupId === context?.id && canCreateGroup))) operation.run(target,
+          (config, prepared) => creations.create(values, config, prepared), openCreated, { trackedCreation: true })
+      }} />}
     {adding && current && <ProjectDocumentsModal key={current.id} project={current} busy={busy} uncertain={uncertain}
       error={operationError} onClose={() => setAdding(false)} onReview={review}
       onAdd={doc => mutate({ kind: 'add', projectId: current.id, groupId: current.groupId, docId: doc.id, title: doc.title }, config =>

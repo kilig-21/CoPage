@@ -11,3 +11,11 @@ CREATE TABLE IF NOT EXISTS project_document (
  added_by BIGINT NOT NULL, create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
  PRIMARY KEY(project_id,doc_id), KEY idx_project_document_doc(doc_id,project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS project_creation_receipt (
+ user_id BIGINT NOT NULL,
+ request_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ request_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ project_id BIGINT NOT NULL, group_id BIGINT NOT NULL,
+ create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ PRIMARY KEY(user_id,request_id), KEY idx_project_creation_project(project_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

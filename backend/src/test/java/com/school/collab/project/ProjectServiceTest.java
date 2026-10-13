@@ -215,4 +215,40 @@ class ProjectServiceTest {
         assertTrue(ProjectService.class.getMethod("state",long.class).getAnnotation(Transactional.class).readOnly());
         assertTrue(ProjectService.class.getMethod("associationState",long.class,long.class).getAnnotation(Transactional.class).readOnly());
     }
+    @Test void personalReplayAllowsArchivedOriginalWithoutReadingDocumentsOrMutating() {
+        as(2);project(2,0,true);
+        assertEquals(new ProjectService.IdView(10,0),service.replayCreation(10,0));
+        verify(repo).find(10,false);verifyNoMoreInteractions(repo);verifyNoInteractions(groups);
+    }
+    @Test void downgradedCreatorCanReplayAnArchivedGroupProjectButCannotCreateAnother() {
+        as(2);project(2,3,true);
+        when(groups.access(3,false)).thenReturn(new GroupService.Access(3,"组","member"));
+        when(groups.access(3,true)).thenReturn(new GroupService.Access(3,"组","member"));
+        assertEquals(new ProjectService.IdView(10,3),service.replayCreation(10,3));
+        code(ErrorCode.FORBIDDEN,()->service.create("项目","简介",3));
+        verify(repo).find(10,false);verifyNoMoreInteractions(repo);
+    }
+    @Test void replayCannotBypassLeavingOrArchivingTheOriginalGroup() {
+        as(2);project(2,3,true);
+        for(ErrorCode denied:new ErrorCode[]{ErrorCode.FORBIDDEN,ErrorCode.NOT_FOUND}) {
+            doThrow(new BizException(denied)).when(groups).access(3,false);
+            code(denied,()->service.replayCreation(10,3));
+        }
+        verify(repo,times(2)).find(10,false);verifyNoMoreInteractions(repo);
+    }
+    @Test void replayRejectsMissingProjectAndUntrustedOwnerGroupOrIdWithoutReplacement() {
+        as(2);code(ErrorCode.NOT_FOUND,()->service.replayCreation(10,0));
+        when(groups.access(3,false)).thenReturn(new GroupService.Access(3,"组","member"));
+        project(1,3,false);assertThrows(IllegalStateException.class,()->service.replayCreation(10,3));
+        project(2,3,false);assertThrows(IllegalStateException.class,()->service.replayCreation(10,0));
+        when(repo.find(10,false)).thenReturn(Optional.of(new ProjectRepository.Project(11,"项目","",2,3,false)));
+        assertThrows(IllegalStateException.class,()->service.replayCreation(10,3));
+        verify(repo,times(4)).find(10,false);verifyNoMoreInteractions(repo);
+    }
+    @Test void anotherPrivateOwnerAndInvalidReceiptIdsCannotReplay() {
+        as(2);project(1,0,true);code(ErrorCode.FORBIDDEN,()->service.replayCreation(10,0));
+        assertThrows(IllegalStateException.class,()->service.replayCreation(0,0));
+        assertThrows(IllegalStateException.class,()->service.replayCreation(10,-1));
+        verify(repo).find(10,false);verifyNoMoreInteractions(repo);verifyNoInteractions(groups);
+    }
 }

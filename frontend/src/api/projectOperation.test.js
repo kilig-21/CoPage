@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { canAcknowledgeProjectCreation, createProjectOperation, projectStateMessage } from './projectOperation.js'
+import { createProjectOperation, projectStateMessage } from './projectOperation.js'
 
 const oldId = '11111111-1111-4111-8111-111111111111', newId = '22222222-2222-4222-8222-222222222222'
 const rename = { kind: 'rename', projectId: 31, name: '原提交', description: '原简介' }
@@ -116,12 +116,11 @@ test('核对被取消后旧回复不能解除原暂停或覆盖新核对', async
   second.resolve({ data: project }); await current
   assert.equal(f.operation.snapshot().uncertain, null); assert.equal(f.confirmations.length, 1)
 })
-test('无ID创建不会用状态接口或同名自动确认，必须明确人工核对', async () => {
+test('无ID创建不会用状态接口或同名自动确认', async () => {
   let reads = 0; const f = fixture(async () => { reads++; return { data: project } })
   await f.operation.run({ kind: 'create', groupId: 0, name: '同名', description: '' }, lost)
   await f.operation.review(); assert.equal(reads, 0); assert.equal(f.operation.snapshot().uncertain.name, '同名')
-  f.operation.acknowledgeCreate(); assert.equal(f.operation.snapshot().uncertain, null)
-  assert.equal(f.operation.snapshot().notice.type, 'info')
+  assert.equal(f.operation.snapshot().notice, null)
 })
 test('无效成功关联/创建回复不能显示成功或解除写暂停', async () => {
   for (const [target, data] of [[add, {}], [{ kind: 'create', groupId: 3, name: '组项目' }, { id: 5, groupId: 0 }]]) {
@@ -161,14 +160,71 @@ test('旧结束等待确认、其他身份和进行中的核对不能解除当�
   await f.operation.run({ ...add }, lost); await f.operation.review()
   f.operation.endWaiting(original); assert.equal(f.operation.snapshot().uncertain.docId, 52)
 })
-test('人工创建核对只能在原归属的进行中、原名称可靠列表完成', () => {
-  for (const groupId of [0, 3]) {
-    const target = { kind: 'create', groupId, name: '原名称' }
-    const view = { groupId, keyword: target.name, scope: groupId ? 'group' : 'personal', archived: false, listed: {}, busy: false, loading: false }
-    assert.equal(canAcknowledgeProjectCreation(target, view), true)
-    for (const change of [{ scope: 'all' }, { scope: groupId ? 'personal' : 'group' }, { archived: true }, { keyword: '后来输入' },
-      { groupId: groupId + 1 }, { listed: null }, { loading: true }, { busy: true }]) {
-      assert.equal(canAcknowledgeProjectCreation(target, { ...view, ...change }), false)
-    }
+test('已准备UUID的创建未知只允许确认原请求，成功后解除该原等待', async () => {
+  const f = fixture(); const target = { kind: 'create', name: '项目', description: '原简介', groupId: 0 }
+  await f.operation.run(target, async (_, prepared) => { prepared({ requestId: oldId, name: '项目', groupId: 0 }); throw Error('lost') }, undefined, { trackedCreation: true })
+  assert.equal(f.operation.snapshot().uncertain.requestId, oldId)
+  let writes = 0
+  const perform = async () => { writes++; return { data: { id: 61, groupId: 0 } } }
+  await f.operation.run({ ...target, requestId: newId }, perform, undefined, { retryCreation: true, trackedCreation: true })
+  assert.equal(writes, 0)
+  await f.operation.run({ ...target, requestId: oldId }, perform, undefined, { retryCreation: true, trackedCreation: true })
+  assert.equal(writes, 1); assert.equal(f.operation.snapshot().uncertain, null); assert.equal(f.pending.size, 0)
+  assert.match(f.operation.snapshot().notice.message, /已确认原项目创建/)
+})
+test('暂缓创建确认保留已准备请求的归属，其他写恢复但旧/新确认不能互相解除', async () => {
+  const f = fixture(), target = { kind: 'create', name: '原项目', groupId: 0 }
+  await f.operation.run(target, async (_, prepared) => { prepared({ requestId: oldId, name: target.name, groupId: 0 }); throw Error('lost') }, undefined, { trackedCreation: true })
+  const original = f.operation.snapshot().uncertain
+  f.operation.pauseCreation({ ...original }); assert.equal(f.operation.snapshot().uncertain, original)
+  f.operation.pauseCreation(original); assert.equal(f.operation.snapshot().uncertain, null)
+  assert.equal(f.operation.snapshot().notice.type, 'warning'); assert.equal(f.confirmations.length, 0)
+  await f.operation.run(rename, lost); f.operation.pauseCreation(original)
+  assert.equal(f.operation.snapshot().uncertain.kind, 'rename')
+})
+test('安全创建在准备UUID前取消不会误作已发送，准备后取消仍保留原UUID', async () => {
+  for (const preparedBeforeCancel of [false, true]) {
+    const f = fixture(), wait = deferred(), target = { kind: 'create', name: '准备', groupId: 0 }
+    let prepared, posts = 0
+    const run = f.operation.run(target, async (_, callback) => {
+      prepared = callback
+      if (preparedBeforeCancel) prepared({ requestId: oldId, name: target.name, groupId: 0 })
+      await wait.promise
+      if (!preparedBeforeCancel) prepared({ requestId: oldId, name: target.name, groupId: 0 })
+      posts++; return { data: { id: 61, groupId: 0 } }
+    }, undefined, { trackedCreation: true })
+    f.operation.cancel(); wait.resolve(); await run
+    assert.equal(posts, preparedBeforeCancel ? 1 : 0)
+    assert.equal(f.operation.snapshot().uncertain?.requestId ?? null, preparedBeforeCancel ? oldId : null)
+    assert.equal(f.confirmations.length, 0)
   }
+})
+test('创建记录只在上层接受身份与响应后清理，一次身份失败保留原UUID', async () => {
+  let failOnce = false, clears = 0
+  const operation = createProjectOperation({ pending: new Map(), readIdentity: () => {
+    if (failOnce) { failOnce = false; throw Error('once') }
+    return { account: 'owner', token: 'fake' }
+  }, readState: async () => ({ data: project }) })
+  const target = { kind: 'create', groupId: 0, name: '原创建' }
+  await operation.run(target, async (_, prepared) => {
+    prepared({ requestId: oldId, name: target.name, groupId: 0 }); failOnce = true
+    return { data: { id: 61, groupId: 0 }, confirmTracking: () => { clears++; return { data: { id: 61, groupId: 0 } } } }
+  }, undefined, { trackedCreation: true })
+  assert.equal(clears, 0); assert.equal(operation.snapshot().uncertain.requestId, oldId)
+  await operation.run({ ...target, requestId: oldId }, async () => ({ data: { id: 61, groupId: 0 }, confirmTracking: () => {
+    clears++; return { data: { id: 61, groupId: 0 } }
+  } }), undefined, { trackedCreation: true, retryCreation: true })
+  assert.equal(clears, 1); assert.equal(operation.snapshot().uncertain, null)
+})
+test('已接受的回复不会因finally额外身份读取失败或界面回调错误变成未知', async () => {
+  let reads = 0
+  const operation = createProjectOperation({ pending: new Map(), readIdentity: () => {
+    if (++reads === 4) throw Error('last read')
+    return { account: 'owner', token: 'fake' }
+  }, readState: async () => ({ data: project }) })
+  await operation.run(rename, async () => ({ data: null }))
+  assert.equal(operation.snapshot().uncertain, null); assert.equal(operation.snapshot().notice.type, 'success')
+  assert.match(operation.snapshot().error, /已收到确认/)
+  const f = fixture(); await f.operation.run(rename, async () => ({ data: null }), () => { throw Error('view failed') })
+  assert.equal(f.operation.snapshot().uncertain, null); assert.match(f.operation.snapshot().error, /操作已确认/)
 })

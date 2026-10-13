@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { openRecoveryChannel } from './recovery-channel.mjs'
 import { createOrganizationFixture, verifyOrganizationRecovery, organizationSnapshotSql } from './organization-recovery-check.mjs'
 import { createCreationFixture, verifyCreationRecovery, creationSnapshotSql } from './document-creation-check.mjs'
+import { createProjectCreationFixture, verifyProjectCreationRecovery, projectCreationSnapshotSql } from './project-creation-check.mjs'
 
 // 仅由生产配置验收脚本调用，输入是该脚本新建的随机临时项目。
 export async function runRecoveryCheck({ docker, base, env, source, sql, port, peerPort, username, password }) {
@@ -100,8 +101,11 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, p
     const organization = await createOrganizationFixture({ port, owner: { username, password }, viewer, outsider, document: original })
     const creation = await createCreationFixture({ port, peerPort, owner: { username, password }, viewer,
       sql: query => readSql(source, query) })
+    const projectCreation = await createProjectCreationFixture({ port, peerPort, owner: { username, password }, viewer,
+      sql: query => readSql(source, query) })
     const durableOrganization = readSql(source, organizationSnapshotSql)
     const durableCreation = readSql(source, creationSnapshotSql)
+    const durableProjectCreation = readSql(source, projectCreationSnapshotSql)
 
     // 对应部署说明的维护窗口：先停写入，再导出 SQL，停 MinIO 后只读归档。
     source(['stop', 'backend'])
@@ -175,7 +179,11 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, p
     assert.equal(readSql(destination, query), durableHistory, '操作历史、幂等收据和快照必须完整恢复')
     assert.equal(readSql(destination, organizationSnapshotSql), durableOrganization, '七张组织/模板表的完整数据和时间字段必须恢复')
     assert.equal(readSql(destination, creationSnapshotSql), durableCreation, '创建收据与首次摘要须完整恢复')
+    assert.equal(readSql(destination, projectCreationSnapshotSql), durableProjectCreation, '项目创建回执全部字段及时间须完整恢复')
     await verifyCreationRecovery({ port: restoredPort, fixture: creation })
+    await verifyProjectCreationRecovery({ port: restoredPort, fixture: projectCreation,
+      sql: query => readSql(destination, query) })
+    assert.equal(readSql(destination, organizationSnapshotSql), durableOrganization, '原项目创建重放不得改变组织fixture任何字段')
     await verifyOrganizationRecovery({ port: restoredPort, fixture: organization })
     const searchPath = q => '/search?q=' + encodeURIComponent(q)
     const assertSearchHit = result => {
