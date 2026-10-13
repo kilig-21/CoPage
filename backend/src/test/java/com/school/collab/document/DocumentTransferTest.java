@@ -73,4 +73,60 @@ class DocumentTransferTest {
         assertEquals(1, normalized.path("ops").size());
         assertEquals("片段".repeat(1000) + "\n", normalized.path("ops").get(0).path("insert").asText());
     }
+
+    @Test
+    void savedDocumentAtCapacityExportsAndImportsWithoutLosingEnvelopeOrRichContent() throws Exception {
+        String prefix = "中文😀\\\"\n".repeat(1000);
+        var first = mapper.createObjectNode().put("insert", prefix);
+        first.set("attributes", mapper.createObjectNode().put("bold", true));
+        var image = mapper.createObjectNode().set("insert", mapper.createObjectNode().put("image", "https://example.invalid/backup.png"));
+        var ops = mapper.createArrayNode().add(first).add(image).add(mapper.createObjectNode().put("insert", "\n"));
+        var content = mapper.createObjectNode().set("ops", ops);
+        int padding = 2 * 1024 * 1024 - content.toString().getBytes(StandardCharsets.UTF_8).length;
+        first.put("insert", prefix + "a".repeat(padding));
+        assertEquals(2 * 1024 * 1024, content.toString().getBytes(StandardCharsets.UTF_8).length);
+        String title = "标题".repeat(100);
+        when(docs.detail(17)).thenReturn(new DocumentService.DetailView(17,title,content,9,1,1,"2026-10-13 20:00:00",false));
+        var copy = transfer.export(17,"copage");
+        assertTrue(copy.content().getBytes(StandardCharsets.UTF_8).length > 2 * 1024 * 1024);
+        assertEquals(9,copy.revision());
+        assertEquals(content,mapper.readTree(copy.content()).path("content"));
+        transfer.importFile(file(copy.filename(),copy.content()),null);
+        verify(docs).createImported(title,content);
+        String padded=copy.content()+" ".repeat(DocumentTransfer.MAX_BYTES-copy.content().getBytes(StandardCharsets.UTF_8).length);
+        assertEquals(3*1024*1024,padded.getBytes(StandardCharsets.UTF_8).length);
+        transfer.importFile(file(copy.filename(),padded),null);
+        verify(docs,times(2)).createImported(title,content);
+        assertEquals(first.path("insert").asText()+"[图片：https://example.invalid/backup.png]\n",transfer.export(17,"txt").content());
+    }
+
+    @Test
+    void importRejectsBodyExpansionBeyondEditorCapacityBeforeCreating() {
+        // 文件小于2MiB，但反斜线JSON转义会让实际正文超过2MiB。
+        assertEquals(ErrorCode.PARAM_ERROR,assertThrows(BizException.class,()->
+                transfer.importFile(file("escaped.txt","\\".repeat(1024 * 1024)),null)).getErrorCode());
+        verifyNoInteractions(docs);
+    }
+
+    @Test
+    void exportPreservesStoredFragmentsWithoutApplyingImportNormalizationLimit() throws Exception {
+        var ops=mapper.createArrayNode();
+        for(int i=0;i<10001;i++) {
+            var op=mapper.createObjectNode().put("insert","段");
+            op.set("attributes",mapper.createObjectNode().put("bold",i%2==0));
+            ops.add(op);
+        }
+        ops.add(mapper.createObjectNode().put("insert","\n"));
+        var content=mapper.createObjectNode().set("ops",ops);
+        when(docs.detail(18)).thenReturn(new DocumentService.DetailView(18,"已保存片段",content,2,1,1,"2026-10-13 20:00:00",false));
+        assertEquals(content,mapper.readTree(transfer.export(18,"copage").content()).path("content"));
+        // 导入片段上限继续保留，下载不能为满足导入限制截断已有正文。
+        assertTrue(assertThrows(BizException.class,()->transfer.importFile(file("many.json",transfer.export(18,"copage").content()),null))
+                .getMessage().contains("10000"));
+        var boundary=mapper.createArrayNode();
+        for(int i=0;i<9999;i++)boundary.add(ops.get(i));
+        boundary.add(mapper.createObjectNode().put("insert","\n"));
+        var accepted=mapper.createObjectNode().set("ops",boundary);
+        assertEquals(10000,transfer.validateContent(accepted).path("ops").size());
+    }
 }

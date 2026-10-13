@@ -15,7 +15,7 @@ try {
  member=await api(null,'/auth/login','POST',{username:'testB',password:'123456'})
  await api(null,'/doc/import','POST',file('a.txt','a'),401)
  await api(owner.token,'/doc/import','POST',new FormData(),400)
- for(const bad of [file('bad.json','{}'),file('bad.txt',new Uint8Array([0xC3])),file('bad.html','<h1>html</h1>'),file('bad.txt','x'.repeat(1024*1024+1))])await api(owner.token,'/doc/import','POST',bad,400)
+ for(const bad of [file('bad.json','{}'),file('bad.txt',new Uint8Array([0xC3])),file('bad.html','<h1>html</h1>'),file('bad.txt','x'.repeat(3*1024*1024+1)),file('expanded.txt','\\'.repeat(1024*1024))])await api(owner.token,'/doc/import','POST',bad,400)
  const doc=await api(owner.token,'/doc/import','POST',file(marker+'.txt','\uFEFF中文 <script>literal</script>\r\n第二行',marker));ids.push(doc.id)
  const detail=await api(owner.token,'/doc/'+doc.id)
  assert.equal(detail.revision,0);assert.deepEqual(detail.content,{ops:[{insert:'中文 <script>literal</script>\n第二行\n'}]})

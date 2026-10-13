@@ -16,18 +16,20 @@ import java.util.Locale;
 /** 有界的 UTF-8 文本与 CoPage 富文本副本；副本不包含身份、权限、草稿或历史。 */
 @Service
 public class DocumentTransfer {
-    public static final int MAX_BYTES = 1024 * 1024;
+    // 文件封装留出标题/format/version空间，正文仍沿用编辑器的2MiB边界。
+    public static final int MAX_BYTES = 3 * 1024 * 1024;
+    static final int MAX_CONTENT_BYTES = 2 * 1024 * 1024;
     private final DocumentService documents;
     private final ObjectMapper mapper;
     public DocumentTransfer(DocumentService documents, ObjectMapper mapper) { this.documents = documents; this.mapper = mapper; }
 
     public DocumentService.SummaryView importFile(MultipartFile file, String title) {
-        if (file.isEmpty() || file.getSize() > MAX_BYTES) throw invalid("请选择不超过 1 MiB 的非空文件");
+        if (file.isEmpty() || file.getSize() > MAX_BYTES) throw invalid("请选择不超过 3 MiB 的非空文件");
         String filename = file.getOriginalFilename() == null ? "" : file.getOriginalFilename();
         String lower = filename.toLowerCase(Locale.ROOT);
         try {
             byte[] bytes = file.getBytes();
-            if (bytes.length > MAX_BYTES) throw invalid("文件不能超过 1 MiB");
+            if (bytes.length > MAX_BYTES) throw invalid("文件不能超过 3 MiB");
             String text = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
                     .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();
             if (text.startsWith("\uFEFF")) text = text.substring(1);
@@ -66,7 +68,8 @@ public class DocumentTransfer {
             return bounded(filename + ".txt", "text/plain;charset=utf-8", text.toString(), doc.revision());
         }
         if ("copage".equals(format)) {
-            JsonNode content = validateContent(doc.content());
+            // 下载是已授权存量正文的完整副本，不用导入片段限制拒绝或改写它。
+            JsonNode content = doc.content();
             var copy = mapper.createObjectNode().put("format", "copage").put("version", 1).put("title", doc.title());
             copy.set("content", content);
             return bounded(filename + ".copage.json", "application/json;charset=utf-8", copy.toString(), doc.revision());
@@ -75,13 +78,14 @@ public class DocumentTransfer {
     }
 
     private ExportView bounded(String filename, String mediaType, String content, long revision) {
-        if (content.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) throw invalid("副本超过 1 MiB，请缩小内容后导出");
+        if (content.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) throw invalid("副本超过 3 MiB，暂不能导出；原文档保留");
         return new ExportView(filename, mediaType, content, revision);
     }
 
     JsonNode validateContent(JsonNode content) {
         if (!content.isObject() || content.size() != 1 || !content.path("ops").isArray()
-                || content.path("ops").isEmpty() || content.path("ops").size() > 10000) throw invalid("副本正文结构不受支持");
+                || content.path("ops").isEmpty()) throw invalid("副本正文结构不受支持");
+        if (content.path("ops").size() > 10000) throw invalid("副本正文超过10000个片段，请先分段整理再导入；原文件保留");
         for (JsonNode op : content.path("ops")) {
             if (!op.isObject() || !op.has("insert") || op.size() > (op.has("attributes") ? 2 : 1)) throw invalid("副本必须是完整正文，不能是编辑操作");
             JsonNode insert = op.path("insert");
@@ -101,7 +105,7 @@ public class DocumentTransfer {
         }
         JsonNode last = content.path("ops").get(content.path("ops").size() - 1).path("insert");
         if (!last.isTextual() || !last.asText().endsWith("\n")) throw invalid("副本正文必须以换行结束");
-        if (content.toString().getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) throw invalid("副本正文超过 1 MiB");
+        if (content.toString().getBytes(StandardCharsets.UTF_8).length > MAX_CONTENT_BYTES) throw invalid("副本正文超过 2 MiB，请缩小内容后导入");
         // 线性合并同格式文本，避免大量拆碎的文本在后续 Delta.push 中反复复制长字符串。
         var normalized = mapper.createArrayNode();
         com.fasterxml.jackson.databind.node.ObjectNode pending = null;

@@ -12,8 +12,8 @@ export default function ImportModal({ onClose, onCreated }) {
   function choose(event) {
     const next = event.target.files?.[0] ?? null
     setError(''); setFile(null)
-    if (next && (!/\.(txt|json)$/i.test(next.name) || !next.size || next.size > 1024 * 1024)) {
-      setError('请选择不超过 1 MiB 的非空 .txt 或 CoPage .json 文件'); return
+    if (next && (!/\.(txt|json)$/i.test(next.name) || !next.size || next.size > 3 * 1024 * 1024)) {
+      setError('请选择不超过 3 MiB 的非空 .txt 或 CoPage .json 文件'); return
     }
     setFile(next)
     setTitle(next?.name.replace(/(?:\.copage)?\.(?:txt|json)$/i, '').slice(0, 200) ?? '')
@@ -35,10 +35,10 @@ export default function ImportModal({ onClose, onCreated }) {
       if (!controller.signal.aborted) setBusy(false)
     }
   }
-  return <Modal title="导入为新文档" open onCancel={busy ? undefined : onClose} onOk={importFile}
+  return <Modal className="document-transfer-modal" title="导入为新文档" open onCancel={busy ? undefined : onClose} onOk={importFile}
     okText="导入文档" cancelText="取消" confirmLoading={busy} okButtonProps={{ disabled: !file }}
     cancelButtonProps={{ disabled: busy }} closable={!busy} maskClosable={!busy} keyboard={!busy}>
-    <Typography.Paragraph>支持 UTF-8 文本（.txt）和 CoPage 导出的富文本副本（.json），最多 1 MiB。导入创建独立文档，不覆盖已有内容或复制协作者权限。</Typography.Paragraph>
+    <Typography.Paragraph>支持 UTF-8 文本（.txt）和 CoPage 导出的富文本副本（.json）。文件最多 3 MiB，正文最多 2 MiB；格式和换行也占正文容量。导入创建独立文档，不覆盖已有内容或复制协作者权限。</Typography.Paragraph>
     <Typography.Paragraph type="secondary">图片保留原地址，地址可访问时才会显示；副本不包含图片文件、历史版本或本地草稿。</Typography.Paragraph>
     <label>选择文件<input type="file" accept=".txt,.json" disabled={busy} onChange={choose} /></label>
     <Typography.Paragraph style={{ marginTop: 16 }}>文档标题</Typography.Paragraph>

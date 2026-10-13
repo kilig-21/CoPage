@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import { draftBackupJson, draftBackupText } from '../editor/draftBackup'
+import { draftBackupExceedsImportLimits, draftBackupJson, draftBackupText } from '../editor/draftBackup'
 import { downloadTextFile } from '../editor/downloadTextFile'
 
 export default function LocalDraftBackup({ backup, onContinue }) {
   const [notice, setNotice] = useState('')
   const text = draftBackupText(backup)
   const json = draftBackupJson(backup)
-  const large = new TextEncoder().encode(json).length > 1024 * 1024 || backup.content.ops.length > 10000
+  const large = draftBackupExceedsImportLimits(backup, json)
   useEffect(() => {
     const warn = event => { event.preventDefault(); event.returnValue = '' }
     window.addEventListener('beforeunload', warn)
@@ -32,7 +32,7 @@ export default function LocalDraftBackup({ backup, onContinue }) {
       <button onClick={copy}>复制文字</button>
     </div>
     <p>富文本副本保留当前正文、格式和图片地址，重新登录后可从列表导入为新文档。它不会补交原文档操作，不包含图片文件、成员或历史。</p>
-    {large && <p>此副本超过导入的 1 MiB 或 10000 片段上限；仍可完整下载保存，后续需分段整理再导入。</p>}
+    {large && <p>此副本超过导入的正文2 MiB、文件3 MiB或10000片段上限；仍可完整下载保存，后续需分段整理再导入。</p>}
     <textarea aria-label="未确认内容备份" readOnly value={text} onFocus={event => event.target.select()}
       style={{ width: '100%', minHeight: 180, font: 'inherit' }} />
     {notice && <p role="status">{notice}</p>}

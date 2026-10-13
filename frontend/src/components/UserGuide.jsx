@@ -116,7 +116,7 @@ const sections = [
     key: 'transfer', label: '副本、导入导出与打印',
     children: <>
       <Paragraph>“创建副本”复制已保存版本的正文、格式和图片地址，新文档归你；成员权限、历史和当前本地未确认草稿不复制。</Paragraph>
-      <Paragraph>导入支持非空 UTF-8 文本（.txt）及 CoPage 导出的富文本副本（.json）。单个导入或导出副本最多 1 MiB；导入创建独立文档，不覆盖已有内容。</Paragraph>
+      <Paragraph>导入支持非空 UTF-8 文本（.txt）及 CoPage 导出的富文本副本（.json）。文件最多 3 MiB，导入正文最多 2 MiB和10000个片段；格式与换行也占容量。导入创建独立文档，不覆盖已有内容。下载保留完整已保存正文，不因导入片段限制而截断。</Paragraph>
       <Paragraph>导出纯文本便于阅读，富文本副本可重新导入并保留格式。图片保留原地址，不打包图片文件；地址仍可访问时才会显示。</Paragraph>
       <Paragraph>“打印 / PDF”预览已保存内容，再使用浏览器打印或另存为 PDF。资料有未确认修改或图片尚未加载时，请先处理页面提示。</Paragraph>
     </>,

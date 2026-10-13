@@ -61,7 +61,8 @@ try {
   assert.equal(await insert(origin, owner.token, source.id, 0, { ops: [{ insert: '大'.repeat(400000) }] }), 1)
   const saved = await api(origin, owner.token, '/doc/' + source.id)
   assert.ok(Buffer.byteLength(JSON.stringify(saved.content), 'utf8') > 1024 * 1024)
-  await api(origin, owner.token, '/doc/' + source.id + '/export?format=copage', 'GET', undefined, 400)
+  const exported=await api(origin,owner.token,'/doc/'+source.id+'/export?format=copage')
+  assert.deepEqual(JSON.parse(exported.content).content,saved.content)
   await api(origin, owner.token, '/doc/' + source.id + '/collaborators', 'POST', { username: 'testB', permission: 1 })
   const title = marker + '-reader'
   const copied = keep(await api(peer, member.token, '/doc/' + source.id + '/copy', 'POST', { title }), member, title)
@@ -93,7 +94,7 @@ try {
   await api(peer, owner.token, '/doc/' + source.id + '/copy', 'POST', {}, 404)
   assert.equal((await api(origin, member.token, '/doc/' + copied.id)).revision, 1)
   console.log(JSON.stringify({ docIds: records.map(record => record.id), origin, peer,
-    fullBodyOverImportLimit: true, readOnlyToPrivateCopy: true, revisionZeroSnapshot: true,
+    fullBodyOverOneMiB: true, fullExport: true, readOnlyToPrivateCopy: true, revisionZeroSnapshot: true,
     independentEditing: true, forbiddenRevokedDeleted: true, sourceRevision: 1 }))
 } finally {
   for (const socket of sockets) socket.close()

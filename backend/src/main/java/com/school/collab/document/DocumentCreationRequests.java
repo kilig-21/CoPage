@@ -82,7 +82,7 @@ public class DocumentCreationRequests {
 
     public Object importInput(MultipartFile file, String title) {
         if (file == null || file.isEmpty() || file.getSize() > DocumentTransfer.MAX_BYTES)
-            throw new BizException(ErrorCode.PARAM_ERROR, "请选择不超过 1 MiB 的非空文件");
+            throw new BizException(ErrorCode.PARAM_ERROR, "请选择不超过 3 MiB 的非空文件");
         try { return new ImportInput(title, file.getOriginalFilename(), HexFormat.of().formatHex(sha256(file.getBytes()))); }
         catch (java.io.IOException failure) { throw new BizException(ErrorCode.PARAM_ERROR, "文件无法读取，请重新选择"); }
     }

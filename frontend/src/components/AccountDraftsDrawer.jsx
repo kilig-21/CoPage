@@ -3,7 +3,7 @@ import { Alert, Button, Drawer, Empty, List, Space, Spin, Tag, Typography } from
 import { useNavigate } from 'react-router-dom'
 import Delta from 'quill-delta'
 import { enumerateAccountDrafts, readAccountDraft } from '../editor/accountDrafts'
-import { draftBackupJson, draftBackupText } from '../editor/draftBackup'
+import { draftBackupExceedsImportLimits, draftBackupJson, draftBackupText } from '../editor/draftBackup'
 import { draftRecordsJson } from '../editor/draftRecords'
 import { downloadTextFile } from '../editor/downloadTextFile'
 import { documentHref } from '../navigation/documents'
@@ -88,7 +88,7 @@ export default function AccountDraftsDrawer({ onClose, sourcePath }) {
       if (!isCurrent()) throw Object.assign(new Error(), { code: 'DRAFT_IDENTITY_CHANGED' })
       downloadTextFile(text, `本地草稿-${current.docId ?? '原始记录'}.${kind === 'text' ? 'txt' : kind === 'raw' ? 'records.json' : 'copage.json'}`,
         kind === 'text' ? 'text/plain;charset=utf-8' : 'application/json;charset=utf-8')
-      const large = current.readable && (new TextEncoder().encode(draftBackupJson(current.backup)).length > 1024 * 1024 || current.backup.content.ops.length > 10000)
+      const large = current.readable && draftBackupExceedsImportLimits(current.backup)
       setError('')
       setNotice('副本已生成，请确认浏览器下载完成；原记录保留。' + (large ? '此草稿超过导入上限，仍已完整保存，需分段整理后导入。' : ''))
     } catch (failure) { showFailure(failure, 'download') }

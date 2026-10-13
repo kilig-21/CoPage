@@ -118,6 +118,12 @@ body { background: var(--cp-paper); }
   .auth-card h2.ant-typography { font-size: 25px; }
   .doc-list-card .ant-list-item { padding-block: 18px; }
   .content-wrap .ant-btn, .document-open-link { min-height: 44px; }
+  .document-transfer-modal .ant-modal-footer .ant-btn,
+  .document-transfer-modal .ant-input,
+  .document-transfer-modal input[type='file'] { min-height: 44px; }
+  .document-transfer-modal .ant-modal-close { width: 44px; height: 44px; }
+  .document-transfer-modal .ant-radio-wrapper { min-height: 44px; align-items: center; }
+  .document-transfer-modal input[type='file'] { max-width: 100%; }
   .trash-list-card .ant-card-body { padding: 16px; }
   .trash-list-card .ant-list .ant-list-item { flex-wrap: wrap; gap: 12px; }
   .trash-list-card .ant-list .ant-list-item .ant-list-item-meta { flex-basis: 100%; }
