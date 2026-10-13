@@ -35,6 +35,21 @@ public class ProjectService {
         return new Detail(p.id(),p.name(),p.description(),p.ownerId(),p.groupId(),access.groupName(),access.canManage(),
             projects.documentCount(id,user(),filter),projects.documents(id,user(),access.canManage(),filter,page,size));
     }
+    /** 按原项目编号核对当前资料；允许项目归档，仍要求当前个人归属或有效小组成员身份。 */
+    @Transactional(readOnly=true)
+    public StateView state(long id) {
+        var access=access(id,false,true);var p=access.project();
+        return new StateView(p.id(),p.groupId(),p.name(),p.description(),p.archived(),access.canManage());
+    }
+    /** 仅在当前仍能访问项目及原文档时返回关联状态，不把撤权、删除或失效小组解释为未关联。 */
+    @Transactional(readOnly=true)
+    public AssociationStateView associationState(long id,long docId) {
+        long user=user();if(docId<=0)throw bad("文档编号无效");
+        var access=access(id,false,true);
+        var current=projects.findVisibleAssociationState(id,docId,user)
+            .orElseThrow(()->new BizException(ErrorCode.NOT_FOUND));
+        return new AssociationStateView(id,current.docId(),current.docTitle(),current.associationId(),access.project().archived());
+    }
     @Transactional(readOnly=true)
     public Candidates candidates(long id,String keyword,int page,int size) {
         user();paging(page,size);var p=access(id,false,false).project();String filter=filter(keyword);
@@ -98,6 +113,8 @@ public class ProjectService {
     private record Access(ProjectRepository.Project project,String groupName,boolean canManage) { }
     public record IdView(long id,long groupId) { }
     public record Change(boolean changed) { }
+    public record StateView(long id,long groupId,String name,String description,boolean archived,boolean canManage) { }
+    public record AssociationStateView(long projectId,long docId,String docTitle,String associationId,boolean projectArchived) { }
     public record ListView(long total,List<ProjectRepository.Summary> list) { }
     public record Detail(long id,String name,String description,long ownerId,long groupId,String groupName,boolean canManage,long total,List<ProjectRepository.DocumentSummary> list) { }
     public record Candidates(long total,List<ProjectRepository.Candidate> list) { }

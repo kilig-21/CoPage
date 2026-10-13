@@ -73,6 +73,16 @@ public class ProjectRepository {
     public Optional<String> association(long project,long doc) {
         return jdbc.query("SELECT association_id FROM project_document WHERE project_id=? AND doc_id=? FOR UPDATE",(r,n)->r.getString(1),project,doc).stream().findFirst();
     }
+    /** 无锁读取最小投影；不存在关联可返回 null，文档不可读或已删除则不返回任何状态。 */
+    public Optional<AssociationState> findVisibleAssociationState(long project,long doc,long user) {
+        return jdbc.query("""
+            SELECT d.id,d.title,pd.association_id
+            FROM document d LEFT JOIN doc_collaborator c ON c.doc_id=d.id AND c.user_id=?
+            LEFT JOIN project_document pd ON pd.project_id=? AND pd.doc_id=d.id
+            WHERE d.id=? AND d.is_deleted=0 AND (d.owner_id=? OR c.permission IN(1,2))
+            """,(r,n)->new AssociationState(r.getLong(1),r.getString(2),r.getString(3)),
+            user,project,doc,user).stream().findFirst();
+    }
     public void remove(long project,long doc,String association) {
         jdbc.update("DELETE FROM project_document WHERE project_id=? AND doc_id=? AND association_id=?",project,doc,association);
     }
@@ -115,6 +125,7 @@ public class ProjectRepository {
     public record Project(long id,String name,String description,long ownerId,long groupId,boolean archived) { }
     public record Summary(long id,String name,String description,long ownerId,long groupId,String groupName,boolean archived,boolean canManage,long visibleDocumentCount,String updateTime) { }
     public record Document(long id,long ownerId,int permission) { }
+    public record AssociationState(long docId,String docTitle,String associationId) { }
     public record DocumentSummary(long id,String title,long ownerId,String ownerName,String associationId,String updateTime,int permission,boolean canRemove) { }
     public record Candidate(long id,String title,int permission) { }
 }

@@ -12,6 +12,8 @@ public class ProjectController {
         @RequestParam(defaultValue="1")int page,@RequestParam(defaultValue="20")int size) {return Result.ok(projects.list(scope,groupId,archived,keyword,page,size));}
     @PostMapping public Result<ProjectService.IdView> create(@RequestBody Create body) {return Result.ok(projects.create(body.name(),body.description(),body.groupId()==null?0:body.groupId()));}
     @GetMapping("/{id}") public Result<ProjectService.Detail> detail(@PathVariable long id,@RequestParam(defaultValue="")String keyword,@RequestParam(defaultValue="1")int page,@RequestParam(defaultValue="20")int size) {return Result.ok(projects.detail(id,keyword,page,size));}
+    @GetMapping("/{id}/state") public Result<ProjectService.StateView> state(@PathVariable long id) {return Result.ok(projects.state(id));}
+    @GetMapping("/{id}/documents/{docId}/state") public Result<ProjectService.AssociationStateView> associationState(@PathVariable long id,@PathVariable long docId) {return Result.ok(projects.associationState(id,docId));}
     @GetMapping("/{id}/candidates") public Result<ProjectService.Candidates> candidates(@PathVariable long id,@RequestParam(defaultValue="")String keyword,@RequestParam(defaultValue="1")int page,@RequestParam(defaultValue="20")int size) {return Result.ok(projects.candidates(id,keyword,page,size));}
     @PutMapping("/{id}") public Result<Void> rename(@PathVariable long id,@RequestBody Fields body) {projects.rename(id,body.name(),body.description());return Result.ok();}
     @PostMapping("/{id}/archive") public Result<Void> archive(@PathVariable long id) {projects.archive(id,true);return Result.ok();}

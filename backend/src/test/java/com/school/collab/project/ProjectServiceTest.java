@@ -6,8 +6,12 @@ import com.school.collab.common.UserContext;
 import com.school.collab.group.GroupService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.annotation.Transactional;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -29,6 +33,8 @@ class ProjectServiceTest {
         code(ErrorCode.UNAUTHORIZED,()->service.list("all",0,false,"",1,20));
         code(ErrorCode.UNAUTHORIZED,()->service.create("name","",0));
         code(ErrorCode.UNAUTHORIZED,()->service.detail(10,"",1,20));
+        code(ErrorCode.UNAUTHORIZED,()->service.state(10));
+        code(ErrorCode.UNAUTHORIZED,()->service.associationState(10,5));
         code(ErrorCode.UNAUTHORIZED,()->service.add(10,5));
         verifyNoInteractions(repo,groups);
     }
@@ -121,5 +127,92 @@ class ProjectServiceTest {
         when(repo.candidates(10,2,true,"会议",1,20)).thenReturn(List.of(new ProjectRepository.Candidate(5,"会议",2)));
         var result=service.candidates(10," 会议 ",1,20);assertEquals(1,result.total());assertEquals(5,result.list().getFirst().id());
         var json=new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(result.list().getFirst());assertFalse(json.has("content"));
+    }
+    @Test void projectStateReadsActiveAndArchivedOwnersMetadataWithoutLoadingDocuments() {
+        as(2);
+        for(boolean archived:new boolean[]{false,true}) {
+            project(2,0,archived);
+            assertEquals(new ProjectService.StateView(10,0,"项目","简介",archived,true),service.state(10));
+        }
+        verify(repo,times(2)).find(10,false);verifyNoMoreInteractions(repo);verifyNoInteractions(groups);
+    }
+    @Test void archivedGroupProjectStateUsesCurrentMemberRoleWithoutRequiringManagement() {
+        as(2);project(1,3,true);when(groups.access(3,false)).thenReturn(new GroupService.Access(3,"组","member"));
+        assertEquals(new ProjectService.StateView(10,3,"项目","简介",true,false),service.state(10));
+        verify(repo).find(10,false);verify(groups).access(3,false);verifyNoMoreInteractions(repo,groups);
+    }
+    @Test void groupProjectStateReportsManagementOnlyFromCurrentRole() {
+        as(2);project(1,3,false);
+        when(groups.access(3,false)).thenReturn(new GroupService.Access(3,"组","admin"));
+        assertTrue(service.state(10).canManage());
+        when(groups.access(3,false)).thenReturn(new GroupService.Access(3,"组","member"));
+        assertFalse(service.state(10).canManage());
+    }
+    @Test void stateEndpointsRejectInvalidIdsBeforeAnyRepositoryRead() {
+        as(2);
+        for(long id:new long[]{0,-1}) {
+            code(ErrorCode.PARAM_ERROR,()->service.state(id));
+            code(ErrorCode.PARAM_ERROR,()->service.associationState(id,5));
+            code(ErrorCode.PARAM_ERROR,()->service.associationState(10,id));
+        }
+        verifyNoInteractions(repo,groups);
+    }
+    @Test void anotherOwnerCannotReadPrivateProjectStateOrProbeItsAssociation() {
+        as(2);project(1,0,true);
+        code(ErrorCode.FORBIDDEN,()->service.state(10));code(ErrorCode.FORBIDDEN,()->service.associationState(10,5));
+        verify(repo,times(2)).find(10,false);verifyNoMoreInteractions(repo);verifyNoInteractions(groups);
+    }
+    @Test void missingProjectNeverReturnsAnUnlinkedAssociationState() {
+        as(2);when(repo.find(10,false)).thenReturn(Optional.empty());
+        code(ErrorCode.NOT_FOUND,()->service.state(10));code(ErrorCode.NOT_FOUND,()->service.associationState(10,5));
+        verify(repo,times(2)).find(10,false);verifyNoMoreInteractions(repo);verifyNoInteractions(groups);
+    }
+    @Test void leavingOrArchivingGroupBlocksStateEvenForTheProjectCreator() {
+        as(2);project(2,3,true);
+        for(ErrorCode denied:new ErrorCode[]{ErrorCode.FORBIDDEN,ErrorCode.NOT_FOUND}) {
+            doThrow(new BizException(denied)).when(groups).access(3,false);
+            code(denied,()->service.state(10));code(denied,()->service.associationState(10,5));
+        }
+        verify(repo,times(4)).find(10,false);verify(groups,times(4)).access(3,false);verifyNoMoreInteractions(repo,groups);
+    }
+    @Test void associationStateReadsOriginalTargetWithoutFiltersAndReportsCurrentAssociation() {
+        as(2);project(2,0,true);
+        when(repo.findVisibleAssociationState(10,5,2)).thenReturn(
+            Optional.of(new ProjectRepository.AssociationState(5,"原文档",OLD)),
+            Optional.of(new ProjectRepository.AssociationState(5,"原文档",NEW)),
+            Optional.of(new ProjectRepository.AssociationState(5,"原文档",null)));
+        assertEquals(new ProjectService.AssociationStateView(10,5,"原文档",OLD,true),service.associationState(10,5));
+        assertEquals(NEW,service.associationState(10,5).associationId());
+        assertNull(service.associationState(10,5).associationId());
+        verify(repo,times(3)).find(10,false);verify(repo,times(3)).findVisibleAssociationState(10,5,2);
+        verifyNoMoreInteractions(repo);verifyNoInteractions(groups);
+    }
+    @Test void ordinaryMemberCanCheckAnAuthorizedDocumentInAnArchivedProject() {
+        as(2);project(1,3,true);when(groups.access(3,false)).thenReturn(new GroupService.Access(3,"组","member"));
+        when(repo.findVisibleAssociationState(10,5,2)).thenReturn(Optional.of(new ProjectRepository.AssociationState(5,"只读资料",null)));
+        assertEquals(new ProjectService.AssociationStateView(10,5,"只读资料",null,true),service.associationState(10,5));
+        verify(repo).find(10,false);verify(groups).access(3,false);verify(repo).findVisibleAssociationState(10,5,2);
+        verifyNoMoreInteractions(repo,groups);
+    }
+    @Test void projectAdministratorCannotInferUnlinkedStateForAnUnreadableOrDeletedDocument() {
+        as(2);project(1,3,false);when(groups.access(3,false)).thenReturn(new GroupService.Access(3,"组","admin"));
+        when(repo.findVisibleAssociationState(10,5,2)).thenReturn(Optional.empty());
+        code(ErrorCode.NOT_FOUND,()->service.associationState(10,5));
+        verify(repo).find(10,false);verify(groups).access(3,false);verify(repo).findVisibleAssociationState(10,5,2);
+        verifyNoMoreInteractions(repo,groups);
+    }
+    @Test void stateResponsesContainOnlyTheirPublicMetadataProjection() {
+        var mapper=new ObjectMapper();
+        var projectJson=mapper.valueToTree(new ProjectService.StateView(10,3,"项目","简介",true,false));
+        var associationJson=mapper.valueToTree(new ProjectService.AssociationStateView(10,5,"资料",null,true));
+        var projectFields=new HashSet<String>();projectJson.fieldNames().forEachRemaining(projectFields::add);
+        var associationFields=new HashSet<String>();associationJson.fieldNames().forEachRemaining(associationFields::add);
+        assertEquals(Set.of("id","groupId","name","description","archived","canManage"),projectFields);
+        assertEquals(Set.of("projectId","docId","docTitle","associationId","projectArchived"),associationFields);
+        assertTrue(associationJson.get("associationId").isNull());
+    }
+    @Test void bothStateReadsUseReadOnlyTransactions() throws Exception {
+        assertTrue(ProjectService.class.getMethod("state",long.class).getAnnotation(Transactional.class).readOnly());
+        assertTrue(ProjectService.class.getMethod("associationState",long.class,long.class).getAnnotation(Transactional.class).readOnly());
     }
 }
