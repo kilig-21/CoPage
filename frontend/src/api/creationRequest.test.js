@@ -157,3 +157,72 @@ for (const path of ['/doc', '/personal-templates/12/documents']) {
     assert.deepEqual([...f.values], [['collab-draft:owner:26', '原草稿']])
   })
 }
+
+for (const path of ['/doc', '/doc/import', '/personal-templates/12/documents']) {
+  test(`已提交但回复编号损坏，刷新助手后仍按原UUID确认唯一文档：${path}`, async () => {
+    const receipts = new Map(), requests = []
+    const fileText = JSON.stringify({ format: 'copage', version: 1, title: '备份😀',
+      content: { ops: [{ insert: '原内容中文😀\\\"\n', attributes: { bold: true } }, { insert: '\n' }] } })
+    const input = version => {
+      if (path === '/doc/import') {
+        const form = new FormData()
+        form.append('file', new Blob([fileText]), '原备份.copage.json'); form.append('title', '原导入标题😀')
+        return form
+      }
+      return { title: '原文档😀', ...(path.includes('personal-templates') ? { expectedVersion: version } : {}) }
+    }
+    const f = fixture(async (requestPath, body, config) => {
+      const uuid = config.headers['Idempotency-Key']
+      const payload = body instanceof FormData ? { title: body.get('title'), filename: body.get('file').name,
+        text: await body.get('file').text() } : structuredClone(body)
+      requests.push({ path: requestPath, uuid, payload })
+      // 模拟已提交的服务端收据；坏下游回复不能让客户端生成第二个UUID。
+      if (!receipts.has(uuid)) receipts.set(uuid, { data: { id: 41 + receipts.size } })
+      if (requests.length === 1) return { code: 0, data: {} }
+      return receipts.get(uuid)
+    })
+    await assert.rejects(f.create(path, input(1), f.options), error => error.code === 500 &&
+      error.reason === 'DOCUMENT_CREATION_RESPONSE' && /原创建标识保留/.test(error.message))
+    const pending = [...f.values].filter(([key]) => key.startsWith('copage-create:'))
+    assert.equal(pending.length, 1)
+    assert.equal(f.values.get('collab-draft:owner:26'), '原草稿')
+    if (path.includes('personal-templates')) {
+      assert.deepEqual(JSON.parse(pending[0][1]), { requestId: requests[0].uuid, expectedVersion: 1 })
+    } else assert.equal(pending[0][1], requests[0].uuid)
+    const confirmed = await f.reload()(path, input(2), f.options)
+    assert.equal(confirmed.data.id, 41); assert.equal(receipts.size, 1)
+    assert.deepEqual(requests[1], requests[0])
+    if (path === '/doc/import') assert.deepEqual(requests[1].payload,
+      { title: '原导入标题😀', filename: '原备份.copage.json', text: fileText })
+    assert.deepEqual([...f.values], [['collab-draft:owner:26', '原草稿']])
+  })
+}
+
+test('只有正安全整数编号可确认；缺失、非数字、非整数、溢出编号均保留原记录', async () => {
+  const invalid = [undefined, null, {}, { data: null }, { data: {} }, ...[0, -1, 1.5, '41', true,
+    Number.MAX_SAFE_INTEGER + 1, Infinity, NaN].map(id => ({ data: { id } }))]
+  for (const result of invalid) {
+    let removes = 0
+    const f = fixture(async () => result)
+    f.storage.removeItem = () => { removes++ }
+    await assert.rejects(f.create('/doc', { title: '原内容' }, f.options), error => error.code === 500 &&
+      error.reason === 'DOCUMENT_CREATION_RESPONSE')
+    assert.equal(removes, 0)
+    assert.equal([...f.values.keys()].filter(key => key.startsWith('copage-create:')).length, 1)
+    assert.equal(f.values.get('collab-draft:owner:26'), '原草稿')
+  }
+})
+
+test('坏回复仍先遵守取消与身份失效门禁，不清原请求或用错误编号确认', async () => {
+  for (const mode of ['abort', 'identity']) {
+    const controller = new AbortController(); let current = true
+    const f = fixture(async () => {
+      if (mode === 'abort') controller.abort(); else current = false
+      return { data: { id: 0 } }
+    })
+    await assert.rejects(f.create('/doc', { title: '原内容' }, { ...f.options, signal: controller.signal,
+      isCurrent: () => current }), error => error.name === 'AbortError')
+    assert.equal([...f.values.keys()].filter(key => key.startsWith('copage-create:')).length, 1)
+    assert.equal(f.values.get('collab-draft:owner:26'), '原草稿')
+  }
+})

@@ -73,6 +73,10 @@ export function createDocumentCreator({ getStorage, crypto, post }) {
       throw failure
     }
     if (config.signal?.aborted || !current()) throw new DOMException('创建页面或账号已变更', 'AbortError')
+    if (!Number.isSafeInteger(result?.data?.id) || result.data.id <= 0) {
+      throw Object.assign(new Error('创建结果无法确认，请重试原内容或核对我的文档；原创建标识保留。'),
+        { code: 500, reason: 'DOCUMENT_CREATION_RESPONSE' })
+    }
     try { clear() }
     catch {
       acknowledged.add(key)
