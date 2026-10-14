@@ -42,6 +42,7 @@ export default function Groups() {
   const [inboxPage, setInboxPage] = useState(1)
   const [groups, setGroups] = useState(null)
   const [inbox, setInbox] = useState(null)
+  const [inboxFrom, setInboxFrom] = useState(null)
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
   const [inboxLoading, setInboxLoading] = useState(true)
@@ -56,6 +57,9 @@ export default function Groups() {
   const [groupRefresh, setGroupRefresh] = useState(0)
   const [inboxRefresh, setInboxRefresh] = useState(0)
   const [detailRefresh, setDetailRefresh] = useState(0)
+  const inboxKey = JSON.stringify([inboxPage, refresh, inboxRefresh])
+  const currentInboxKey = useRef(inboxKey)
+  currentInboxKey.current = inboxKey
   const [fields, setFields] = useState(null)
   const [username, setUsername] = useState('')
   const [busy, setBusy] = useState(false)
@@ -111,16 +115,21 @@ export default function Groups() {
   useEffect(() => {
     const controller = new AbortController()
     const epoch = mutationEpoch.current
-    setInboxLoading(true); setInbox(null); setInboxError('')
+    const current = () => !controller.signal.aborted && currentInboxKey.current === inboxKey
+    setInboxLoading(true); setInbox(null); setInboxFrom(null); setInboxError('')
     request.get('/groups/invitations', { params: { page: inboxPage, size: SIZE }, signal: controller.signal })
       .then(({ data }) => {
-        if (controller.signal.aborted) return
+        if (!current()) return
+        if (!Number.isSafeInteger(data?.total) || data.total < 0 || !Array.isArray(data.list)) throw new Error('邀请响应无效')
         const last = Math.max(1, Math.ceil(data.total / SIZE))
         if (inboxPage > last) { setInboxPage(last); return }
-        setInbox(data); confirmRead('inbox', epoch)
+        setInbox(data); setInboxFrom(inboxKey); confirmRead('inbox', epoch)
       }).catch(failure => {
-        if (!controller.signal.aborted) setInboxError([400, 403, 404].includes(failure?.code) ? failure.message : '收到的邀请未能加载，请重试。')
-      }).finally(() => { if (!controller.signal.aborted) setInboxLoading(false) })
+        if (current()) {
+          setInboxFrom(inboxKey)
+          setInboxError([400, 403, 404].includes(failure?.code) ? failure.message || '收到的邀请未能加载，请重试。' : '收到的邀请未能加载，请重试。')
+        }
+      }).finally(() => { if (current()) setInboxLoading(false) })
     return () => controller.abort()
   }, [inboxPage, refresh, inboxRefresh])
   useEffect(() => {
@@ -137,7 +146,12 @@ export default function Groups() {
   }, [selected, archived, refresh, detailRefresh])
   const groupsAvailable = Boolean(groups && !loading)
   const groupsReady = groupsAvailable && !busy && !uncertain
-  const inboxReady = Boolean(inbox && !inboxLoading && !busy && !uncertain)
+  const currentInbox = inboxFrom === inboxKey ? inbox : null
+  const currentInboxError = inboxFrom === inboxKey ? inboxError : ''
+  const inboxReading = inboxLoading || inboxFrom !== inboxKey
+  const inboxReady = Boolean(currentInbox && !inboxReading && !currentInboxError && !busy && !uncertain)
+  const compactInbox = Boolean(currentInbox && !inboxReading && !currentInboxError && currentInbox.total === 0 &&
+    Array.isArray(currentInbox.list) && currentInbox.list.length === 0)
   const detailReady = Boolean(detail?.id === selected && !detailLoading && !busy && !uncertain)
   const manager = detail && detail.id === selected && ['owner', 'admin'].includes(detail.role)
   useEffect(() => { if (fields?.id && !manager) setFields(null) }, [manager, fields?.id])
@@ -176,11 +190,15 @@ export default function Groups() {
       {error && <Alert type={uncertain ? 'warning' : 'error'} showIcon message={error}
         action={uncertain && <Button disabled={busy} onClick={reviewOperation}>核对操作结果</Button>} />}
       {notice && <Alert type={noticeType} showIcon message={notice} />}
-      <Card title="收到的邀请" className="group-section" extra={<Button disabled={inboxLoading || busy} onClick={() => setInboxRefresh(n => n + 1)}>刷新邀请</Button>}>
-        {inboxError && <Alert type="error" showIcon message={inboxError}
-          action={<Button disabled={inboxLoading || busy} onClick={() => setInboxRefresh(n => n + 1)}>重试邀请</Button>} />}
-        <List rowKey="groupId" loading={inboxLoading} dataSource={inbox?.list || []}
-          locale={{ emptyText: inboxLoading ? '正在加载…' : !inbox ? '邀请暂不可用' : <Empty description="暂无待处理邀请" /> }}
+      <Card role="region" aria-label="收到的邀请" className={'group-section group-inbox-card' + (compactInbox ? ' group-inbox-empty' : '')}
+        title={<div className="group-inbox-heading"><span>收到的邀请</span>{compactInbox && <span className="group-inbox-status">暂无待处理邀请</span>}</div>}
+        extra={<Button disabled={busy} loading={inboxReading} aria-disabled={inboxReading || busy}
+          onClick={() => { if (!inboxReading && !busy) setInboxRefresh(n => n + 1) }}>刷新邀请</Button>}>
+        {!compactInbox && <>
+        {currentInboxError && <Alert type="error" showIcon message={currentInboxError}
+          action={<Button disabled={inboxReading || busy} onClick={() => setInboxRefresh(n => n + 1)}>重试邀请</Button>} />}
+        <List rowKey="groupId" loading={inboxReading} dataSource={currentInbox?.list || []}
+          locale={{ emptyText: inboxReading ? '正在加载…' : !currentInbox ? '邀请暂不可用' : <Empty description="暂无待处理邀请" /> }}
           renderItem={invitation => <List.Item actions={[
             <Button key="accept" type="primary" disabled={!inboxReady} onClick={() => mutate(signal =>
               request.post('/groups/' + invitation.groupId + '/invitation', { accept: true, invitationVersion: invitation.invitationVersion }, { signal }), '已加入小组',
@@ -188,8 +206,9 @@ export default function Groups() {
             <Button key="decline" disabled={!inboxReady} onClick={() => mutate(signal =>
               request.post('/groups/' + invitation.groupId + '/invitation', { accept: false, invitationVersion: invitation.invitationVersion }, { signal }), '已拒绝邀请', undefined, { resource: 'inbox' })}>拒绝</Button>,
           ]}><List.Item.Meta title={invitation.name} description={invitation.inviterNickname + '（' + invitation.inviterUsername + '）邀请你加入 · ' + invitation.createdAt} /></List.Item>} />
-        {inbox?.total > SIZE && <Pagination current={inboxPage} total={inbox.total} pageSize={SIZE}
-          showSizeChanger={false} disabled={inboxLoading || busy} onChange={setInboxPage} />}
+        {currentInbox?.total > SIZE && <Pagination current={inboxPage} total={currentInbox.total} pageSize={SIZE}
+          showSizeChanger={false} disabled={inboxReading || busy} onChange={setInboxPage} />}
+        </>}
       </Card>
       <Space className="group-section"><Radio.Group aria-label="小组状态" value={archived} disabled={busy}
         options={[{ label: '进行中', value: false }, { label: '已归档', value: true }]}

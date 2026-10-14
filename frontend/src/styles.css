@@ -148,6 +148,11 @@ body { margin: 0; min-width: 0; }
 }
 
 .group-section { margin-bottom: 24px; }
+.group-inbox-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+.group-inbox-status { color: var(--cp-muted, #5c6572); font-size: 14px; font-weight: 400; }
+.group-inbox-empty .ant-card-head { min-height: 0; padding: 12px 16px; }
+.group-inbox-empty .ant-card-head-title { padding: 0; white-space: normal; }
+.group-inbox-empty .ant-card-body { display: none; }
 .group-page .ant-list-item-meta-title, .group-page .ant-list-item-meta-description { overflow-wrap: anywhere; }
 @media (max-width: 640px) {
   .group-page .ant-list-item { flex-wrap: wrap; gap: 12px; }
