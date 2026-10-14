@@ -91,7 +91,18 @@ body { margin: 0; min-width: 0; }
 .copy-creation-review { margin-bottom: 20px; }
 .copy-creation-review .ant-list-item-meta { min-width: 0; }
 .copy-creation-review .ant-list-item-meta-title { overflow-wrap: anywhere; }
+.document-share-modal .ant-alert { margin-top: 12px; }
 @media (max-width: 640px) {
+  :is(.document-share-modal, .document-collaborators-modal).ant-modal .ant-btn { min-height: 44px; }
+  :is(.document-share-modal, .document-collaborators-modal).ant-modal .ant-modal-close { width: 44px; height: 44px; }
+  :is(.document-share-modal, .document-collaborators-modal).ant-modal .ant-modal-header { padding-inline-end: 36px; }
+  :is(.document-share-modal, .document-collaborators-modal).ant-modal .ant-modal-title { overflow-wrap: anywhere; }
+  :is(.document-share-modal, .document-collaborators-modal).ant-modal .ant-input { min-height: 44px; }
+  .document-collaborators-modal.ant-modal .ant-select-single { height: 44px; }
+  .document-collaborators-modal .ant-list .ant-list-item { flex-direction: column; align-items: stretch; gap: 8px; }
+  .document-collaborators-modal .ant-list .ant-list-item-meta { flex: none; width: 100%; min-width: 0; }
+  .document-collaborators-modal .ant-list .ant-list-item-meta-title { overflow-wrap: anywhere; }
+  .document-collaborators-modal .ant-list .ant-list-item-action { margin: 0; align-self: flex-end; }
   .copy-creation-review .ant-card-body { padding: 16px; }
   .copy-creation-review .ant-list .ant-list-item { flex-direction: column; align-items: stretch; gap: 12px; }
   .copy-creation-review .ant-list .ant-list-item-meta { flex: none; width: 100%; }

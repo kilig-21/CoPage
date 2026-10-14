@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowLeftOutlined, CloudOutlined, MoreOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons'
 import { Alert, Avatar, Button, Dropdown, Layout, Modal, Popover, Space, Tag, Tooltip, Typography } from 'antd'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -17,6 +17,7 @@ import DraftBackupDownloads from '../components/DraftBackupDownloads'
 import DocumentFindPanel from '../components/DocumentFindPanel'
 import UserGuide from '../components/UserGuide'
 import PendingCopyHint from '../components/PendingCopyHint'
+import request from '../api/request'
 import '../styles/editor-workspace.css'
 
 export default function Editor() {
@@ -27,7 +28,10 @@ export default function Editor() {
   const docId = Number(id)
   const [renaming, setRenaming] = useState(false)
   const [sharing, setSharing] = useState(false)
-  const [managing, setManaging] = useState(false)
+  const [managing, setManaging] = useState(null)
+  const activeManagement = useRef(null)
+  const managementScope = useRef(null)
+  const [shareError, setShareError] = useState('')
   const [showHistory, setShowHistory] = useState(false)
   const [showExport, setShowExport] = useState(false)
   const [showPrint, setShowPrint] = useState(false)
@@ -41,6 +45,7 @@ export default function Editor() {
   const { editorHostRef, connection, users, error, title, permission, isOwner,
     saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, unreadableDrafts, unavailableDrafts, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor } = useQuillCollab(docId)
   const isConnected = connection === '已连接'
+  managementScope.current = { docId, isOwner, permission }
   const displayTitle = title || '协同文档 #' + id
   const documentTools = [
     ...(permission === 2 ? [{ key: 'rename', label: '重命名' }] : []),
@@ -55,16 +60,60 @@ export default function Editor() {
   ]
   function selectTool({ key }) {
     setToolsOpen(false)
+    if (key === 'manage') { openManagement(false); return }
     const actions = { rename: setRenaming, history: setShowHistory, copy: setShowCopy,
-      export: setShowExport, print: setShowPrint, manage: setManaging, guide: setShowGuide }
+      export: setShowExport, print: setShowPrint, guide: setShowGuide }
     actions[key]?.(true)
   }
+  function managementContext(fromShare) {
+    const scope = managementScope.current
+    if (!scope?.isOwner || scope.permission !== 2) return null
+    try {
+      const account = localStorage.getItem('collab-user'), token = localStorage.getItem('collab-token')
+      return account && token ? { docId: scope.docId, account, token, service: request.defaults.baseURL, fromShare } : null
+    } catch { return null }
+  }
+  function currentManagement(context) {
+    const current = managementContext(false)
+    return Boolean(context && current && context.docId === current.docId && context.account === current.account &&
+      context.token === current.token && context.service === current.service)
+  }
+  function changeManagement(context) {
+    activeManagement.current = context
+    setManaging(context)
+  }
+  function openManagement(fromShare) {
+    const context = managementContext(fromShare)
+    if (!context) {
+      if (fromShare) setShareError('当前账号或权限暂时无法核对，请恢复登录信息后再设置协作者；分享链接仍可查看。')
+      return
+    }
+    setShareError('')
+    if (fromShare) setSharing(false)
+    changeManagement(context)
+  }
+  function closeManagement(context) {
+    if (activeManagement.current !== context) return
+    const returnToShare = context?.fromShare && currentManagement(context)
+    changeManagement(null)
+    if (returnToShare) setSharing(true)
+  }
   useEffect(() => { setToolsOpen(false); setTitleOpen(false) }, [docId, permission])
+  useEffect(() => { changeManagement(null); setSharing(false); setShareError('') }, [docId])
   useEffect(() => {
-    if (!isOwner || permission !== 2) setManaging(false)
+    const close = event => {
+      if (event.type === 'storage' && event.key !== null && !['collab-user', 'collab-token'].includes(event.key)) return
+      changeManagement(null); setSharing(false); setShareError('')
+    }
+    window.addEventListener('storage', close)
+    window.addEventListener('copage-auth-changed', close)
+    return () => { window.removeEventListener('storage', close); window.removeEventListener('copage-auth-changed', close) }
+  }, [])
+  useEffect(() => {
+    if (!isOwner || permission !== 2) changeManagement(null)
   }, [isOwner, permission])
   useEffect(() => {
-    if (permission <= 0) { setShowHistory(false); setShowCopy(false) }
+    if (permission <= 0) { setShowHistory(false); setShowCopy(false); setSharing(false) }
     if (permission !== 2) setRenaming(false)
   }, [permission])
   useEffect(() => {
@@ -168,9 +217,9 @@ export default function Editor() {
       </main>
       {showGuide && <UserGuide initialSection="save" onClose={() => setShowGuide(false)} />}
       {renaming && permission === 2 && <RenameModal doc={{ id: docId, title }} onSaved={refreshTitle} onClose={() => setRenaming(false)} />}
-      {sharing && <ShareModal docId={docId} isOwner={isOwner && permission === 2} onClose={() => setSharing(false)}
-        onManage={() => { setSharing(false); setManaging(true) }} />}
-      {managing && isOwner && permission === 2 && <CollaboratorModal doc={{ id: docId, title }} onClose={() => setManaging(false)} />}
+      {sharing && <ShareModal docId={docId} isOwner={isOwner && permission === 2} managementError={shareError} onClose={() => setSharing(false)}
+        onManage={() => openManagement(true)} />}
+      {managing && currentManagement(managing) && <CollaboratorModal doc={{ id: docId, title }} returnToShare={managing.fromShare} onClose={() => closeManagement(managing)} />}
       {showHistory && permission > 0 && <HistoryDrawer docId={docId} isOwner={isOwner && permission === 2}
         canRestore={canRestoreHistory} onClose={() => setShowHistory(false)} />}
       {showExport && <ExportModal docId={docId} canExport={() => permission > 0 && !recoveryDraft && canExportDocument()}
