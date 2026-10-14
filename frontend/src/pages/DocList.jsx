@@ -13,6 +13,7 @@ import ImportModal from '../components/ImportModal'
 import CopyModal from '../components/CopyModal'
 import RenameModal from '../components/RenameModal'
 import UserGuide from '../components/UserGuide'
+import PendingCopies from '../components/PendingCopies'
 
 const PAGE_SIZE = 20
 
@@ -110,6 +111,7 @@ export default function DocList() {
             <Button type="primary" icon={<PlusOutlined />} loading={creating} onClick={createDocument}>新建文档</Button>
           </Space>
         </div>
+        <PendingCopies onCreated={data => navigate(documentHref(data.id, sourcePath))} />
         <Space wrap style={{ marginBottom: 16 }}>
           <Radio.Group aria-label="文档分类" value={scope} disabled={deletion.busy} onChange={event => applyScope(event.target.value)}
             options={[{ label: '全部', value: 'all' }, { label: '我创建', value: 'owned' }, { label: '与我协作', value: 'shared' }]} />

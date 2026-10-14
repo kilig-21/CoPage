@@ -16,6 +16,7 @@ import { downloadTextFile } from '../editor/downloadTextFile'
 import DraftBackupDownloads from '../components/DraftBackupDownloads'
 import DocumentFindPanel from '../components/DocumentFindPanel'
 import UserGuide from '../components/UserGuide'
+import PendingCopyHint from '../components/PendingCopyHint'
 import '../styles/editor-workspace.css'
 
 export default function Editor() {
@@ -128,6 +129,7 @@ export default function Editor() {
         </Space>
       </header>
       <main className="editor-wrap">
+        <PendingCopyHint sourceId={docId} />
         <div className="editor-status-row">
           <Space wrap className="editor-save-state">
             <Tag color={isConnected ? 'green' : 'gold'} icon={<CloudOutlined />}>{connection}</Tag>

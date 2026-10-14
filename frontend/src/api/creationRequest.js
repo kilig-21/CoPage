@@ -25,6 +25,12 @@ async function bodyFingerprint(crypto, body) {
   return canonical(JSON.parse(JSON.stringify(body ?? null)))
 }
 
+/** 与既有文档创建槽完全相同的账号、服务、路径和内容指纹。 */
+export async function documentCreationTrackingKey(crypto, { service, account, path, body }) {
+  const fingerprint = await bodyFingerprint(crypto, body)
+  return 'copage-create:' + await digest(crypto, new TextEncoder().encode(JSON.stringify([service, account, path, fingerprint])))
+}
+
 /** 只保存UUID、请求指纹及私人模板的原版本，不存文件、正文、密码或令牌。 */
 export function createDocumentCreator({ getStorage, crypto, post }) {
   const acknowledged = new Set()

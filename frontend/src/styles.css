@@ -88,7 +88,15 @@ body { margin: 0; min-width: 0; }
 .history-preview { margin-top: 20px; scroll-margin-top: 16px; }
 .history-preview:focus-visible { outline: 2px solid #2563eb; outline-offset: 4px; }
 .history-drawer .ant-drawer-content-wrapper { max-width: 100vw; }
+.copy-creation-review { margin-bottom: 20px; }
+.copy-creation-review .ant-list-item-meta { min-width: 0; }
+.copy-creation-review .ant-list-item-meta-title { overflow-wrap: anywhere; }
 @media (max-width: 640px) {
+  .copy-creation-review .ant-card-body { padding: 16px; }
+  .copy-creation-review .ant-list .ant-list-item { flex-direction: column; align-items: stretch; gap: 12px; }
+  .copy-creation-review .ant-list .ant-list-item-meta { flex: none; width: 100%; }
+  .copy-creation-review .ant-list .ant-list-item-action { margin: 0; align-self: flex-end; }
+  .copy-creation-review .ant-btn { min-height: 44px; }
   .history-drawer .ant-drawer-body { padding: 16px; }
   .history-drawer .ant-alert { flex-wrap: wrap; }
   .history-drawer .ant-alert-content { min-width: 0; overflow-wrap: anywhere; }
