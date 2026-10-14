@@ -1,0 +1,44 @@
+import { useEffect, useRef, useState } from 'react'
+import request from './request'
+import { createHistoryRestore } from './historyRestore'
+
+export default function useHistoryRestore(docId, isOwner, canRestore, onConfirmed) {
+  const mounted = useRef(false), callbacks = useRef(null)
+  callbacks.current = { isOwner, canRestore, onConfirmed }
+  const [, render] = useState(0)
+  const scope = useRef(null)
+  const service = request.defaults.baseURL || ''
+  if (!scope.current || scope.current.docId !== docId || scope.current.service !== service) {
+    const previous = scope.current
+    scope.current = null
+    previous?.controller.deactivate()
+    const entry = { docId, service, controller: null }
+    scope.current = entry
+    entry.controller = createHistoryRestore({ service, docId,
+      readIdentity: () => ({ token: localStorage.getItem('collab-token'), account: localStorage.getItem('collab-user') }),
+      ready: () => callbacks.current.isOwner && callbacks.current.canRestore(),
+      perform: (target, config) => request.post(`/doc/${docId}/history/${target.targetRevision}/restore`,
+        { expectedRevision: target.expectedRevision, requestId: target.requestId }, config),
+      confirmed: (...args) => callbacks.current.onConfirmed(...args),
+      changed: () => { if (mounted.current && scope.current === entry && entry.controller) render(value => value + 1) },
+    })
+  }
+  const controller = scope.current.controller
+  useEffect(() => {
+    mounted.current = true
+    controller.activate()
+    const sync = () => controller.syncIdentity()
+    sync()
+    window.addEventListener('storage', sync)
+    window.addEventListener('copage-auth-changed', sync)
+    window.addEventListener('copage-auth-expired', sync)
+    return () => {
+      mounted.current = false
+      window.removeEventListener('storage', sync)
+      window.removeEventListener('copage-auth-changed', sync)
+      window.removeEventListener('copage-auth-expired', sync)
+      controller.deactivate()
+    }
+  }, [controller])
+  return { ...controller.snapshot(), ...controller }
+}
