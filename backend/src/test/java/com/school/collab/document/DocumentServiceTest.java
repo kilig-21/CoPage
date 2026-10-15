@@ -7,6 +7,7 @@ import com.school.collab.common.UserContext;
 import com.school.collab.document.DocumentRepository.DocumentRow;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -243,6 +244,7 @@ class DocumentServiceTest {
         var publisher = mock(org.springframework.context.ApplicationEventPublisher.class);
         var withEvents = new DocumentService(repository, new ObjectMapper(), null, publisher);
         UserContext.set(1L, "owner");
+        when(repository.findForUpdate(5L)).thenReturn(Optional.of(row));
         when(repository.find(5L)).thenReturn(Optional.of(row));
         assertThrows(BizException.class, () -> withEvents.rename(5, ""));
         assertThrows(BizException.class, () -> withEvents.rename(5, "新标题"));
@@ -250,6 +252,7 @@ class DocumentServiceTest {
         when(repository.rename(5L, "新标题")).thenReturn(true);
         withEvents.rename(5, "新标题");
         verify(publisher).publishEvent(new DocumentService.DocumentRenamed(5));
+        verify(repository, never()).collaboratorPermission(anyLong(), anyLong());
     }
 
     @Test
@@ -315,6 +318,7 @@ class DocumentServiceTest {
     void readOnlyCollaboratorCanReadButCannotRenameOrDelete() {
         UserContext.set(2L, "reader");
         when(repository.find(5L)).thenReturn(Optional.of(row));
+        when(repository.findForUpdate(5L)).thenReturn(Optional.of(row));
         when(repository.collaboratorPermission(5L, 2L)).thenReturn(1);
 
         assertEquals(1, service.detail(5L).permission());
@@ -332,13 +336,79 @@ class DocumentServiceTest {
         DocumentRow renamed = new DocumentRow(
                 5L, "新标题", row.content(), row.revision(), row.ownerId(),
                 row.ownerName(), row.parentId(), row.updateTime());
-        when(repository.find(5L)).thenReturn(Optional.of(row), Optional.of(renamed));
+        when(repository.findForUpdate(5L)).thenReturn(Optional.of(row));
+        when(repository.find(5L)).thenReturn(Optional.of(renamed), Optional.of(row));
         when(repository.collaboratorPermission(5L, 2L)).thenReturn(2);
         when(repository.rename(5L, "新标题")).thenReturn(true);
 
         assertEquals("新标题", service.rename(5L, "新标题").title());
+        var order = inOrder(repository);
+        order.verify(repository).findForUpdate(5L);
+        order.verify(repository).collaboratorPermission(5L, 2L);
+        order.verify(repository).rename(5L, "新标题");
+        order.verify(repository).find(5L);
         assertEquals(ErrorCode.FORBIDDEN,
                 assertThrows(BizException.class, () -> service.delete(5L)).getErrorCode());
+    }
+
+    @Test
+    void renameRejectsRevocationCommittedBeforeItsDocumentLockIsAcquired() {
+        assertRenameRejectsPermissionChangedBeforeLock(0);
+    }
+
+    @Test
+    void renameRejectsReadOnlyDemotionCommittedBeforeItsDocumentLockIsAcquired() {
+        assertRenameRejectsPermissionChangedBeforeLock(1);
+    }
+
+    private void assertRenameRejectsPermissionChangedBeforeLock(int currentPermission) {
+        var index = mock(com.school.collab.search.SearchIndex.class);
+        var publisher = mock(org.springframework.context.ApplicationEventPublisher.class);
+        var guarded = new DocumentService(repository, new ObjectMapper(), index, publisher);
+        UserContext.set(2L, "former-editor");
+        when(repository.collaboratorPermission(5L, 2L)).thenReturn(2);
+        when(repository.findForUpdate(5L)).thenAnswer(call -> {
+            // 模拟文档锁的前一持有者已提交撤权/降权，再允许重命名取得锁。
+            when(repository.collaboratorPermission(5L, 2L)).thenReturn(currentPermission);
+            return Optional.of(row);
+        });
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            assertEquals(ErrorCode.FORBIDDEN,
+                    assertThrows(BizException.class, () -> guarded.rename(5L, "失效编辑者的标题")).getErrorCode());
+            assertTrue(TransactionSynchronizationManager.getSynchronizations().isEmpty());
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+        var order = inOrder(repository);
+        order.verify(repository).findForUpdate(5L);
+        order.verify(repository).collaboratorPermission(5L, 2L);
+        verify(repository, never()).find(anyLong());
+        verify(repository, never()).rename(anyLong(), anyString());
+        verifyNoMoreInteractions(repository);
+        verifyNoInteractions(index, publisher);
+    }
+
+    @Test
+    void renameRequiresLoginAndValidExistingIdBeforePermissionOrWrites() {
+        var index = mock(com.school.collab.search.SearchIndex.class);
+        var publisher = mock(org.springframework.context.ApplicationEventPublisher.class);
+        var guarded = new DocumentService(repository, new ObjectMapper(), index, publisher);
+        assertEquals(ErrorCode.UNAUTHORIZED,
+                assertThrows(BizException.class, () -> guarded.rename(5L, "标题")).getErrorCode());
+        verifyNoInteractions(repository);
+        UserContext.set(2L, "editor");
+        for (long id : new long[]{0, -1}) {
+            assertEquals(ErrorCode.PARAM_ERROR,
+                    assertThrows(BizException.class, () -> guarded.rename(id, "标题")).getErrorCode());
+        }
+        verifyNoInteractions(repository);
+        when(repository.findForUpdate(5L)).thenReturn(Optional.empty());
+        assertEquals(ErrorCode.NOT_FOUND,
+                assertThrows(BizException.class, () -> guarded.rename(5L, "标题")).getErrorCode());
+        verify(repository).findForUpdate(5L);
+        verifyNoMoreInteractions(repository);
+        verifyNoInteractions(index, publisher);
     }
 
     @Test

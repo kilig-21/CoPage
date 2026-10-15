@@ -178,7 +178,9 @@ public class DocumentService {
     @Transactional
     public RenameView rename(long docId, String title) {
         long userId = currentUserId();
-        DocumentRow row = requireVisible(docId, userId);
+        if (docId <= 0) throw new BizException(ErrorCode.PARAM_ERROR);
+        // 与权限变更共用文档锁；锁前不建立旧读取快照，等待结束后再检查当前权限。
+        DocumentRow row = documents.findForUpdate(docId).orElseThrow(() -> new BizException(ErrorCode.NOT_FOUND));
         if (permission(row, userId) != 2) {
             throw new BizException(ErrorCode.FORBIDDEN);
         }

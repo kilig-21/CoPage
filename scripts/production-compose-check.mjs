@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import { runRecoveryCheck } from './production-recovery-smoke.mjs'
 import { runProxyCheck } from './production-proxy-smoke.mjs'
+import { runDocumentRenamePermissionCheck } from './document-rename-permission-check.mjs'
 
 const cwd = fileURLToPath(new URL('../', import.meta.url))
 const secret = () => randomBytes(32).toString('hex')
@@ -63,7 +64,8 @@ console.log('PASS: 生产凭据必填、prod profile、非 root 数据库账号�
 const recoverySmoke = process.argv.includes('--recovery-smoke')
 const proxySmoke = process.argv.includes('--proxy-smoke')
 const expirySmoke = process.argv.includes('--session-expiry-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke
+const renamePermissionSmoke = process.argv.includes('--rename-permission-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke
 const runtimeImages = process.argv.filter(value => value.startsWith('--runtime-image='))
 assert.ok(runtimeImages.length <= 1, '预构建运行时镜像只能指定一次')
 const runtimeImage = runtimeImages[0]?.slice('--runtime-image='.length)
@@ -154,6 +156,9 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       console.log(smoke.stdout.trim())
       assert.equal(sql("SELECT COUNT(*) FROM user WHERE username IN ('testA','testB');").stdout.trim(), '0')
       console.log('PASS: 两个 prod 后端均就绪，独立注册账号跨实例协同通过，未创建演示账号')
+      if (renamePermissionSmoke) {
+        await runDocumentRenamePermissionCheck({ docker, source: qaDocker, sql, ports, username, password, cwd, env: qaEnv })
+      }
       if (expirySmoke) {
         const expiry = spawnSync(process.execPath, ['scripts/session-expiry-smoke.mjs'], {
           cwd, encoding: 'utf8', timeout: 120_000,
