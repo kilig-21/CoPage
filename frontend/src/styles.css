@@ -93,6 +93,9 @@ body { margin: 0; min-width: 0; }
 .copy-creation-review .ant-list-item-meta-title { overflow-wrap: anywhere; }
 .document-share-modal .ant-alert { margin-top: 12px; }
 @media (max-width: 640px) {
+  .user-guide-drawer .ant-drawer-body { padding: 16px; }
+  .user-guide-drawer .ant-drawer-close { width: 44px; min-height: 44px; margin-inline-end: 8px; }
+  .user-guide-drawer .ant-drawer-footer .ant-btn { min-height: 44px; }
   :is(.document-share-modal, .document-collaborators-modal).ant-modal .ant-btn { min-height: 44px; }
   :is(.document-share-modal, .document-collaborators-modal).ant-modal .ant-modal-close { width: 44px; height: 44px; }
   :is(.document-share-modal, .document-collaborators-modal).ant-modal .ant-modal-header { padding-inline-end: 36px; }
