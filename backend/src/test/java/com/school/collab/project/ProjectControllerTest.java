@@ -11,7 +11,7 @@ class ProjectControllerTest {
     @Test void projectStateRouteBindsOriginalIdAndReturnsMetadataOnly() throws Exception {
         var service=mock(ProjectService.class);
         when(service.state(10)).thenReturn(new ProjectService.StateView(10,3,"项目","简介",true,false));
-        MockMvcBuilders.standaloneSetup(new ProjectController(service,mock(ProjectCreationRequests.class))).build().perform(get("/api/projects/10/state"))
+        MockMvcBuilders.standaloneSetup(new ProjectController(service,mock(ProjectCreationRequests.class),mock(ProjectDocumentCreations.class))).build().perform(get("/api/projects/10/state"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0))
             .andExpect(jsonPath("$.data.id").value(10)).andExpect(jsonPath("$.data.groupId").value(3))
             .andExpect(jsonPath("$.data.archived").value(true)).andExpect(jsonPath("$.data.canManage").value(false))
@@ -21,7 +21,7 @@ class ProjectControllerTest {
     @Test void associationStateRouteBindsBothIdsAndPreservesAnAbsentAssociation() throws Exception {
         var service=mock(ProjectService.class);
         when(service.associationState(10,5)).thenReturn(new ProjectService.AssociationStateView(10,5,"资料",null,true));
-        MockMvcBuilders.standaloneSetup(new ProjectController(service,mock(ProjectCreationRequests.class))).build().perform(get("/api/projects/10/documents/5/state"))
+        MockMvcBuilders.standaloneSetup(new ProjectController(service,mock(ProjectCreationRequests.class),mock(ProjectDocumentCreations.class))).build().perform(get("/api/projects/10/documents/5/state"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0))
             .andExpect(jsonPath("$.data.projectId").value(10)).andExpect(jsonPath("$.data.docId").value(5))
             .andExpect(jsonPath("$.data.docTitle").value("资料")).andExpect(jsonPath("$.data.projectArchived").value(true))
@@ -33,7 +33,7 @@ class ProjectControllerTest {
         var projects=mock(ProjectService.class);var creations=mock(ProjectCreationRequests.class);
         String key="12345678-1234-4123-8123-123456789abc";
         when(creations.execute(key," 项目 ","简介",3)).thenReturn(new ProjectService.IdView(10,3));
-        MockMvcBuilders.standaloneSetup(new ProjectController(projects,creations)).build()
+        MockMvcBuilders.standaloneSetup(new ProjectController(projects,creations,mock(ProjectDocumentCreations.class))).build()
             .perform(post("/api/projects").header("Idempotency-Key",key).contentType("application/json")
                 .content("{\"name\":\" 项目 \",\"description\":\"简介\",\"groupId\":3}"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(10)).andExpect(jsonPath("$.data.groupId").value(3));
@@ -42,9 +42,35 @@ class ProjectControllerTest {
     @Test void legacyCreationKeepsMissingHeaderAndDefaultsPersonalGroupToZero() throws Exception {
         var projects=mock(ProjectService.class);var creations=mock(ProjectCreationRequests.class);
         when(creations.execute(null,"项目",null,0)).thenReturn(new ProjectService.IdView(10,0));
-        MockMvcBuilders.standaloneSetup(new ProjectController(projects,creations)).build()
+        MockMvcBuilders.standaloneSetup(new ProjectController(projects,creations,mock(ProjectDocumentCreations.class))).build()
             .perform(post("/api/projects").contentType("application/json").content("{\"name\":\"项目\"}"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.data.id").value(10)).andExpect(jsonPath("$.data.groupId").value(0));
         verify(creations).execute(null,"项目",null,0);verifyNoMoreInteractions(creations);verifyNoInteractions(projects);
+    }
+    @Test void projectDocumentCreationUsesRouteProjectAndOnlyAcceptsTitleAndBuiltInTemplate() throws Exception {
+        var projects=mock(ProjectService.class);var creations=mock(ProjectCreationRequests.class);
+        var documents=mock(ProjectDocumentCreations.class);
+        String key="12345678-1234-4123-8123-123456789abc";
+        when(documents.execute(key,10," 原始标题 ","meeting")).thenReturn(new ProjectDocumentCreations.Created(41,10,"原始标题"));
+        MockMvcBuilders.standaloneSetup(new ProjectController(projects,creations,documents)).build()
+            .perform(post("/api/projects/10/documents/new").header("Idempotency-Key",key).contentType("application/json")
+                .content("{\"title\":\" 原始标题 \",\"templateId\":\"meeting\",\"ownerId\":999,\"projectId\":999,\"permission\":2,\"content\":\"不接收正文\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(0))
+            .andExpect(jsonPath("$.data.id").value(41)).andExpect(jsonPath("$.data.projectId").value(10))
+            .andExpect(jsonPath("$.data.title").value("原始标题"))
+            .andExpect(jsonPath("$.data",org.hamcrest.Matchers.aMapWithSize(3)))
+            .andExpect(jsonPath("$.data.content").doesNotExist()).andExpect(jsonPath("$.data.permission").doesNotExist());
+        verify(documents).execute(key,10," 原始标题 ","meeting");verifyNoMoreInteractions(documents);
+        verifyNoInteractions(projects,creations);
+    }
+    @Test void projectDocumentCreationAllowsEmptyFieldsWithoutKeyAndDefaultsTemplateToNull() throws Exception {
+        var projects=mock(ProjectService.class);var creations=mock(ProjectCreationRequests.class);
+        var documents=mock(ProjectDocumentCreations.class);
+        when(documents.execute(null,10,null,null)).thenReturn(new ProjectDocumentCreations.Created(41,10,"未命名文档"));
+        MockMvcBuilders.standaloneSetup(new ProjectController(projects,creations,documents)).build()
+            .perform(post("/api/projects/10/documents/new").contentType("application/json").content("{}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.title").value("未命名文档"))
+            .andExpect(jsonPath("$.data.id").value(41)).andExpect(jsonPath("$.data.projectId").value(10));
+        verify(documents).execute(null,10,null,null);verifyNoMoreInteractions(documents);verifyNoInteractions(projects,creations);
     }
 }

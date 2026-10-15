@@ -79,6 +79,11 @@ public class ProjectService {
         if(access.project().groupId()>0&&d.ownerId()!=user)throw new BizException(ErrorCode.FORBIDDEN,"小组项目只能主动加入你拥有的文档");
         boolean added=projects.add(id,docId,user);if(added)projects.touch(id);return new Change(added);
     }
+    /** 新建正文前先锁定当前活跃项目及小组权限；普通成员也可加入自己创建的文档。 */
+    @Transactional
+    public void lockForDocumentCreation(long id) {
+        access(id,true,false);
+    }
     @Transactional
     public Change remove(long id,long docId,String associationId) {
         long user=user();var access=access(id,true,false);var d=document(docId,user);

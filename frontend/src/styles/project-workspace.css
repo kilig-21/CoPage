@@ -1,6 +1,15 @@
 .project-read-alert { margin-bottom: 16px; overflow-wrap: anywhere; }
 .project-page .ant-card-head-title { white-space: normal; overflow-wrap: anywhere; }
 .project-page .ant-list-item-meta-title { overflow-wrap: anywhere; }
+.project-document-create-modal .ant-typography { overflow-wrap: anywhere; }
+.project-document-create-modal { top: 32px; padding-bottom: 24px; }
+.project-document-create-modal .ant-select { width: 100%; }
+.project-document-create-modal .ant-modal-body { max-height: calc(100dvh - 220px); overflow-y: auto; overscroll-behavior: contain; }
+.project-document-template-preview { margin-top: 16px; }
+.project-document-template-preview .document-preview .ql-editor { max-height: 240px; }
+.project-document-local-note { margin: 16px 0 0; }
+.project-document-pending .ant-list-item-meta { min-width: 0; }
+.project-document-pending .ant-list-item-meta-description { overflow-wrap: anywhere; }
 @media (max-width: 640px) {
   .project-read-alert { flex-wrap: wrap; gap: 8px; }
   .project-read-alert .ant-alert-content { min-width: 0; }
@@ -8,4 +17,8 @@
   .project-page .ant-card-head-wrapper { flex-wrap: wrap; gap: 8px; }
   .project-page .ant-card-extra { margin-inline-start: 0; }
   .project-page .ant-btn, .project-read-alert .ant-btn { min-height: 44px; }
+  .project-document-create-modal .ant-modal-title { padding-right: 32px; overflow-wrap: anywhere; }
+  .project-document-create-modal .ant-btn, .project-document-create-modal .ant-input,
+  .project-document-create-modal .ant-select-selector, .project-document-create-modal .ant-modal-close { min-height: 44px; }
+  .project-document-pending .ant-list .ant-list-item { flex-wrap: wrap; }
 }

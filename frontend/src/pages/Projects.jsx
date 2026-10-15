@@ -8,6 +8,8 @@ import UserGuide from '../components/UserGuide'
 import ProjectDocumentsModal from '../components/ProjectDocumentsModal'
 import useProjectOperation from '../api/useProjectOperation'
 import useProjectCreations from '../api/useProjectCreations'
+import CreateProjectDocumentModal from '../components/CreateProjectDocumentModal'
+import PendingProjectDocuments from '../components/PendingProjectDocuments'
 import '../styles/project-workspace.css'
 
 const idValue = value => Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Number(value) : 0
@@ -77,11 +79,13 @@ export default function Projects() {
   const [detailRefresh, setDetailRefresh] = useState(0)
   const [fields, setFields] = useState(null)
   const [adding, setAdding] = useState(false)
+  const [newDocument, setNewDocument] = useState(null)
+  const [documentBusy, setDocumentBusy] = useState(false)
   const operation = useProjectOperation(target => {
     setRefresh(value => value + 1)
     if (target.kind === 'add') setAdding(false)
   })
-  const busy = operation.busy
+  const busy = operation.busy || documentBusy
   const uncertain = Boolean(operation.uncertain)
   const operationError = operation.error
   const creations = useProjectCreations(busy)
@@ -97,7 +101,7 @@ export default function Projects() {
     // 自动纠正分页不改变所选项目，保留其表单、原目标和写等待。
     if (keepWork) return () => { if (!automaticPageChange.current) operation.cancel() }
     operation.cancel()
-    setFields(null); setAdding(false)
+    setFields(null); setAdding(false); setNewDocument(null); setDocumentBusy(false)
     return () => { if (!automaticPageChange.current) operation.cancel() }
   }, [location.key])
   useEffect(() => setInput(keyword), [keyword])
@@ -191,6 +195,11 @@ export default function Projects() {
     setFields(null)
     setParams({ project: String(result.id), ...(result.groupId ? { groupId: String(result.groupId), scope: 'group' } : { scope: 'personal' }) })
   }
+  const openProjectDocument = result => {
+    const origin = selected === result.projectId && !archived ? sourcePath : '/projects?project=' + result.projectId
+    goTo(documentHref(result.id, origin))
+    setNewDocument(null)
+  }
   const confirmCreation = record => operation.run({ kind: 'create', name: record.name, groupId: record.groupId, requestId: record.requestId },
     (config, prepared) => creations.retry(record, config, prepared), openCreated, { retryCreation: true, trackedCreation: true })
   const review = async () => {
@@ -211,6 +220,8 @@ export default function Projects() {
     <main className="content-wrap project-page">
       <Typography.Title level={2}>{context ? context.name + '的项目' : '把资料整理成项目'}</Typography.Title>
       <Typography.Paragraph type="secondary">整理个人或小组工作，关联保留同一份原文档。项目内只显示你有权限访问的资料。</Typography.Paragraph>
+      <PendingProjectDocuments contextKey={location.key} onBusyChange={setDocumentBusy} onCreated={openProjectDocument}
+        disabled={operation.busy || uncertain || Boolean(fields) || adding || Boolean(newDocument)} />
       {chooseGroup && <Typography.Paragraph>先选择需要整理资料的小组，再由创建者或管理员创建小组项目。</Typography.Paragraph>}
       {groupId > 0 && <Button onClick={() => setParams({})}>查看全部项目</Button>}
       {contextLoading && <Typography.Paragraph role="status">正在读取小组资料；项目列表和已打开资料可分别查看。</Typography.Paragraph>}
@@ -287,7 +298,9 @@ export default function Projects() {
         {current && <>
           <Typography.Paragraph>{current.description || '尚未填写简介'}</Typography.Paragraph>
           <Typography.Paragraph>{current.total} 篇你可访问的文档 · {current.groupId ? '小组：' + current.groupName : '个人项目'}</Typography.Paragraph>
-          <Space wrap className="project-section"><Button disabled={!detailReady} onClick={() => setAdding(true)}>加入已有文档</Button>
+          <Space wrap className="project-section">
+            <Button type="primary" disabled={!detailReady} onClick={() => setNewDocument({ id: current.id, name: current.name, groupId: current.groupId })}>新建文档</Button>
+            <Button disabled={!detailReady} onClick={() => setAdding(true)}>加入已有文档</Button>
             {manage && <Button disabled={!detailReady} onClick={() => setFields(current)}>修改项目资料</Button>}
             {manage && <Popconfirm overlayClassName="document-action-confirm" title={'归档“' + current.name + '”？'}
               description="保留原文档、单独权限及项目关联，可在已归档列表恢复。" disabled={!detailReady}
@@ -296,7 +309,7 @@ export default function Projects() {
           </Space>
           <Input.Search aria-label="筛选项目内文档" value={docInput} maxLength={200} disabled={busy} placeholder="按文档标题筛选"
             onChange={e => setDocInput(e.target.value)} onSearch={value => navigate({ docKeyword: value.trim() || null, docPage: null })} enterButton="筛选" />
-          <List rowKey="id" dataSource={current.list} locale={{ emptyText: <Empty description="没有符合条件且可访问的文档" /> }}
+          <List rowKey="id" dataSource={current.list} locale={{ emptyText: <Empty description={docKeyword ? '没有符合条件且可访问的文档' : '还没有你可访问的文档，可以新建一篇或加入已有文档'} /> }}
             renderItem={doc => <List.Item actions={[
               <Link key="open" to={documentHref(doc.id, sourcePath)}>打开</Link>,
               doc.canRemove && <Popconfirm key="remove" overlayClassName="document-action-confirm" title={'将“' + doc.title + '”移出项目？'}
@@ -311,6 +324,8 @@ export default function Projects() {
         </>}
       </Card>}
     </main>
+    {newDocument && <CreateProjectDocumentModal project={newDocument} contextKey={location.key}
+      onClose={() => setNewDocument(null)} onCreated={openProjectDocument} onBusyChange={setDocumentBusy} />}
     {fields && <Fields key={fields.id || 'create'} value={fields} context={hasGroupContext ? context : null}
       ready={fields.id ? detailReady && manage : createReady} busy={busy} uncertain={uncertain}
       error={operationError || (fields.id ? detailError : contextError || error)} notice={operation.notice?.target?.projectId === fields.id ? operation.notice : null}

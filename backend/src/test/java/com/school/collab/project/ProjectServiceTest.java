@@ -95,6 +95,28 @@ class ProjectServiceTest {
         var order=inOrder(repo,groups);order.verify(repo).find(10,false);order.verify(groups).access(3,true);
         order.verify(repo).find(10,true);order.verify(repo).lockDocument(5,2);
     }
+    @Test void documentCreationLockAllowsOrdinaryGroupMemberAndLocksGroupBeforeProjectWithoutBodyAccess() {
+        as(2);project(1,3,false);when(groups.access(3,true)).thenReturn(new GroupService.Access(3,"组","member"));
+        service.lockForDocumentCreation(10);
+        var order=inOrder(repo,groups);order.verify(repo).find(10,false);order.verify(groups).access(3,true);
+        order.verify(repo).find(10,true);verifyNoMoreInteractions(repo,groups);
+    }
+    @Test void documentCreationLockAllowsOnlyPersonalOwnerAndRejectsArchivedOrRemovedGroupContext() {
+        as(2);project(2,0,false);service.lockForDocumentCreation(10);
+        project(1,0,false);code(ErrorCode.FORBIDDEN,()->service.lockForDocumentCreation(10));
+        project(2,0,true);code(ErrorCode.NOT_FOUND,()->service.lockForDocumentCreation(10));
+        project(1,3,false);when(groups.access(3,true)).thenThrow(new BizException(ErrorCode.FORBIDDEN));
+        code(ErrorCode.FORBIDDEN,()->service.lockForDocumentCreation(10));
+        verify(repo,never()).lockDocument(anyLong(),anyLong());verify(repo,never()).add(anyLong(),anyLong(),anyLong());
+        verify(repo,never()).create(anyString(),anyString(),anyLong(),anyLong());
+    }
+    @Test void documentCreationLockRejectsAnonymousInvalidAndMissingProjectBeforeAnyFurtherAccess() {
+        code(ErrorCode.UNAUTHORIZED,()->service.lockForDocumentCreation(10));verifyNoInteractions(repo,groups);
+        as(2);code(ErrorCode.PARAM_ERROR,()->service.lockForDocumentCreation(0));
+        code(ErrorCode.PARAM_ERROR,()->service.lockForDocumentCreation(-1));verifyNoInteractions(repo,groups);
+        code(ErrorCode.NOT_FOUND,()->service.lockForDocumentCreation(10));
+        verify(repo).find(10,false);verifyNoMoreInteractions(repo);verifyNoInteractions(groups);
+    }
     @Test void inaccessibleOrDeletedDocumentNeverCreatesAssociation() {
         as(2);project(2,0,false);when(repo.lockDocument(5,2)).thenReturn(Optional.empty());code(ErrorCode.NOT_FOUND,()->service.add(10,5));
         when(repo.lockDocument(5,2)).thenReturn(Optional.of(new ProjectRepository.Document(5,1,0)));

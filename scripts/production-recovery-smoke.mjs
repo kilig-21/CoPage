@@ -8,6 +8,7 @@ import { createOrganizationFixture, verifyOrganizationRecovery, organizationSnap
 import { createCreationFixture, verifyCreationRecovery, creationSnapshotSql } from './document-creation-check.mjs'
 import { createProjectCreationFixture, verifyProjectCreationRecovery, projectCreationSnapshotSql } from './project-creation-check.mjs'
 import { createGroupCreationFixture, verifyGroupCreationRecovery, groupCreationSnapshotSql } from './group-creation-check.mjs'
+import { createProjectDocumentCreationFixture, verifyProjectDocumentCreationRecovery, projectDocumentCreationSnapshotSql } from './project-document-creation-check.mjs'
 
 // 仅由生产配置验收脚本调用，输入是该脚本新建的随机临时项目。
 export async function runRecoveryCheck({ docker, base, env, source, sql, port, peerPort, username, password }) {
@@ -48,6 +49,15 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, p
     assert.equal(label, project, '恢复或清理前必须核对资源项目归属')
   }
   try {
+    const sourceContainers = source(['ps', '-q']).stdout.trim().split(/\s+/).filter(Boolean)
+    assert.ok(sourceContainers.length >= 7, '隔离恢复源须包含双后端及其基础服务')
+    for (const id of sourceContainers) assertProject(id, sourceProjectName)
+    assert.notEqual(port, peerPort)
+    for (const [index, actualPort] of [port, peerPort].entries()) {
+      assert.ok(Number.isSafeInteger(actualPort) && actualPort > 0 && actualPort <= 65535)
+      assert.equal(source(['port', '--index', String(index + 1), 'backend', '8080']).stdout.trim(), `127.0.0.1:${actualPort}`,
+        '恢复验收API必须属于已核对的随机隔离项目')
+    }
     token = (await api(port, '/auth/login', 'POST', { username, password })).token
     const revokedToken = token
     const oldPassword = password
@@ -109,10 +119,15 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, p
       sql: query => readSql(source, query) })
     const groupCreation = await createGroupCreationFixture({ port, peerPort, owner: { username, password }, viewer,
       sql: query => readSql(source, query), projectName: sourceProjectName })
+    const projectDocumentCreation = await createProjectDocumentCreationFixture({ port, peerPort, owner: { username, password }, viewer, outsider,
+      sql: query => readSql(source, query), projectName: sourceProjectName,
+      rootSql: query => source(['exec', '-T', 'mysql', 'sh', '-ec',
+        'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --default-character-set=utf8mb4 -uroot -N -D collab_doc'], { input: query }).stdout.trim() })
     const durableOrganization = readSql(source, organizationSnapshotSql)
     const durableCreation = readSql(source, creationSnapshotSql)
     const durableProjectCreation = readSql(source, projectCreationSnapshotSql)
     const durableGroupCreation = readSql(source, groupCreationSnapshotSql)
+    const durableProjectDocumentCreation = readSql(source, projectDocumentCreationSnapshotSql)
 
     // 对应部署说明的维护窗口：先停写入，再导出 SQL，停 MinIO 后只读归档。
     source(['stop', 'backend'])
@@ -187,6 +202,9 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, p
     assert.equal(readSql(destination, creationSnapshotSql), durableCreation, '创建收据与首次摘要须完整恢复')
     assert.equal(readSql(destination, projectCreationSnapshotSql), durableProjectCreation, '项目创建回执全部字段及时间须完整恢复')
     assert.equal(readSql(destination, groupCreationSnapshotSql), durableGroupCreation, '小组当前资料、成员、邀请和创建回执全部字段及时间须完整恢复')
+    assert.equal(readSql(destination, projectDocumentCreationSnapshotSql), durableProjectDocumentCreation, '项目内新建文档涉及的18表完整字段、正文、快照、关联UUID、回执JSON和时间须恢复')
+    await verifyProjectDocumentCreationRecovery({ port: restoredPort, fixture: projectDocumentCreation,
+      sql: query => readSql(destination, query) })
     await verifyCreationRecovery({ port: restoredPort, fixture: creation })
     await verifyProjectCreationRecovery({ port: restoredPort, fixture: projectCreation,
       sql: query => readSql(destination, query) })
