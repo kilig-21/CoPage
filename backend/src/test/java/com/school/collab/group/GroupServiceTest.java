@@ -46,6 +46,42 @@ class GroupServiceTest {
         assertEquals(20,service.create(" 我的组 "," 简介 ").id());
         verify(repo).add(20,7,"owner");
     }
+    @Test void creationReplayReadsOriginalOwnerGroupIncludingArchivedWithoutChangingIt() {
+        as(1,"owner");
+        for(boolean archived:new boolean[]{false,true}) {
+            when(repo.find(10,false)).thenReturn(Optional.of(new GroupRepository.Group(10,"已改名","当前简介",1,archived)));
+            assertEquals(new GroupService.CreationView(10,archived,"已改名"),service.replayCreation(10));
+        }
+        verify(repo,times(2)).find(10,false);verify(repo,times(2)).role(10,1);verifyNoMoreInteractions(repo);
+    }
+    @Test void creationReplayRejectsOtherOwnerEvenWhenThatAccountIsAdminOrMember() {
+        for(String role:new String[]{"admin","member","owner"}) {
+            as(2,role);code(ErrorCode.FORBIDDEN,()->service.replayCreation(10));
+        }
+        verify(repo,never()).role(10,2);verify(repo,never()).create(any(),any(),anyLong());
+    }
+    @Test void creationReplayRequiresActualOwnerMembershipAndNeverRepairsMissingOrChangedRole() {
+        as(1,null);
+        for(String role:new String[]{null,"member","admin"}) {
+            doReturn(role).when(repo).role(10,1);
+            code(ErrorCode.FORBIDDEN,()->service.replayCreation(10));
+        }
+        verify(repo,never()).add(anyLong(),anyLong(),any());verify(repo,never()).role(anyLong(),anyLong(),any());
+    }
+    @Test void creationReplayMissingOrInconsistentOriginalDoesNotCreateReplacement() {
+        UserContext.set(1L,"owner");
+        when(repo.find(10,false)).thenReturn(Optional.empty());
+        code(ErrorCode.NOT_FOUND,()->service.replayCreation(10));
+        doReturn(Optional.of(new GroupRepository.Group(11,"其他组","",1,false))).when(repo).find(10,false);
+        assertThrows(IllegalStateException.class,()->service.replayCreation(10));
+        verify(repo,never()).create(any(),any(),anyLong());verify(repo,never()).role(anyLong(),anyLong());
+    }
+    @Test void creationReplayAnonymousOrInvalidIdDoesNotReadAnything() {
+        code(ErrorCode.UNAUTHORIZED,()->service.replayCreation(10));
+        UserContext.set(1L,"owner");
+        for(long id:new long[]{0,-1})code(ErrorCode.PARAM_ERROR,()->service.replayCreation(id));
+        verifyNoInteractions(repo);
+    }
     @Test void listAndInboxAreScopedAndBounded() {
         UserContext.set(2L,"member");when(repo.list(2,false,"",1,20)).thenReturn(List.of());when(repo.inbox(2,1,20)).thenReturn(List.of());
         assertEquals(0,service.list(false,"",1,20).total());assertEquals(0,service.inbox(1,20).total());

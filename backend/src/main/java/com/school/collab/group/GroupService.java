@@ -24,6 +24,15 @@ public class GroupService {
         long user=user(); String normalized=name(name), about=description(description);
         long id=groups.create(normalized,about,user); groups.add(id,user,"owner"); return new IdView(id);
     }
+    /** 原创建确认允许归档，但必须仍对应可信创建者及其完整owner成员关系。 */
+    @Transactional(readOnly=true)
+    public CreationView replayCreation(long id) {
+        long user=user(); var g=existing(id,false);
+        if(g.id()!=id)throw new IllegalStateException("原小组编号无法确认");
+        requireOwner(g);
+        if(!"owner".equals(groups.role(id,user)))throw new BizException(ErrorCode.FORBIDDEN,"原小组创建者成员关系无法确认");
+        return new CreationView(g.id(),g.archived(),g.name());
+    }
     @Transactional(readOnly=true)
     public Detail detail(long id) {
         var g=active(id,false); String role=membership(g);
@@ -137,6 +146,9 @@ public class GroupService {
     private static String description(String input) { String s=input==null?"":input.trim();if(s.length()>300||s.chars().anyMatch(c->Character.isISOControl(c)&&c!='\n'&&c!='\r'))throw bad("小组简介最多300个字符");return s; }
     private static BizException bad(String message) { return new BizException(ErrorCode.PARAM_ERROR,message); }
     public record IdView(long id) { }
+    public record CreationView(long id,boolean archived,String name) {
+        public CreationView(long id,boolean archived) { this(id,archived,null); }
+    }
     public record ListView(long total,List<GroupRepository.Summary> list) { }
     public record Inbox(long total,List<GroupRepository.Invitation> list) { }
     public record Detail(long id,String name,String description,long ownerId,long currentUserId,String role,List<GroupRepository.Member> members,List<GroupRepository.Pending> invitations) { }

@@ -9,11 +9,14 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/groups")
 public class GroupController {
     private final GroupService groups;
-    public GroupController(GroupService groups) { this.groups=groups; }
+    private final GroupCreationRequests creations;
+    public GroupController(GroupService groups,GroupCreationRequests creations) { this.groups=groups;this.creations=creations; }
     @GetMapping
     public Result<GroupService.ListView> list(@RequestParam(defaultValue="false")boolean archived,@RequestParam(defaultValue="")String keyword,@RequestParam(defaultValue="1")int page,@RequestParam(defaultValue="20")int size) { return Result.ok(groups.list(archived,keyword,page,size)); }
     @PostMapping
-    public Result<GroupService.IdView> create(@RequestBody Fields body) { return Result.ok(groups.create(body.name(),body.description())); }
+    public Result<GroupService.CreationView> create(@RequestBody Fields body,@RequestHeader(value="Idempotency-Key",required=false) String key) {
+        return Result.ok(creations.execute(key,body.name(),body.description()));
+    }
     @GetMapping("/invitations")
     public Result<GroupService.Inbox> inbox(@RequestParam(defaultValue="1")int page,@RequestParam(defaultValue="20")int size) { return Result.ok(groups.inbox(page,size)); }
     @GetMapping("/{id}")

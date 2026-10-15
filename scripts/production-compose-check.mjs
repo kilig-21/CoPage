@@ -104,7 +104,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
     assert.equal(initial[0], '0', '生产初始化不得创建演示账号')
     assert.ok(initial[1].startsWith('copage@'), '应用必须使用独立数据库账号')
     for (const table of ['user', 'document', 'doc_operation', 'doc_operation_receipt', 'doc_snapshot', 'doc_collaborator', 'doc_history_boundary', 'doc_named_version',
-      'copage_group', 'group_member', 'group_invitation', 'copage_project', 'project_document', 'personal_template_owner', 'personal_template', 'doc_creation_receipt', 'project_creation_receipt']) {
+      'copage_group', 'group_member', 'group_invitation', 'copage_project', 'project_document', 'personal_template_owner', 'personal_template', 'doc_creation_receipt', 'project_creation_receipt', 'group_creation_receipt']) {
       assert.ok(initial.slice(2).includes(table), `缺少表 ${table}`)
     }
     assert.notEqual(sql('SELECT * FROM mysql.user;', false, true).status, 0, '应用账号不应读取系统账号表')
@@ -112,7 +112,8 @@ if (process.argv.includes('--smoke') || fullSmoke) {
     assert.ok(redisNoAuth.includes('NOAUTH'), 'Redis 无凭据请求必须拒绝')
     const redisAuth = qaDocker(['exec', '-T', 'redis', 'sh', '-ec', 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping']).stdout.trim()
     assert.equal(redisAuth, 'PONG')
-    console.log('PASS: 全新 MySQL 无演示账号、十七张表齐全、数据库权限隔离、Redis 认证')
+    assert.equal(initial.slice(2).length, 18, '全新数据库业务表契约须为十八张')
+    console.log('PASS: 全新 MySQL 无演示账号、十八张表齐全、数据库权限隔离、Redis 认证')
     if (fullSmoke) {
       const ports = [1, 2].map(index => {
         const address = qaDocker(['port', '--index', String(index), 'backend', '8080']).stdout.trim()

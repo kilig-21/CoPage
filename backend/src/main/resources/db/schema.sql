@@ -95,6 +95,14 @@ CREATE TABLE IF NOT EXISTS group_member (
  joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
  PRIMARY KEY(group_id,user_id), KEY idx_group_member_user(user_id,group_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS group_creation_receipt (
+ user_id BIGINT NOT NULL,
+ request_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ request_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ group_id BIGINT NOT NULL,
+ create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ PRIMARY KEY(user_id,request_id), KEY idx_group_creation_group(group_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 CREATE TABLE IF NOT EXISTS group_invitation (
  group_id BIGINT NOT NULL, user_id BIGINT NOT NULL, inviter_id BIGINT NOT NULL,
  status VARCHAR(12) NOT NULL DEFAULT 'pending', invitation_version BIGINT NOT NULL DEFAULT 1,

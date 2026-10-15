@@ -7,9 +7,13 @@ import { openRecoveryChannel } from './recovery-channel.mjs'
 import { createOrganizationFixture, verifyOrganizationRecovery, organizationSnapshotSql } from './organization-recovery-check.mjs'
 import { createCreationFixture, verifyCreationRecovery, creationSnapshotSql } from './document-creation-check.mjs'
 import { createProjectCreationFixture, verifyProjectCreationRecovery, projectCreationSnapshotSql } from './project-creation-check.mjs'
+import { createGroupCreationFixture, verifyGroupCreationRecovery, groupCreationSnapshotSql } from './group-creation-check.mjs'
 
 // 仅由生产配置验收脚本调用，输入是该脚本新建的随机临时项目。
 export async function runRecoveryCheck({ docker, base, env, source, sql, port, peerPort, username, password }) {
+  // 在任何账号、权限、SQL或停服务动作之前核对调用方栈；绝不接收本地开发/实际生产项目。
+  const sourceProjectName = JSON.parse(source(['config', '--format', 'json']).stdout).name
+  assert.match(sourceProjectName, /^copage-prod-qa-[0-9a-f]{12}$/, '恢复源必须为本次随机隔离生产项目')
   const restoredProject = 'copage-recovery-qa-' + randomBytes(6).toString('hex')
   const destination = (args, options = {}) => docker([...base, '-p', restoredProject, ...args], { ...options, customEnv: env })
   const backupDir = mkdtempSync(join(tmpdir(), 'copage-recovery-backup-'))
@@ -103,9 +107,12 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, p
       sql: query => readSql(source, query) })
     const projectCreation = await createProjectCreationFixture({ port, peerPort, owner: { username, password }, viewer,
       sql: query => readSql(source, query) })
+    const groupCreation = await createGroupCreationFixture({ port, peerPort, owner: { username, password }, viewer,
+      sql: query => readSql(source, query), projectName: sourceProjectName })
     const durableOrganization = readSql(source, organizationSnapshotSql)
     const durableCreation = readSql(source, creationSnapshotSql)
     const durableProjectCreation = readSql(source, projectCreationSnapshotSql)
+    const durableGroupCreation = readSql(source, groupCreationSnapshotSql)
 
     // 对应部署说明的维护窗口：先停写入，再导出 SQL，停 MinIO 后只读归档。
     source(['stop', 'backend'])
@@ -115,8 +122,7 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, p
     writeFileSync(sqlFile, dump, { mode: 0o600 })
     source(['stop', 'minio'])
     const sourceMinio = source(['ps', '-a', '-q', 'minio']).stdout.trim()
-    const sourceProject = source(['config', '--format', 'json']).stdout
-    assertProject(sourceMinio, JSON.parse(sourceProject).name)
+    assertProject(sourceMinio, sourceProjectName)
     const archive = docker(['run', '--rm', '--network', 'none', '--volumes-from', sourceMinio + ':ro',
       'redis:7.4.1-alpine', 'sh', '-ec', 'tar -czf - -C /data .'], { binary: true }).stdout
     assert.ok(archive.length > 0)
@@ -180,9 +186,13 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, p
     assert.equal(readSql(destination, organizationSnapshotSql), durableOrganization, '七张组织/模板表的完整数据和时间字段必须恢复')
     assert.equal(readSql(destination, creationSnapshotSql), durableCreation, '创建收据与首次摘要须完整恢复')
     assert.equal(readSql(destination, projectCreationSnapshotSql), durableProjectCreation, '项目创建回执全部字段及时间须完整恢复')
+    assert.equal(readSql(destination, groupCreationSnapshotSql), durableGroupCreation, '小组当前资料、成员、邀请和创建回执全部字段及时间须完整恢复')
     await verifyCreationRecovery({ port: restoredPort, fixture: creation })
     await verifyProjectCreationRecovery({ port: restoredPort, fixture: projectCreation,
       sql: query => readSql(destination, query) })
+    await verifyGroupCreationRecovery({ port: restoredPort, fixture: groupCreation,
+      sql: query => readSql(destination, query) })
+    assert.equal(readSql(destination, groupCreationSnapshotSql), durableGroupCreation, '小组原UUID重放不得改变原资料、owner成员或任何时间与回执')
     assert.equal(readSql(destination, organizationSnapshotSql), durableOrganization, '原项目创建重放不得改变组织fixture任何字段')
     await verifyOrganizationRecovery({ port: restoredPort, fixture: organization })
     const searchPath = q => '/search?q=' + encodeURIComponent(q)

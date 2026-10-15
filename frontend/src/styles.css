@@ -185,6 +185,10 @@ body { margin: 0; min-width: 0; }
 .group-inbox-empty .ant-card-head-title { padding: 0; white-space: normal; }
 .group-inbox-empty .ant-card-body { display: none; }
 .group-page .ant-list-item-meta-title, .group-page .ant-list-item-meta-description { overflow-wrap: anywhere; }
+.group-creation-review { border-color: var(--cp-border, #d6dce5); }
+.group-creation-review .ant-card-head-title { white-space: normal; }
+.group-creation-review .ant-list-item-meta { min-width: 0; }
+.group-create-modal .ant-typography, .group-create-modal .ant-alert { overflow-wrap: anywhere; }
 @media (max-width: 640px) {
   .group-page .ant-list-item { flex-wrap: wrap; gap: 12px; }
   .group-page .ant-list .ant-list-item .ant-list-item-meta { flex: 1 1 100%; min-width: 0; }
@@ -192,6 +196,10 @@ body { margin: 0; min-width: 0; }
   .group-page .ant-alert { flex-wrap: wrap; }
   .group-page .ant-alert .ant-alert-content { min-width: 0; overflow-wrap: anywhere; }
   .group-page .ant-alert .ant-alert-action { flex: 0 0 100%; margin: 8px 0 0; padding-left: 22px; }
+  .group-creation-review .ant-list .ant-list-item { flex-wrap: wrap; }
+  .group-creation-review .ant-btn, .group-create-modal .ant-modal-footer .ant-btn { min-height: 44px; }
+  .group-creation-review .ant-card-head { padding-inline: 16px; }
+  .group-creation-review .ant-card-body { padding: 16px; }
 }
 
 .project-section { margin: 24px 0; }

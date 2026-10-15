@@ -4,6 +4,8 @@ import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import UserGuide from '../components/UserGuide'
+import CreateGroupModal from '../components/CreateGroupModal'
+import PendingGroupCreations from '../components/PendingGroupCreations'
 
 const roles = { owner: '创建者', admin: '管理员', member: '成员' }
 const options = [{ value: 'member', label: '成员' }, { value: 'admin', label: '管理员' }]
@@ -13,12 +15,12 @@ const validId = raw => Number.isSafeInteger(Number(raw)) && Number(raw) > 0 ? Nu
 function GroupFields({ fields, busy, uncertain, error, onClose, onReview, onSave }) {
   const [name, setName] = useState(fields.name || '')
   const [description, setDescription] = useState(fields.description || '')
-  return <Modal open title={fields.id ? '修改小组资料' : '创建小组'} closable={!busy}
+  return <Modal open title="修改小组资料" closable={!busy}
     maskClosable={!busy} keyboard={!busy} onCancel={onClose} footer={[
       <Button key="cancel" disabled={busy} onClick={onClose}>取消</Button>,
       uncertain && <Button key="review" disabled={busy} onClick={onReview}>核对当前列表</Button>,
       <Button key="save" type="primary" loading={busy} disabled={uncertain || !name.trim()}
-        onClick={() => onSave({ name: name.trim(), description: description.trim() })}>{fields.id ? '保存资料' : '创建小组'}</Button>,
+        onClick={() => onSave({ name: name.trim(), description: description.trim() })}>保存资料</Button>,
     ]}>
     <Typography.Paragraph>小组负责组织成员与资料分类；文档仍需所有者逐篇授权。</Typography.Paragraph>
     {error && <Alert type="error" showIcon message={error} />}
@@ -61,6 +63,8 @@ export default function Groups() {
   const currentInboxKey = useRef(inboxKey)
   currentInboxKey.current = inboxKey
   const [fields, setFields] = useState(null)
+  const [creating, setCreating] = useState(false)
+  const [creationBusy, setCreationBusy] = useState(false)
   const [username, setUsername] = useState('')
   const [busy, setBusy] = useState(false)
   const [uncertain, setUncertain] = useState(false)
@@ -68,13 +72,21 @@ export default function Groups() {
   const mutationEpoch = useRef(0)
   const unconfirmed = useRef(null)
   useEffect(() => {
-    mutation.current?.abort(); mutation.current = null; setBusy(false); setFields(null)
+    mutation.current?.abort(); mutation.current = null; setBusy(false); setFields(null); setCreating(false); setCreationBusy(false)
     return () => mutation.current?.abort()
   }, [location.key])
   useEffect(() => setInput(keyword), [keyword])
   const choose = (id, nextPage = page, nextArchived = archived, nextKeyword = keyword) =>
     setParams({ ...(nextArchived ? { archived: 'true' } : {}), ...(nextKeyword ? { keyword: nextKeyword } : {}),
       page: String(nextPage), ...(id ? { group: String(id) } : {}) })
+  function created(data) {
+    setCreating(false); setError(''); setNoticeType('info')
+    setNotice(data.archived ? `已确认原小组 #${data.id}，目前已归档，可在下方按当前名称查看。`
+      : `已确认小组 #${data.id}，可在下方查看成员与资料。`)
+    setRefresh(value => value + 1)
+    choose(data.archived ? 0 : data.id, 1, data.archived,
+      data.archived && typeof data.name === 'string' ? data.name : '')
+  }
   function confirmRead(resource, epoch, target = 0) {
     const pending = unconfirmed.current
     if (!pending || pending.resource !== resource || pending.epoch !== epoch || epoch !== mutationEpoch.current ||
@@ -145,14 +157,14 @@ export default function Groups() {
     return () => controller.abort()
   }, [selected, archived, refresh, detailRefresh])
   const groupsAvailable = Boolean(groups && !loading)
-  const groupsReady = groupsAvailable && !busy && !uncertain
+  const groupsReady = groupsAvailable && !busy && !uncertain && !creationBusy
   const currentInbox = inboxFrom === inboxKey ? inbox : null
   const currentInboxError = inboxFrom === inboxKey ? inboxError : ''
   const inboxReading = inboxLoading || inboxFrom !== inboxKey
-  const inboxReady = Boolean(currentInbox && !inboxReading && !currentInboxError && !busy && !uncertain)
+  const inboxReady = Boolean(currentInbox && !inboxReading && !currentInboxError && !busy && !uncertain && !creationBusy)
   const compactInbox = Boolean(currentInbox && !inboxReading && !currentInboxError && currentInbox.total === 0 &&
     Array.isArray(currentInbox.list) && currentInbox.list.length === 0)
-  const detailReady = Boolean(detail?.id === selected && !detailLoading && !busy && !uncertain)
+  const detailReady = Boolean(detail?.id === selected && !detailLoading && !busy && !uncertain && !creationBusy)
   const manager = detail && detail.id === selected && ['owner', 'admin'].includes(detail.role)
   useEffect(() => { if (fields?.id && !manager) setFields(null) }, [manager, fields?.id])
 
@@ -182,7 +194,7 @@ export default function Groups() {
     <WorkspaceHeader title="我的小组" onGuide={() => setShowGuide(true)}>
       <Space wrap>
         <Button disabled={busy} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
-        <Button type="primary" disabled={!groupsReady} onClick={() => { setError(''); setFields({}) }}>创建小组</Button></Space>
+        <Button type="primary" disabled={!groupsReady} onClick={() => { setError(''); setCreating(true) }}>创建小组</Button></Space>
     </WorkspaceHeader>
     <main className="content-wrap group-page">
       <Typography.Title level={2}>和同伴组织工作</Typography.Title>
@@ -190,6 +202,8 @@ export default function Groups() {
       {error && <Alert type={uncertain ? 'warning' : 'error'} showIcon message={error}
         action={uncertain && <Button disabled={busy} onClick={reviewOperation}>核对操作结果</Button>} />}
       {notice && <Alert type={noticeType} showIcon message={notice} />}
+      <PendingGroupCreations onCreated={created} onBusyChange={setCreationBusy} contextKey={location.key}
+        disabled={busy || uncertain || creating || Boolean(fields)} />
       <Card role="region" aria-label="收到的邀请" className={'group-section group-inbox-card' + (compactInbox ? ' group-inbox-empty' : '')}
         title={<div className="group-inbox-heading"><span>收到的邀请</span>{compactInbox && <span className="group-inbox-status">暂无待处理邀请</span>}</div>}
         extra={<Button disabled={busy} loading={inboxReading} aria-disabled={inboxReading || busy}
@@ -234,7 +248,7 @@ export default function Groups() {
               disabled={!groupsReady} onConfirm={() => mutate(signal => request.post('/groups/' + group.id + '/restore', {}, { signal }), '小组已恢复', undefined, { resource: 'groups' })}>
               <Button disabled={!groupsReady}>恢复小组</Button></Popconfirm>,
           ] : [] : [<Button key="open" disabled={!groupsAvailable || busy} onClick={() => choose(group.id)}>查看成员</Button>]}>
-            <List.Item.Meta title={group.name} description={<Space wrap><Tag>{roles[group.role]}</Tag>
+            <List.Item.Meta title={group.name} description={<Space wrap><Tag>{roles[group.role]}</Tag><span>小组 #{group.id}</span>
               <span>{group.memberCount} 位成员</span><span>{group.description || '尚未填写简介'}</span></Space>} />
           </List.Item>} />
         {groups?.total > SIZE && <Pagination current={page} total={groups.total} pageSize={SIZE}
@@ -284,11 +298,11 @@ export default function Groups() {
         </>}
       </Card>}
     </main>
-    {fields && <GroupFields key={fields.id || 'create'} fields={fields} busy={busy} uncertain={uncertain} error={error}
+    {creating && <CreateGroupModal onClose={() => setCreating(false)} onCreated={created} onBusyChange={setCreationBusy} />}
+    {fields && <GroupFields key={fields.id} fields={fields} busy={busy} uncertain={uncertain} error={error}
       onClose={() => { if (!busy) setFields(null) }} onReview={reviewOperation}
-      onSave={values => mutate(signal => fields.id ? request.put('/groups/' + fields.id, values, { signal }) :
-        request.post('/groups', values, { signal }), fields.id ? '小组资料已保存' : '小组已创建',
-        data => { setFields(null); if (!fields.id) choose(data.id, 1, false, '') }, { resource: fields.id ? 'detail' : 'groups', keyword: fields.id ? undefined : values.name })} />}
+      onSave={values => mutate(signal => request.put('/groups/' + fields.id, values, { signal }),
+        '小组资料已保存', () => setFields(null))} />}
     {showGuide && <UserGuide initialSection="groups" onClose={() => setShowGuide(false)} />}
   </Layout>
 }
