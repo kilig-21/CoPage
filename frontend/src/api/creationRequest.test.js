@@ -2,6 +2,58 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { webcrypto } from 'node:crypto'
 import { createDocumentCreator } from './creationRequest.js'
+import { createDocumentImporter } from './documentImport.js'
+
+test('关闭导入窗口后重选原文件，拒绝不丢原UUID；原窗口重建后仍确认唯一文档', async () => {
+  const calls = []; let attempt = 0
+  const f = fixture(async (_, body, config) => {
+    calls.push({ id: config.headers['Idempotency-Key'], filename: body.get('file').name, text: await body.get('file').text(), title: body.get('title') })
+    if (++attempt === 1) throw { code: 503 }
+    if (attempt === 2) throw { code: 403 }
+    return { data: { id: 528 } }
+  })
+  const make = create => createDocumentImporter({ readIdentity: () => ({ account: 'owner', token: 'local-test-token', service: '/api' }),
+    create: (path, body, config) => create(path, body, { ...config, ...f.options }) })
+  const input = () => ({ file: new File(['原文件字节😀'], '原备份.txt'), title: ' 原导入标题 ' })
+  await assert.rejects(make(f.create).submit(input()))
+  const reopened = make(f.reload())
+  await assert.rejects(reopened.submit(input()))
+  assert.equal(reopened.getSnapshot().status, 'uncertain')
+  assert.equal(f.values.size, 2)
+  const result = await reopened.submit({ file: new File(['不该发送'], '其它.txt'), title: '其它标题' })
+  assert.equal(result.data.id, 528)
+  assert.equal(new Set(calls.map(call => call.id)).size, 1)
+  assert.ok(calls.every(call => call.filename === '原备份.txt' && call.text === '原文件字节😀' && call.title === '原导入标题'))
+  assert.deepEqual([...f.values], [['collab-draft:owner:26', '原草稿']])
+})
+
+test('导入首次明确拒绝且没有旧tracking时仍清理，修正后的独立尝试不受影响', async () => {
+  const f = fixture(async () => { throw { code: 400 } })
+  const body = new FormData(); body.append('file', new Blob(['原正文']), '导入.txt')
+  await assert.rejects(f.create('/doc/import', body, { ...f.options, preserveRejectedTracking: true }))
+  assert.deepEqual([...f.values], [['collab-draft:owner:26', '原草稿']])
+})
+
+test('导入已未知后核对遇到拒绝仍保留原UUID，不泄漏保留选项到HTTP层', async () => {
+  const calls = []; let attempt = 0
+  const f = fixture(async (path, body, config) => {
+    calls.push({ path, id: config.headers['Idempotency-Key'], preserveOptionSent: Object.hasOwn(config, 'preserveRejectedTracking') })
+    if (++attempt === 1) throw { code: 503 }
+    if (attempt === 2) throw { code: 403 }
+    return { data: { id: 527 } }
+  })
+  const form = () => {
+    const body = new FormData(); body.append('file', new Blob(['原文件正文']), '原文件.txt'); body.append('title', '原始标题'); return body
+  }
+  await assert.rejects(f.create('/doc/import', form(), f.options))
+  await assert.rejects(f.create('/doc/import', form(), { ...f.options, preserveRejectedTracking: true }))
+  assert.equal(f.values.size, 2)
+  const result = await f.reload()('/doc/import', form(), { ...f.options, preserveRejectedTracking: true })
+  assert.equal(result.data.id, 527)
+  assert.equal(new Set(calls.map(call => call.id)).size, 1)
+  assert.ok(calls.every(call => !call.preserveOptionSent))
+  assert.deepEqual([...f.values], [['collab-draft:owner:26', '原草稿']])
+})
 
 function fixture(post) {
   const values = new Map([['collab-draft:owner:26', '原草稿']])

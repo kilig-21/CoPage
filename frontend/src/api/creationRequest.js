@@ -34,7 +34,7 @@ export async function documentCreationTrackingKey(crypto, { service, account, pa
 /** 只保存UUID、请求指纹及私人模板的原版本，不存文件、正文、密码或令牌。 */
 export function createDocumentCreator({ getStorage, crypto, post }) {
   const acknowledged = new Set()
-  return async function create(path, body, { account, service, isCurrent = () => true, ...config }) {
+  return async function create(path, body, { account, service, isCurrent = () => true, preserveRejectedTracking = false, ...config }) {
     const current = () => { try { return isCurrent() } catch { return false } }
     if (!account) throw localFailure('请重新登录后创建文档；已有文档和草稿保留。')
     if (!crypto?.subtle || !crypto?.randomUUID) throw localFailure('浏览器暂不支持安全重试，请使用当前版本浏览器。')
@@ -46,13 +46,14 @@ export function createDocumentCreator({ getStorage, crypto, post }) {
     catch { throw localFailure('无法读取本次创建内容，请重新选择文件或重试；尚未发送创建请求。') }
     const key = 'copage-create:' + await digest(crypto, new TextEncoder().encode(JSON.stringify([service, account, path, fingerprint])))
     if (config.signal?.aborted || !current()) throw new DOMException('创建已取消', 'AbortError')
-    let storage, id, storedValue, requestBody = body
+    let storage, id, storedValue, hadTrackedRequest = false, requestBody = body
     try {
       storage = getStorage()
       storedValue = storage.getItem(key)
       if (acknowledged.has(key)) {
         storage.removeItem(key); acknowledged.delete(key); storedValue = null
       }
+      hadTrackedRequest = Boolean(storedValue)
       if (freezeTemplateVersion) {
         const record = storedValue ? JSON.parse(storedValue) : { requestId: crypto.randomUUID(), expectedVersion: body.expectedVersion }
         if (!record || Object.keys(record).length !== 2 || !UUID.test(record.requestId) || !Number.isSafeInteger(record.expectedVersion) || record.expectedVersion <= 0) throw new Error('invalid template creation record')
@@ -75,7 +76,10 @@ export function createDocumentCreator({ getStorage, crypto, post }) {
     } catch (failure) {
       // 401在认证层拒绝本次请求，无法证明此前丢回复的创建没有提交。
       // 保留原UUID（及私人模板版本），让重登原账号仍确认首次结果。
-      if ([400, 403, 404].includes(failure?.code)) { try { clear() } catch { /* 保留原记录，不清其他数据。 */ } }
+      const preserveOriginal = preserveRejectedTracking && hadTrackedRequest
+      if (!preserveOriginal && [400, 403, 404].includes(failure?.code)) { try { clear() } catch { /* 保留原记录，不清其他数据。 */ } }
+      // 原导入窗口已关闭时，由既有指纹槽识别此前未确认请求；拒绝当前重试不能否认先前提交。
+      if (preserveOriginal) throw Object.assign(new Error(failure?.message || '原创建结果仍未确认，请继续核对原请求。'), failure, { uncertain: true })
       throw failure
     }
     if (config.signal?.aborted || !current()) throw new DOMException('创建页面或账号已变更', 'AbortError')

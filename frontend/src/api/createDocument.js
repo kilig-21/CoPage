@@ -14,6 +14,8 @@ export default async function createDocument(path, body, config = {}) {
   catch { throw Object.assign(new Error('浏览器无法读取当前账号，请允许本站保存数据后重试。'), { code: 400 }) }
   const result = await create(path, body, { ...config, copageExpectedSessionToken: token, account, service: request.defaults.baseURL,
     isCurrent: () => localStorage.getItem('collab-user') === account && localStorage.getItem('collab-token') === token })
-  if (result.creationTrackingWarning) message.warning(result.creationTrackingWarning, 10)
+  if (result.creationTrackingWarning) {
+    try { message.warning(result.creationTrackingWarning, 10) } catch { /* 通知失败不能把已确认创建变成未知。 */ }
+  }
   return result
 }

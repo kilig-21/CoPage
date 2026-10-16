@@ -169,7 +169,8 @@ export default function DocList() {
       {copying && <CopyModal doc={copying} onClose={() => setCopying(null)}
         onCreated={data => { message.success('已创建服务端版本 ' + data.sourceRevision + ' 的副本'); navigate(documentHref(data.id, sourcePath)) }} />}
       {managing && <CollaboratorModal doc={managing} onClose={() => setManaging(null)} />}
-      {importing && <ImportModal onClose={() => setImporting(false)} onCreated={id => navigate(documentHref(id, sourcePath))} />}
+      {importing && <ImportModal scopeKey={location.key} onClose={() => setImporting(false)} onCreated={id => navigate(documentHref(id, sourcePath))}
+        onReview={title => { setImporting(false); setSearchParams({ scope: 'owned', ...(title ? { keyword: title } : {}) }); setRefresh(value => value + 1) }} />}
       {editing && <RenameModal doc={editing} onClose={() => setEditing(null)}
         onSaved={() => setRefresh(value => value + 1)} />}
     </Layout>
