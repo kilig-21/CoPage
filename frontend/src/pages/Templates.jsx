@@ -110,7 +110,7 @@ export default function Templates() {
       <Link to="/docs">也可以返回我的文档创建空白文档</Link>
     </main>
     {showGuide && <UserGuide onClose={() => setShowGuide(false)} />}
-    <Modal title={selected ? '使用' + selected.title : '使用模板'} open={Boolean(selected)} width={720}
+    <Modal className="builtin-template-modal" title={selected ? '使用' + selected.title : '使用模板'} open={Boolean(selected)} width={720}
       onCancel={() => { if (!creating) { setSelected(null); if (!uncertain) setCreateError('') } }}
       closable={!creating} maskClosable={!creating} keyboard={!creating} footer={[
         <Button key="close" disabled={creating} onClick={() => { setSelected(null); if (!uncertain) setCreateError('') }}>关闭</Button>,

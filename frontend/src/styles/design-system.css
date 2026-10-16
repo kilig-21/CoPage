@@ -131,6 +131,18 @@ body { background: var(--cp-paper); }
   .personal-template-modal .ant-modal-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
   .personal-template-modal .ant-modal-footer .ant-btn { margin-inline-start: 0; }
   .personal-template-modal { top: 24px; }
+  .builtin-template-modal { top: 24px; padding-bottom: 24px; }
+  .builtin-template-modal .ant-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); }
+  .builtin-template-modal .ant-modal-header, .builtin-template-modal .ant-modal-footer { flex-shrink: 0; }
+  .builtin-template-modal .ant-modal-header { padding-inline-end: 44px; max-height: 25dvh; overflow-y: auto; }
+  .builtin-template-modal .ant-modal-title, .builtin-template-modal .ant-typography,
+  .builtin-template-modal .ant-alert-message { overflow-wrap: anywhere; }
+  .builtin-template-modal .ant-modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .builtin-template-modal .ant-input, .builtin-template-modal .ant-modal-footer .ant-btn { min-height: 44px; }
+  .builtin-template-modal .ant-modal-close { width: 44px; height: 44px; }
+  .builtin-template-modal .ant-modal-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .builtin-template-modal .ant-modal-footer .ant-btn { height: auto; max-width: 100%; margin-inline-start: 0; white-space: normal; }
+  .builtin-template-modal .document-preview .ql-editor { height: auto; max-height: none; overflow-y: visible; }
   .personal-template-page .ant-list .ant-list-item .ant-list-item-meta { flex: 1 1 100%; min-width: 0; }
   .personal-template-page .ant-list .ant-list-item .ant-list-item-action { margin: 0; width: 100%; display: flex; flex-wrap: wrap; gap: 4px; }
   .trash-list-card .ant-card-body { padding: 16px; }
