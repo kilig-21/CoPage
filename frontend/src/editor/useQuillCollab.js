@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Quill from 'quill'
 import 'quill/dist/quill.snow.css'
 import CollabSocket from '../ws/CollabSocket'
@@ -40,6 +40,7 @@ export default function useQuillCollab(docId) {
   const historyReadyRef = useRef(null)
   const exportReadyRef = useRef(null)
   const documentFindRef = useRef(null)
+  const revealDocumentMatch = useCallback(() => documentFindRef.current?.refreshSelection(), [])
   const [documentFindState, setDocumentFindState] = useState(EMPTY_DOCUMENT_FIND)
   const [loadAttempt, setLoadAttempt] = useState(0)
 
@@ -708,6 +709,7 @@ export default function useQuillCollab(docId) {
     canRestoreHistory: () => Boolean(historyReadyRef.current?.()),
     canExportDocument: () => Boolean(exportReadyRef.current?.()),
     documentFindState,
+    revealDocumentMatch,
     startDocumentFind: () => { documentFindRef.current?.start() },
     closeDocumentFind: () => { documentFindRef.current?.pause() },
     queryDocument: (query, caseSensitive, selectMatches) => documentFindRef.current?.setQuery(query, caseSensitive, selectMatches),

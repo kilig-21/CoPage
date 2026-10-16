@@ -144,3 +144,28 @@ test('查找框输入期间更新匹配但不移动正文选区或提交替换�
   assert.deepEqual(quill.getSelection(), { index: 0, length: 2 })
   assert.equal(state().canReplace, true)
 })
+
+function positionedFind(rect) {
+  const fixture = findFixture(), scrolled = [], document = fixture.quill.root.ownerDocument
+  document.defaultView = { innerHeight: 480, scrollBy: (_, offset) => scrolled.push(offset) }
+  document.querySelector = () => ({ getBoundingClientRect: () => ({ bottom: 400 }) })
+  document.getSelection = () => ({ rangeCount: 1, getRangeAt: () => ({ getBoundingClientRect: () => rect }) })
+  fixture.finder.start(); fixture.finder.setQuery('目标')
+  return scrolled
+}
+
+test('低高度窗口的查找命中完整留在底边16px以内，不只避开面板', () => {
+  const offsets = positionedFind({ top: 440, bottom: 480 })
+  assert.deepEqual(offsets, [16])
+  assert.equal(480 - offsets[0], 464)
+  assert.ok(440 - offsets[0] >= 408)
+})
+
+test('查找命中已在面板与底边之间时不移动，遮在面板下时向下露出', () => {
+  assert.deepEqual(positionedFind({ top: 410, bottom: 438 }), [])
+  assert.deepEqual(positionedFind({ top: 380, bottom: 420 }), [-28])
+})
+
+test('多行命中高于可用空间时优先露出开头，不在上下边界间反复移动', () => {
+  assert.deepEqual(positionedFind({ top: 390, bottom: 510 }), [-18])
+})

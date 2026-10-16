@@ -19,14 +19,18 @@
 .editor-workspace .editor-topbar .ant-btn { min-height: 38px; }
 .editor-workspace .editor-actions { flex-shrink: 0; }
 .editor-workspace .editor-wrap { width: min(1000px, calc(100% - 48px)); padding: 20px 0 64px; }
-.editor-workspace .editor-status-row { min-height: 32px; gap: 8px; align-items: center; }
+.editor-workspace .editor-status-row { position: sticky; top: var(--editor-topbar-offset, var(--editor-bar-height)); z-index: 18;
+  min-height: 32px; gap: 8px; align-items: center; padding-block: 6px;
+  background: var(--cp-paper); border-bottom: 1px solid var(--cp-line); }
 .editor-save-state { flex: 1; min-width: 0; }
 .editor-save-state .ant-tag { margin-inline-end: 0; }
 .editor-save-status { font-size: 13px; overflow-wrap: anywhere; }
 .editor-presence { flex-shrink: 0; }
 .editor-presence .ant-avatar:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 2px; }
 .editor-workspace .editor-canvas { margin-top: 12px; padding: 48px 64px; background: var(--cp-surface); }
-.editor-workspace .document-find-panel { top: calc(var(--editor-bar-height) + 8px); }
+.editor-workspace .document-find-panel { top: calc(var(--editor-topbar-offset, var(--editor-bar-height)) + var(--editor-status-height, 32px) + 8px);
+  max-height: calc(100dvh - var(--editor-topbar-offset, var(--editor-bar-height)) - var(--editor-status-height, 32px) - 88px);
+  overflow-y: auto; overscroll-behavior: contain; }
 .editor-workspace .editor-alert { overflow-wrap: anywhere; }
 .editor-workspace .editor-topbar .ant-btn:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 2px; }
 @media (max-width: 640px) {
@@ -39,6 +43,8 @@
   .editor-workspace .editor-wrap { width: calc(100% - 24px); padding: 12px 0 36px; }
   .editor-workspace .editor-canvas { padding: 16px; }
   .editor-workspace .editor-host .ql-editor { padding-top: 20px; }
+  .editor-workspace .document-find-panel .ant-btn, .editor-workspace .document-find-panel .ant-input { min-height: 44px; }
+  .editor-workspace .document-find-panel .ant-checkbox-wrapper { min-height: 44px; align-items: center; }
   .editor-workspace .editor-canvas .ql-toolbar.ql-snow { display: grid; grid-template-columns: repeat(6, minmax(44px, 1fr)); gap: 2px; padding-bottom: 12px; }
   .editor-workspace .ql-toolbar.ql-snow .ql-formats { display: contents; margin: 0; }
   .editor-workspace .ql-toolbar.ql-snow::after,

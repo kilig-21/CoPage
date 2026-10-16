@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeftOutlined, CloudOutlined, MoreOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons'
 import { Alert, Avatar, Button, Dropdown, Layout, Modal, Popover, Space, Tag, Tooltip, Typography } from 'antd'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { documentHref, documentReturn } from '../navigation/documents'
 import useQuillCollab from '../editor/useQuillCollab'
+import useEditorStickyOffsets from '../editor/useEditorStickyOffsets'
 import CollaboratorModal from '../components/CollaboratorModal'
 import HistoryDrawer from '../components/HistoryDrawer'
 import ExportModal from '../components/ExportModal'
@@ -27,6 +28,9 @@ export default function Editor() {
   const location = useLocation()
   const returnTarget = documentReturn(location.search)
   const docId = Number(id)
+  const topbarRef = useRef(null)
+  const statusRef = useRef(null)
+  useEditorStickyOffsets(topbarRef, statusRef)
   const [renaming, setRenaming] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [managing, setManaging] = useState(null)
@@ -47,7 +51,10 @@ export default function Editor() {
   const [findFocusEpoch, setFindFocusEpoch] = useState(0)
   const [draftDownloadNotice, setDraftDownloadNotice] = useState('')
   const { editorHostRef, connection, users, error, title, permission, isOwner,
-    saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, unreadableDrafts, unavailableDrafts, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor } = useQuillCollab(docId)
+    saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, unreadableDrafts, unavailableDrafts, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor, revealDocumentMatch } = useQuillCollab(docId)
+  useLayoutEffect(() => {
+    if (showFind) revealDocumentMatch()
+  }, [showFind, findFocusEpoch, revealDocumentMatch])
   const isConnected = connection === '已连接'
   managementScope.current = { docId, isOwner, permission }
   templateScope.current = { docId, permission, routeKey: location.key }
@@ -178,7 +185,7 @@ export default function Editor() {
 
   return (
     <Layout className="app-shell editor-workspace">
-      <header className="topbar editor-topbar">
+      <header className="topbar editor-topbar" ref={topbarRef}>
         <div className="editor-title-row">
           <Tooltip title={returnTarget.label}><Button type="text" className="editor-return" aria-label={returnTarget.label}
             icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={() => navigate(returnTarget.path)}><span className="editor-action-label">{returnTarget.label}</span></Button></Tooltip>
@@ -206,7 +213,7 @@ export default function Editor() {
         <PendingCopyHint sourceId={docId} />
         {templateNotice && currentTemplateContext(templateNotice.context) && <Alert className="editor-alert" type={templateNotice.type} showIcon
           message={templateNotice.message} action={<Button onClick={() => { if (currentTemplateContext(templateNotice.context)) viewPersonalTemplates(templateNotice.name) }}>{templateNotice.type === 'warning' ? '核对我的模板' : '查看我的模板'}</Button>} />}
-        <div className="editor-status-row">
+        <div className="editor-status-row" ref={statusRef}>
           <Space wrap className="editor-save-state">
             <Tag color={isConnected ? 'green' : 'gold'} icon={<CloudOutlined />}>{connection}</Tag>
             <Typography.Text className="editor-save-status" role="status" aria-live="polite">{saveStatus}</Typography.Text>

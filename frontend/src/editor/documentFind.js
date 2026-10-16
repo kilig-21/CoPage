@@ -148,6 +148,9 @@ export function createDocumentFind(quill, { Delta, canReplace, onState }) {
     if (panel && range) {
       const rect = range.getBoundingClientRect(), panelRect = panel.getBoundingClientRect()
       if (rect.top < panelRect.bottom + 8) document.defaultView.scrollBy(0, rect.top - panelRect.bottom - 8)
+      else if (Number.isFinite(document.defaultView?.innerHeight) && rect.bottom > document.defaultView.innerHeight - 16) {
+        document.defaultView.scrollBy(0, rect.bottom - document.defaultView.innerHeight + 16)
+      }
     }
     if (focus && focus !== quill.root && focus !== document.body && focus.isConnected) focus.focus({ preventScroll: true })
   }
