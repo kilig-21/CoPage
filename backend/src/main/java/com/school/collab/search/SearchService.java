@@ -45,9 +45,25 @@ public class SearchService {
 
     private static HitView view(DocumentRow row, Pattern literal) {
         String body = SearchIndex.plainText(row.content());
-        String excerpt = literal.matcher(body).find() ? body : row.title();
-        return new HitView(row.id(), row.title(), highlight(excerpt, literal),
+        String snippet = literal.matcher(body).find() ? highlight(body, literal) : opening(body);
+        if (snippet == null) snippet = literal.matcher(row.title()).find()
+                ? "标题匹配，暂无文字摘要" : "暂无文字摘要";
+        return new HitView(row.id(), row.title(), snippet,
                 row.updateTime().format(TIME));
+    }
+
+    /** 无字面命中时只预览当前正文开头；忽略空行，不把图片地址当作文字。 */
+    private static String opening(String text) {
+        int start = 0, limit = text.length();
+        while (start < limit && previewSpace(text.codePointAt(start))) start += Character.charCount(text.codePointAt(start));
+        if (start == limit) return null;
+        while (limit > start && previewSpace(text.codePointBefore(limit))) limit -= Character.charCount(text.codePointBefore(limit));
+        int end = sliceEnd(text, start + Math.min(160, limit - start));
+        return escape(text.substring(start, end)) + (end < limit ? "…" : "");
+    }
+
+    private static boolean previewSpace(int codePoint) {
+        return Character.isWhitespace(codePoint) || Character.isSpaceChar(codePoint);
     }
 
     /** 只保留服务端生成的 strong 标记；原文中的 HTML 全部转义。 */
