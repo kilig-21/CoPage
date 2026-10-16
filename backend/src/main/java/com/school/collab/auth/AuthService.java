@@ -34,14 +34,15 @@ public class AuthService {
     public UserView register(String username, String password, String nickname) {
         String normalizedUsername = username.trim();
         if (normalizedUsername.length() < 3 || normalizedUsername.length() > 50
+                || normalizedUsername.chars().anyMatch(Character::isISOControl)
                 || password.length() < 6 || password.length() > 64
                 || password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72) {
-            throw new BizException(ErrorCode.PARAM_ERROR, "用户名需要 3～50 个字符；密码需要 6～64 个字符且 UTF-8 长度不超过 72 字节");
+            throw new BizException(ErrorCode.PARAM_ERROR, "用户名需要 3～50 个字符且不能包含控制字符；密码需要 6～64 个字符且 UTF-8 长度不超过 72 字节");
         }
         String normalizedNickname = nickname == null || nickname.isBlank()
                 ? normalizedUsername : nickname.trim();
-        if (normalizedNickname.length() > 50) {
-            throw new BizException(ErrorCode.PARAM_ERROR);
+        if (normalizedNickname.length() > 50 || normalizedNickname.chars().anyMatch(Character::isISOControl)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "昵称最多50个字符，不能包含控制字符");
         }
         if (findByUsername(normalizedUsername) != null) {
             throw new BizException(ErrorCode.PARAM_ERROR, "用户名已存在");
