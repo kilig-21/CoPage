@@ -15,6 +15,7 @@ import { createCompositionInbox } from './compositionInbox'
 import { createEditCapacityGuard } from './editCapacityGuard'
 import { createDraftBackup } from './draftBackup'
 import { readDraftRecords } from './draftRecords'
+import { createSkippedDraftNotice } from './skippedDraftNotice'
 import { createDocumentFind, EMPTY_DOCUMENT_FIND } from './documentFind'
 
 function createClientId() {
@@ -36,6 +37,8 @@ export default function useQuillCollab(docId) {
   const [recoveryDraft, setRecoveryDraft] = useState(null)
   const [unreadableDrafts, setUnreadableDrafts] = useState([])
   const [unavailableDrafts, setUnavailableDrafts] = useState([])
+  const [skippedDraftNotice, setSkippedDraftNotice] = useState(false)
+  const skippedDraftNoticeRef = useRef(null)
   const recoveryActionsRef = useRef(null)
   const historyReadyRef = useRef(null)
   const exportReadyRef = useRef(null)
@@ -58,6 +61,7 @@ export default function useQuillCollab(docId) {
     setRecoveryDraft(null)
     setUnreadableDrafts([])
     setUnavailableDrafts([])
+    setSkippedDraftNotice(false)
     setUsers([])
     setError('')
     setPermission(0)
@@ -131,6 +135,9 @@ export default function useQuillCollab(docId) {
     const tabKey = `copage-tab-client:${docId}`
     const clientId = sessionStorage.getItem(tabKey) || createClientId()
     sessionStorage.setItem(tabKey, clientId)
+    const skippedDrafts = createSkippedDraftNotice({ storage: localStorage, eventTarget: window,
+      onChange: visible => { if (active) setSkippedDraftNotice(visible) } })
+    skippedDraftNoticeRef.current = skippedDrafts
     let composing = false
     let compositionDirty = false
     let lastKnownContents = quill.getContents()
@@ -545,6 +552,9 @@ export default function useQuillCollab(docId) {
       updateEditable()
       titleController?.abort()
       sessionCheckController.abort()
+      skippedDrafts.dispose()
+      skippedDraftNoticeRef.current = null
+      setSkippedDraftNotice(false)
       active = false
     }
     const onBeforeUnload = (event) => {
@@ -588,12 +598,11 @@ export default function useQuillCollab(docId) {
         lastKnownContents = quill.getContents()
         updateEditable()
         let stored = null
-        let activeDraftFound = false
         for (const candidate of findDrafts()) {
           const ownerActive = await isDraftOwnerActive(candidate.draft.clientId)
           if (!active) return
           if (ownerActive) {
-            activeDraftFound = true
+            skippedDrafts.track(candidate.key)
             if (candidate.draft.clientId === client.clientId) {
               client.clientId = createClientId()
               sessionStorage.setItem(tabKey, client.clientId)
@@ -639,7 +648,6 @@ export default function useQuillCollab(docId) {
           }
         } else {
           draftReady = true
-          if (activeDraftFound) setError('另一标签页正在编辑，未接管它的本地草稿')
           startSocket()
         }
       })
@@ -662,6 +670,8 @@ export default function useQuillCollab(docId) {
       })
 
     return () => {
+      skippedDrafts.dispose()
+      skippedDraftNoticeRef.current = null
       onSessionChanged()
       hideCursor()
       flushComposition()
@@ -701,7 +711,8 @@ export default function useQuillCollab(docId) {
   }, [docId, loadAttempt])
 
   return {
-    editorHostRef, connection, users, error, title, permission, isOwner, recoveryDraft, unreadableDrafts, unavailableDrafts, saveStatus, titleError,
+    editorHostRef, connection, users, error, title, permission, isOwner, recoveryDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, saveStatus, titleError,
+    dismissSkippedDraftNotice: () => skippedDraftNoticeRef.current?.dismiss(),
     refreshTitle: () => refreshTitleRef.current?.(),
     retryLoad: () => { if (connection === '加载失败') setLoadAttempt(value => value + 1) },
     recoverDraft: () => recoveryActionsRef.current?.recover(),

@@ -51,7 +51,7 @@ export default function Editor() {
   const [findFocusEpoch, setFindFocusEpoch] = useState(0)
   const [draftDownloadNotice, setDraftDownloadNotice] = useState('')
   const { editorHostRef, connection, users, error, title, permission, isOwner,
-    saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, unreadableDrafts, unavailableDrafts, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor, revealDocumentMatch } = useQuillCollab(docId)
+    saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, dismissSkippedDraftNotice, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor, revealDocumentMatch } = useQuillCollab(docId)
   useLayoutEffect(() => {
     if (showFind) revealDocumentMatch()
   }, [showFind, findFocusEpoch, revealDocumentMatch])
@@ -227,6 +227,10 @@ export default function Editor() {
         {titleError && <Alert className="editor-alert" type="warning" message={titleError}
           action={<Button onClick={refreshTitle}>重试标题</Button>} />}
         {permission === 1 && <Alert className="editor-alert" type="info" showIcon message="你拥有只读权限，不能修改此文档" />}
+        {skippedDraftNotice && <Alert className="editor-alert editor-draft-notice" type="info" showIcon
+          message="打开文档时发现其他标签的本地草稿，本页未接管"
+          description="请回原标签或工作台的本地草稿核对。本页显示的保存状态仅针对本页编辑；关闭此提示不会删除草稿。"
+          action={<Button onClick={dismissSkippedDraftNotice}>关闭提示</Button>} />}
         {unreadableDrafts.length > 0 && <Alert className="editor-alert" type="warning" showIcon
           message={`有 ${unreadableDrafts.length} 份旧草稿无法自动恢复，原始记录已保留`}
           description={<><p>{connection === '加载失败' ? '服务器正文未能加载。' : '当前正文来自服务器已保存版本。'}请保存原始草稿副本留存；它不能直接作为文档导入。</p>

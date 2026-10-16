@@ -58,6 +58,7 @@
   .editor-workspace .ql-toolbar.ql-snow .ql-picker-item { min-height: 44px; display: flex; align-items: center; }
   .editor-workspace .editor-alert { flex-wrap: wrap; }
   .editor-workspace .editor-alert .ant-alert-content { min-width: 0; }
+  .editor-workspace .editor-draft-notice .ant-btn { min-height: 44px; }
   .editor-workspace .editor-alert .ant-alert-action { flex-basis: 100%; margin: 8px 0 0; padding-left: 22px; }
 }
 @media (max-width: 360px) {
