@@ -53,7 +53,7 @@ export default function DocList() {
     onConfirmed: () => setRefresh(value => value + 1) })
 
   useEffect(() => {
-    setCopying(null); setImporting(false)
+    setCopying(null); setImporting(false); setSavingTemplate(null)
     createController.current?.abort(); createController.current = null; setCreating(false)
     return () => createController.current?.abort()
   }, [location.key])

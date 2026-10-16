@@ -143,6 +143,13 @@ body { background: var(--cp-paper); }
 .personal-template-modal .ant-modal-title { padding-inline-end: 40px; }
 .personal-template-modal .template-detail-notice { margin-block: 12px; }
 .personal-template-modal .ant-input-textarea-show-count { margin-bottom: 20px; }
+.personal-template-save-modal { top: 32px; padding-bottom: 24px; }
+.personal-template-save-modal .ant-modal-body { max-height: calc(100dvh - 220px); overflow-y: auto; overscroll-behavior: contain; }
+.personal-template-save-modal .ant-typography, .personal-template-save-modal .ant-alert-message { overflow-wrap: anywhere; }
+.personal-template-save-modal .ant-alert { margin-bottom: 16px; }
+@media (max-width: 360px) {
+  .personal-template-save-modal .ant-modal-body { max-height: calc(100dvh - 260px); }
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important;
     animation-iteration-count: 1 !important; transition-duration: .01ms !important; }

@@ -9,6 +9,7 @@ import HistoryDrawer from '../components/HistoryDrawer'
 import ExportModal from '../components/ExportModal'
 import PrintModal from '../components/PrintModal'
 import CopyModal from '../components/CopyModal'
+import SavePersonalTemplateModal from '../components/SavePersonalTemplateModal'
 import RenameModal from '../components/RenameModal'
 import ShareModal from '../components/ShareModal'
 import { draftRecordsJson } from '../editor/draftRecords'
@@ -36,6 +37,9 @@ export default function Editor() {
   const [showExport, setShowExport] = useState(false)
   const [showPrint, setShowPrint] = useState(false)
   const [showCopy, setShowCopy] = useState(false)
+  const [savingTemplate, setSavingTemplate] = useState(null)
+  const [templateNotice, setTemplateNotice] = useState(null)
+  const templateScope = useRef(null)
   const [showFind, setShowFind] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(false)
@@ -46,10 +50,12 @@ export default function Editor() {
     saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, unreadableDrafts, unavailableDrafts, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor } = useQuillCollab(docId)
   const isConnected = connection === '已连接'
   managementScope.current = { docId, isOwner, permission }
+  templateScope.current = { docId, permission, routeKey: location.key }
   const displayTitle = title || '协同文档 #' + id
   const documentTools = [
     ...(permission === 2 ? [{ key: 'rename', label: '重命名' }] : []),
     { key: 'history', label: '历史版本' }, { key: 'copy', label: '创建副本' },
+    { key: 'template', label: '保存为个人模板', disabled: Boolean(templateNotice?.type === 'warning' && currentTemplateContext(templateNotice.context)) },
     { key: 'export', label: '导出文档' }, { key: 'print', label: '打印 / PDF' },
   ]
   const tools = [
@@ -61,6 +67,7 @@ export default function Editor() {
   function selectTool({ key }) {
     setToolsOpen(false)
     if (key === 'manage') { openManagement(false); return }
+    if (key === 'template') { setSavingTemplate(templateContext()); return }
     const actions = { rename: setRenaming, history: setShowHistory, copy: setShowCopy,
       export: setShowExport, print: setShowPrint, guide: setShowGuide }
     actions[key]?.(true)
@@ -72,6 +79,22 @@ export default function Editor() {
       const account = localStorage.getItem('collab-user'), token = localStorage.getItem('collab-token')
       return account && token ? { docId: scope.docId, account, token, service: request.defaults.baseURL, fromShare } : null
     } catch { return null }
+  }
+  function templateContext() {
+    const scope = templateScope.current
+    if (!scope || scope.permission <= 0) return null
+    try {
+      const account = localStorage.getItem('collab-user'), token = localStorage.getItem('collab-token')
+      return account && token ? { id: scope.docId, title, routeKey: scope.routeKey, account, token, service: request.defaults.baseURL } : null
+    } catch { return null }
+  }
+  function currentTemplateContext(context) {
+    const current = templateContext()
+    return Boolean(context && current && context.id === current.id && context.routeKey === current.routeKey &&
+      context.account === current.account && context.token === current.token && context.service === current.service)
+  }
+  function viewPersonalTemplates(name) {
+    navigate('/templates?' + new URLSearchParams({ source: 'personal', keyword: name }).toString())
   }
   function currentManagement(context) {
     const current = managementContext(false)
@@ -100,10 +123,12 @@ export default function Editor() {
   }
   useEffect(() => { setToolsOpen(false); setTitleOpen(false) }, [docId, permission])
   useEffect(() => { changeManagement(null); setSharing(false); setShareError('') }, [docId])
+  useEffect(() => { setSavingTemplate(null); setTemplateNotice(null) }, [docId, location.key])
   useEffect(() => {
     const close = event => {
       if (event.type === 'storage' && event.key !== null && !['collab-user', 'collab-token'].includes(event.key)) return
       changeManagement(null); setSharing(false); setShareError('')
+      setSavingTemplate(null); setTemplateNotice(null)
     }
     window.addEventListener('storage', close)
     window.addEventListener('copage-auth-changed', close)
@@ -113,7 +138,7 @@ export default function Editor() {
     if (!isOwner || permission !== 2) changeManagement(null)
   }, [isOwner, permission])
   useEffect(() => {
-    if (permission <= 0) { setShowHistory(false); setShowCopy(false); setSharing(false) }
+    if (permission <= 0) { setShowHistory(false); setShowCopy(false); setSharing(false); setSavingTemplate(null); setTemplateNotice(null) }
     if (permission !== 2) setRenaming(false)
   }, [permission])
   useEffect(() => {
@@ -133,7 +158,7 @@ export default function Editor() {
   }
   useEffect(() => {
     const shortcut = event => {
-      if (permission <= 0 || recoveryDraft || renaming || sharing || managing || showHistory || showExport || showPrint || showCopy || showGuide ||
+      if (permission <= 0 || recoveryDraft || renaming || sharing || managing || savingTemplate || showHistory || showExport || showPrint || showCopy || showGuide ||
           event.isComposing || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || !['f', 'p'].includes(event.key.toLowerCase())) return
       event.preventDefault()
       if (event.key.toLowerCase() === 'p') { setToolsOpen(false); setShowPrint(true) }
@@ -141,7 +166,7 @@ export default function Editor() {
     }
     window.addEventListener('keydown', shortcut)
     return () => window.removeEventListener('keydown', shortcut)
-  }, [permission, recoveryDraft, renaming, sharing, managing, showHistory, showExport, showPrint, showCopy, showGuide, startDocumentFind])
+  }, [permission, recoveryDraft, renaming, sharing, managing, savingTemplate, showHistory, showExport, showPrint, showCopy, showGuide, startDocumentFind])
   function saveRawDrafts() {
     try {
       downloadTextFile(draftRecordsJson(docId, unreadableDrafts), `原始草稿-${docId}.json`, 'application/json;charset=utf-8')
@@ -179,6 +204,8 @@ export default function Editor() {
       </header>
       <main className="editor-wrap">
         <PendingCopyHint sourceId={docId} />
+        {templateNotice && currentTemplateContext(templateNotice.context) && <Alert className="editor-alert" type={templateNotice.type} showIcon
+          message={templateNotice.message} action={<Button onClick={() => { if (currentTemplateContext(templateNotice.context)) viewPersonalTemplates(templateNotice.name) }}>{templateNotice.type === 'warning' ? '核对我的模板' : '查看我的模板'}</Button>} />}
         <div className="editor-status-row">
           <Space wrap className="editor-save-state">
             <Tag color={isConnected ? 'green' : 'gold'} icon={<CloudOutlined />}>{connection}</Tag>
@@ -227,6 +254,17 @@ export default function Editor() {
       {showCopy && permission > 0 && <CopyModal doc={{ id: docId, title }}
         canCopy={() => permission > 0 && !recoveryDraft && canExportDocument()}
         onClose={() => setShowCopy(false)} onCreated={data => { setShowCopy(false); navigate(documentHref(data.id, returnTarget.path)) }} />}
+      {savingTemplate && currentTemplateContext(savingTemplate) && <SavePersonalTemplateModal key={savingTemplate.id + ':' + savingTemplate.routeKey}
+        doc={savingTemplate} canSave={() => currentTemplateContext(savingTemplate) && !recoveryDraft && canExportDocument()}
+        onClose={() => setSavingTemplate(null)} onReview={name => { if (currentTemplateContext(savingTemplate)) viewPersonalTemplates(name) }}
+        onUncertain={name => { if (currentTemplateContext(savingTemplate)) setTemplateNotice({ context: savingTemplate, name, type: 'warning',
+          message: '模板保存结果未确认。请先核对我的模板，再决定是否重新保存；原文档与本地草稿保留。' }) }}
+        onSaved={data => {
+          if (!currentTemplateContext(savingTemplate)) return
+          setTemplateNotice({ context: savingTemplate, name: data.name, type: 'success',
+            message: '已将服务端版本 ' + data.sourceRevision + ' 保存为个人模板，可以继续编辑。' })
+          setSavingTemplate(null)
+        }} />}
       {showPrint && permission > 0 && <PrintModal docId={docId}
         canPrint={() => permission > 0 && !recoveryDraft && canExportDocument()}
         onClose={() => setShowPrint(false)} />}

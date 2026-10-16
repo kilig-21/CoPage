@@ -151,7 +151,7 @@ export default function PersonalTemplates() {
     </Space></WorkspaceHeader>
     <main className="content-wrap template-center personal-template-page">
       <Typography.Title level={2}>复用自己的工作框架</Typography.Title>
-      <Typography.Paragraph>在“我的文档”里选择“保存为模板”，保留已保存的内容。模板只供本人使用，使用时新建独立文档；修改资料不替换模板正文。</Typography.Paragraph>
+      <Typography.Paragraph>在编辑器“更多”选择“保存为个人模板”，也可从“我的文档”保存。模板只供本人使用，使用时新建独立文档；修改资料不替换模板正文。</Typography.Paragraph>
       {loadError && <Alert type="error" showIcon message={loadError} action={<Button disabled={busy || loading} onClick={() => setRefresh(n => n + 1)}>重试读取</Button>} />}
       {error && <Alert className="creation-review-alert" type={uncertain ? 'warning' : 'error'} showIcon message={error}
         description={uncertain?.kind === 'instance' ? '待确认文档：' + uncertain.title : undefined}
