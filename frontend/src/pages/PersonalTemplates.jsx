@@ -149,7 +149,7 @@ export default function PersonalTemplates() {
       <Button onClick={() => navigate('/templates')}>内置模板</Button>
       <Button disabled={busy || loading} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
     </Space></WorkspaceHeader>
-    <main className="content-wrap template-center personal-template-page">
+    <main id="workspace-main" tabIndex={-1} className="content-wrap template-center personal-template-page">
       <Typography.Title level={2}>复用自己的工作框架</Typography.Title>
       <Typography.Paragraph>在编辑器“更多”选择“保存为个人模板”，也可从“我的文档”保存。模板只供本人使用，使用时新建独立文档；修改资料不替换模板正文。</Typography.Paragraph>
       {loadError && <Alert type="error" showIcon message={loadError} action={<Button disabled={busy || loading} onClick={() => setRefresh(n => n + 1)}>重试读取</Button>} />}

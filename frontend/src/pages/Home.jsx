@@ -54,7 +54,7 @@ export default function Home() {
   }, [profileRefresh])
   return <Layout className="app-shell">
     <WorkspaceHeader title="工作台" onGuide={() => setShowGuide(true)} />
-    <main className="content-wrap workbench">
+    <main id="workspace-main" tabIndex={-1} className="content-wrap workbench">
       <div className="page-heading cp-workbench-heading"><div>
         <Typography.Text className="cp-workbench-kicker">你的资料与协作</Typography.Text>
         <Typography.Title level={1}>{profile ? profile.nickname + '，欢迎回来' : '你的协作工作台'}</Typography.Title>

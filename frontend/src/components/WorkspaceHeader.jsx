@@ -12,8 +12,18 @@ const destinations = [
 
 export default function WorkspaceHeader({ title, onGuide, children }) {
   const location = useLocation()
+  const header = useRef(null)
   const navigation = useRef(null)
   const [showGuide, setShowGuide] = useState(false)
+  function skipNavigation(event) {
+    const main = document.getElementById('workspace-main')
+    if (!main) return
+    event.preventDefault()
+    const top = Math.max(0, window.scrollY + main.getBoundingClientRect().top
+      - (header.current?.getBoundingClientRect().height || 0) - 16)
+    main.focus({ preventScroll: true })
+    window.scrollTo({ top, behavior: 'instant' })
+  }
   useEffect(() => {
     const nav = navigation.current
     if (!nav) return
@@ -55,7 +65,8 @@ export default function WorkspaceHeader({ title, onGuide, children }) {
     }
   }, [location.pathname])
   return <>
-    <header className="topbar workspace-header">
+    <a className="workspace-skip-link" href="#workspace-main" onClick={skipNavigation}>跳到主要内容</a>
+    <header className="topbar workspace-header" ref={header}>
       <div className="workspace-identity">
         <Link className="workspace-brand" to="/home" aria-label="CoPage 工作台">
           <img src="/favicon.svg" alt="" width="30" height="30" /><span>CoPage</span>

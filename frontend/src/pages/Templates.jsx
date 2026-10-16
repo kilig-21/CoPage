@@ -83,7 +83,7 @@ export default function Templates() {
     <WorkspaceHeader title="模板中心" onGuide={() => setShowGuide(true)}>
       <Button onClick={() => navigate('/templates?source=personal')}>我的模板</Button>
     </WorkspaceHeader>
-    <main className="content-wrap template-center">
+    <main id="workspace-main" tabIndex={-1} className="content-wrap template-center">
       <Typography.Title level={2}>选一个适合这次工作的框架</Typography.Title>
       <Typography.Paragraph type="secondary">先预览内容，再创建独立文档。内置模板只提供通用框架，不读取其他用户的资料。</Typography.Paragraph>
       {loadError && <Alert type="error" showIcon message={loadError} action={<Button disabled={loading} onClick={() => setRefresh(n => n + 1)}>重试读取</Button>} />}

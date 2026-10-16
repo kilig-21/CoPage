@@ -217,7 +217,7 @@ export default function Projects() {
         : <Button type="primary" disabled={!createReady} onClick={() => setFields({ groupId: canCreateGroup ? context.id : 0 })}>
           {groupId && !hasGroupContext ? '创建项目' : canCreateGroup ? '创建小组项目' : '创建个人项目'}</Button>}
     </Space></WorkspaceHeader>
-    <main className="content-wrap project-page">
+    <main id="workspace-main" tabIndex={-1} className="content-wrap project-page">
       <Typography.Title level={2}>{context ? context.name + '的项目' : '把资料整理成项目'}</Typography.Title>
       <Typography.Paragraph type="secondary">整理个人或小组工作，关联保留同一份原文档。项目内只显示你有权限访问的资料。</Typography.Paragraph>
       <PendingProjectDocuments contextKey={location.key} onBusyChange={setDocumentBusy} onCreated={openProjectDocument}

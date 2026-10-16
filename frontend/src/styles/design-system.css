@@ -11,6 +11,12 @@
   background: var(--cp-paper);
 }
 body { background: var(--cp-paper); }
+.workspace-skip-link { position: fixed; top: 12px; left: 16px; z-index: 1100;
+  display: inline-flex; align-items: center; min-height: 44px; max-width: calc(100% - 32px);
+  padding: 8px 16px; border-radius: 8px; color: #fff; background: var(--cp-ink);
+  transform: translateY(calc(-100% - 16px)); }
+.workspace-skip-link:focus { transform: translateY(0); color: #fff; outline: 3px solid var(--cp-accent); outline-offset: 3px; }
+#workspace-main:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 4px; }
 .app-shell { background: var(--cp-paper); }
 .content-wrap { width: min(1120px, calc(100% - 64px)); padding: 44px 0 64px; }
 .content-wrap > h2.ant-typography, .page-heading h2.ant-typography {

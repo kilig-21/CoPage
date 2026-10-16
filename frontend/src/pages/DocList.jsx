@@ -101,7 +101,7 @@ export default function DocList() {
   return (
     <Layout className="app-shell">
       <WorkspaceHeader title="我的文档" onGuide={() => setShowGuide(true)} />
-      <main className="content-wrap">
+      <main id="workspace-main" tabIndex={-1} className="content-wrap">
         <div className="page-heading">
           <div><Typography.Title level={2}>我的文档</Typography.Title><Typography.Text type="secondary">编辑时可查看连接与保存状态，删除的文档可从回收站找回</Typography.Text></div>
           <Space wrap>

@@ -77,7 +77,7 @@ export default function Account() {
   }
   return <Layout className="app-shell">
     <WorkspaceHeader title="账号设置" />
-    <main className="content-wrap">
+    <main id="workspace-main" tabIndex={-1} className="content-wrap">
       <Typography.Title level={2}>我的账号</Typography.Title>
       {loadError && <Alert type="error" showIcon message={loadError} action={<Button onClick={() => setRefresh(value => value + 1)}>重试</Button>} />}
       {error && <Alert type="error" showIcon message={error} />}

@@ -59,7 +59,7 @@ export default function Trash() {
     <WorkspaceHeader title="回收站">
       <Button disabled={loading||restoration.busy} onClick={()=>setRefresh(n=>n+1)}>刷新回收站</Button>
     </WorkspaceHeader>
-    <main className="content-wrap">
+    <main id="workspace-main" tabIndex={-1} className="content-wrap">
       <Typography.Title level={2}>找回删除的文档</Typography.Title>
       <Typography.Paragraph type="secondary">这里只显示你拥有的已删除文档。恢复保留正文、版本与原协作者权限；已清理的普通历史不会重建。</Typography.Paragraph>
       <Input.Search aria-label="按标题查找已删除文档" placeholder="按文档标题查找" maxLength={200} value={input}

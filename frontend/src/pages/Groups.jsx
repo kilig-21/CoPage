@@ -196,7 +196,7 @@ export default function Groups() {
         <Button disabled={busy} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
         <Button type="primary" disabled={!groupsReady} onClick={() => { setError(''); setCreating(true) }}>创建小组</Button></Space>
     </WorkspaceHeader>
-    <main className="content-wrap group-page">
+    <main id="workspace-main" tabIndex={-1} className="content-wrap group-page">
       <Typography.Title level={2}>和同伴组织工作</Typography.Title>
       <Typography.Paragraph type="secondary">在小组管理成员与角色。加入小组不会自动获得文档权限，资料仍逐篇共享。</Typography.Paragraph>
       {error && <Alert type={uncertain ? 'warning' : 'error'} showIcon message={error}
