@@ -132,11 +132,11 @@ body { background: var(--cp-paper); }
   .document-transfer-modal .ant-modal-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
   .document-transfer-modal .ant-modal-footer .ant-btn { margin-inline-start: 0; max-width: 100%; height: auto; white-space: normal; }
   .document-transfer-modal .ant-alert { overflow-wrap: anywhere; }
-  .document-import-modal { top: 24px; padding-bottom: 24px; }
-  .document-import-modal .ant-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); }
-  .document-import-modal .ant-modal-header, .document-import-modal .ant-modal-footer { flex-shrink: 0; }
-  .document-import-modal .ant-modal-header { padding-inline-end: 44px; }
-  .document-import-modal .ant-modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .document-transfer-modal { top: 24px; padding-bottom: 24px; }
+  .document-transfer-modal .ant-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); }
+  .document-transfer-modal .ant-modal-header, .document-transfer-modal .ant-modal-footer { flex-shrink: 0; }
+  .document-transfer-modal .ant-modal-header { padding-inline-end: 44px; }
+  .document-transfer-modal .ant-modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .document-transfer-modal .ant-radio-wrapper { min-height: 44px; align-items: center; }
   .document-transfer-modal input[type='file'] { max-width: 100%; }
   .personal-template-modal .ant-btn, .personal-template-modal .ant-input { min-height: 44px; }
