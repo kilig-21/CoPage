@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import request from '../api/request'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import { expireSession } from '../auth/session'
+import { parseAccountProfile } from '../auth/accountProfile'
 
 export default function Account() {
   const navigate = useNavigate()
@@ -26,11 +27,15 @@ export default function Account() {
     const controller = new AbortController()
     setLoading(true); setLoadError('')
     request.get('/account/me', { signal: controller.signal })
-      .then(({ data }) => {
+      .then(response => {
         if (controller.signal.aborted) return
-        setProfile(data); nicknameForm.setFieldsValue({ nickname: data.nickname || data.username })
+        const verified = parseAccountProfile(response?.data)
+        setProfile(verified); nicknameForm.setFieldsValue({ nickname: verified.nickname || verified.username })
       })
-      .catch(failure => { if (!controller.signal.aborted) setLoadError(failure.message || '账号信息加载失败') })
+      .catch(failure => {
+        if (!controller.signal.aborted) setLoadError(failure?.reason === 'ACCOUNT_PROFILE_RESPONSE'
+          ? failure.message : '账号信息暂时无法读取，请检查连接后重试。')
+      })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [refresh, nicknameForm])
@@ -39,11 +44,17 @@ export default function Account() {
     const controller = new AbortController(); mutation.current = controller
     setBusy(true); setError(''); setNotice('')
     try {
-      const { data } = await request.put('/account/me', { nickname: values.nickname.trim() }, { signal: controller.signal })
+      const submittedNickname = values.nickname.trim()
+      const response = await request.put('/account/me', { nickname: submittedNickname }, { signal: controller.signal })
       if (alive.current && !controller.signal.aborted) {
-        setProfile(data); nicknameForm.setFieldsValue({ nickname: data.nickname }); setNotice('昵称已保存。重新打开文档后将使用新昵称。')
+        const verified = parseAccountProfile(response?.data, { expectedProfile: profile, expectedNickname: submittedNickname })
+        setProfile(verified); nicknameForm.setFieldsValue({ nickname: verified.nickname }); setNotice('昵称已保存。重新打开文档后将使用新昵称。')
       }
-    } catch (failure) { if (alive.current && !controller.signal.aborted) setError(failure.message || '昵称保存失败，请重试') }
+    } catch (failure) {
+      if (alive.current && !controller.signal.aborted) setError(failure?.code === 400 && failure?.reason !== 'ACCOUNT_PROFILE_RESPONSE'
+        ? failure.message || '昵称不符合要求，请修改后重试。'
+        : '昵称保存结果未确认，当前输入已保留。可以重新保存相同昵称，或重新打开账号页核对当前资料。')
+    }
     finally {
       if (mutation.current === controller) mutation.current = null
       if (alive.current && !controller.signal.aborted) setBusy(false)
