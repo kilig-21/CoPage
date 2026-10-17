@@ -28,6 +28,8 @@ body { background: var(--cp-paper); }
 .content-wrap .ant-alert { margin-bottom: 16px; }
 .content-wrap .ant-card { border-color: var(--cp-line); box-shadow: none; background: var(--cp-surface); }
 .content-wrap .ant-card-head { border-bottom-color: var(--cp-line); }
+.workspace-detail-title { margin: 0; font: inherit; white-space: normal; overflow-wrap: anywhere; }
+.workspace-detail-title:focus { outline: 2px solid var(--cp-accent); outline-offset: 4px; border-radius: 2px; }
 .content-wrap .ant-list-item-meta-title { font-size: 16px; }
 .content-wrap .ant-list-item-meta-description { line-height: 1.7; }
 .doc-icon { color: var(--cp-accent); }

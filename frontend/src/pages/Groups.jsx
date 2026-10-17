@@ -6,6 +6,7 @@ import WorkspaceHeader from '../components/WorkspaceHeader'
 import UserGuide from '../components/UserGuide'
 import CreateGroupModal from '../components/CreateGroupModal'
 import PendingGroupCreations from '../components/PendingGroupCreations'
+import WorkspaceDetailCard from '../components/WorkspaceDetailCard'
 
 const roles = { owner: '创建者', admin: '管理员', member: '成员' }
 const options = [{ value: 'member', label: '成员' }, { value: 'admin', label: '管理员' }]
@@ -41,6 +42,7 @@ export default function Groups() {
   const archived = params.get('archived') === 'true'
   const page = Math.min(validId(params.get('page')) || 1, 1000000)
   const selected = validId(params.get('group'))
+  const [detailArrival, setDetailArrival] = useState(0)
   const [inboxPage, setInboxPage] = useState(1)
   const [groups, setGroups] = useState(null)
   const [inbox, setInbox] = useState(null)
@@ -49,6 +51,7 @@ export default function Groups() {
   const [loading, setLoading] = useState(true)
   const [inboxLoading, setInboxLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [detailTarget, setDetailTarget] = useState(0)
   const [error, setError] = useState('')
   const [groupError, setGroupError] = useState('')
   const [inboxError, setInboxError] = useState('')
@@ -80,6 +83,7 @@ export default function Groups() {
     setParams({ ...(nextArchived ? { archived: 'true' } : {}), ...(nextKeyword ? { keyword: nextKeyword } : {}),
       page: String(nextPage), ...(id ? { group: String(id) } : {}) })
   function created(data) {
+    setDetailArrival(n => n + 1)
     setCreating(false); setError(''); setNoticeType('info')
     setNotice(data.archived ? `已确认原小组 #${data.id}，目前已归档，可在下方按当前名称查看。`
       : `已确认小组 #${data.id}，可在下方查看成员与资料。`)
@@ -147,13 +151,13 @@ export default function Groups() {
   useEffect(() => {
     const controller = new AbortController()
     const epoch = mutationEpoch.current
-    setDetail(null); setDetailError(''); setUsername('')
+    setDetail(null); setDetailTarget(0); setDetailError(''); setUsername('')
     setDetailLoading(Boolean(selected && !archived))
     if (selected && !archived) request.get('/groups/' + selected, { signal: controller.signal })
       .then(({ data }) => { if (!controller.signal.aborted) { setDetail(data); confirmRead('detail', epoch, selected) } })
       .catch(failure => { if (!controller.signal.aborted) setDetailError([400, 403, 404].includes(failure?.code)
         ? failure.message : '小组资料未能加载，请刷新重试。') })
-      .finally(() => { if (!controller.signal.aborted) setDetailLoading(false) })
+      .finally(() => { if (!controller.signal.aborted) { setDetailLoading(false); setDetailTarget(selected) } })
     return () => controller.abort()
   }, [selected, archived, refresh, detailRefresh])
   const groupsAvailable = Boolean(groups && !loading)
@@ -216,7 +220,7 @@ export default function Groups() {
           renderItem={invitation => <List.Item actions={[
             <Button key="accept" type="primary" disabled={!inboxReady} onClick={() => mutate(signal =>
               request.post('/groups/' + invitation.groupId + '/invitation', { accept: true, invitationVersion: invitation.invitationVersion }, { signal }), '已加入小组',
-              () => choose(invitation.groupId, 1, false), { resource: 'inbox' })}>接受邀请</Button>,
+              () => { setDetailArrival(n => n + 1); choose(invitation.groupId, 1, false) }, { resource: 'inbox' })}>接受邀请</Button>,
             <Button key="decline" disabled={!inboxReady} onClick={() => mutate(signal =>
               request.post('/groups/' + invitation.groupId + '/invitation', { accept: false, invitationVersion: invitation.invitationVersion }, { signal }), '已拒绝邀请', undefined, { resource: 'inbox' })}>拒绝</Button>,
           ]}><List.Item.Meta title={invitation.name} description={invitation.inviterNickname + '（' + invitation.inviterUsername + '）邀请你加入 · ' + invitation.createdAt} /></List.Item>} />
@@ -247,14 +251,18 @@ export default function Groups() {
             <Popconfirm overlayClassName="document-action-confirm" key="restore" title={'恢复“' + group.name + '”？'} description="原成员将重新获得小组访问权限；文档仍逐篇授权。"
               disabled={!groupsReady} onConfirm={() => mutate(signal => request.post('/groups/' + group.id + '/restore', {}, { signal }), '小组已恢复', undefined, { resource: 'groups' })}>
               <Button disabled={!groupsReady}>恢复小组</Button></Popconfirm>,
-          ] : [] : [<Button key="open" disabled={!groupsAvailable || busy} onClick={() => choose(group.id)}>查看成员</Button>]}>
+          ] : [] : [<Button key="open" disabled={!groupsAvailable || busy} aria-expanded={selected === group.id}
+            aria-controls={selected === group.id ? 'group-detail' : undefined}
+            onClick={() => { setDetailArrival(n => n + 1); choose(group.id) }}>查看成员</Button>]}>
             <List.Item.Meta title={group.name} description={<Space wrap><Tag>{roles[group.role]}</Tag><span>小组 #{group.id}</span>
               <span>{group.memberCount} 位成员</span><span>{group.description || '尚未填写简介'}</span></Space>} />
           </List.Item>} />
         {groups?.total > SIZE && <Pagination current={page} total={groups.total} pageSize={SIZE}
           showSizeChanger={false} disabled={loading || busy} onChange={next => choose(selected, next)} />}
       </Card>
-      {selected > 0 && !archived && <Card key={selected} title={detail?.id === selected ? detail.name : '小组资料'} loading={detailLoading} className="group-section">
+      {selected > 0 && !archived && <WorkspaceDetailCard key={selected} id="group-detail" arrival={detailArrival}
+        waiting={loading || detailLoading || inboxReading || detailTarget !== selected}
+        title={detail?.id === selected ? detail.name : '小组资料'} loading={detailLoading} className="group-section">
         {detailError && <Alert type="error" showIcon message={detailError}
           action={<Button disabled={detailLoading || busy} onClick={() => setDetailRefresh(n => n + 1)}>重试小组资料</Button>} />}
         {detail && detail.id === selected && <>
@@ -296,7 +304,7 @@ export default function Groups() {
                 <List.Item.Meta title={invitation.nickname || invitation.username} description={invitation.username + ' · ' + invitation.createdAt} />
               </List.Item>} /></>}
         </>}
-      </Card>}
+      </WorkspaceDetailCard>}
     </main>
     {creating && <CreateGroupModal onClose={() => setCreating(false)} onCreated={created} onBusyChange={setCreationBusy} />}
     {fields && <GroupFields key={fields.id} fields={fields} busy={busy} uncertain={uncertain} error={error}

@@ -10,6 +10,7 @@ import useProjectOperation from '../api/useProjectOperation'
 import useProjectCreations from '../api/useProjectCreations'
 import CreateProjectDocumentModal from '../components/CreateProjectDocumentModal'
 import PendingProjectDocuments from '../components/PendingProjectDocuments'
+import WorkspaceDetailCard from '../components/WorkspaceDetailCard'
 import '../styles/project-workspace.css'
 
 const idValue = value => Number.isSafeInteger(Number(value)) && Number(value) > 0 ? Number(value) : 0
@@ -51,6 +52,7 @@ export default function Projects() {
   const location = useLocation()
   const sourcePath = location.pathname + location.search + location.hash
   const selected = idValue(params.get('project'))
+  const [detailArrival, setDetailArrival] = useState(0)
   const groupId = idValue(params.get('groupId'))
   const page = Math.min(idValue(params.get('page')) || 1, 1000000)
   const scope = ['personal', 'group'].includes(params.get('scope')) ? params.get('scope') : 'all'
@@ -66,6 +68,7 @@ export default function Projects() {
   const [contextRefresh, setContextRefresh] = useState(0)
   const [detail, setDetail] = useState(null)
   const [detailFrom, setDetailFrom] = useState('')
+  const [detailSettledFrom, setDetailSettledFrom] = useState('')
   const docPage = Math.min(idValue(params.get('docPage')) || 1, 1000000)
   const docKeyword = (params.get('docKeyword') || '').slice(0, 200).trim()
   const [docInput, setDocInput] = useState(docKeyword)
@@ -169,7 +172,7 @@ export default function Projects() {
         setDetailErrorCode(failure?.code)
         setDetailError([400, 401, 403, 404].includes(failure?.code) ? failure.message : '项目文档未能加载，请刷新重试。')
       } })
-      .finally(() => { if (!controller.signal.aborted) setDetailLoading(false) })
+      .finally(() => { if (!controller.signal.aborted) { setDetailLoading(false); setDetailSettledFrom(detailKey) } })
     return () => controller.abort()
   }, [selected, archived, docPage, docKeyword, refresh, detailRefresh])
   const listed = dataFrom === listKey ? data : null
@@ -192,6 +195,7 @@ export default function Projects() {
     if (available) return operation.run(target, action, onSuccess)
   }
   const openCreated = result => {
+    setDetailArrival(n => n + 1)
     setFields(null)
     setParams({ project: String(result.id), ...(result.groupId ? { groupId: String(result.groupId), scope: 'group' } : { scope: 'personal' }) })
   }
@@ -247,6 +251,7 @@ export default function Projects() {
             onClick={() => { operation.pauseCreation(operation.uncertain); setFields(null) }}>稍后确认</Button>}</Space>} />}
       {operation.notice && <Alert className="project-read-alert" type={operation.notice.type} showIcon message={operation.notice.message}
         action={operation.notice.target && <Button disabled={busy} onClick={() => {
+          setDetailArrival(n => n + 1)
           const target = operation.notice.target, result = operation.notice.data
           const wasArchived = result.archived ?? result.projectArchived
           const originalGroup = result.groupId ?? target.groupId
@@ -284,14 +289,17 @@ export default function Projects() {
               description="恢复项目与原关联，文档继续按当前权限访问。" disabled={!ready} onConfirm={() => mutate({ kind: 'restore', projectId: project.id, name: project.name }, config =>
                 request.post('/projects/' + project.id + '/restore', {}, config), undefined, ready)}>
               <Button disabled={!ready}>恢复项目</Button></Popconfirm>,
-          ] : [] : [<Button key="open" disabled={!ready} onClick={() => navigate({ project: String(project.id) })}>查看项目</Button>]}>
+          ] : [] : [<Button key="open" disabled={!ready} aria-expanded={selected === project.id}
+            aria-controls={selected === project.id ? 'project-detail' : undefined}
+            onClick={() => { setDetailArrival(n => n + 1); navigate({ project: String(project.id) }) }}>查看项目</Button>]}>
             <List.Item.Meta title={project.name} description={<Space wrap><Tag>{project.groupId ? '小组：' + project.groupName : '个人项目'}</Tag>
               <span>{project.visibleDocumentCount} 篇可访问文档</span><span>{project.description || '尚未填写简介'}</span></Space>} />
           </List.Item>} />
         {listed?.total > SIZE && <Pagination current={page} total={listed.total} pageSize={SIZE} showSizeChanger={false}
           disabled={!ready} onChange={next => navigate({ page: String(next) })} />}
       </Card>
-      {selected > 0 && !archived && <Card key={selected} title={current?.name || '项目资料'} loading={detailLoading} className="project-section"
+      {selected > 0 && !archived && <WorkspaceDetailCard key={selected} id="project-detail" arrival={detailArrival}
+        waiting={loading || detailLoading || detailSettledFrom !== detailKey} title={current?.name || '项目资料'} loading={detailLoading} className="project-section"
         extra={<Button disabled={detailLoading || busy} onClick={() => setDetailRefresh(n => n + 1)}>刷新项目资料</Button>}>
         {detailError && <Alert className="project-read-alert" type="error" showIcon message={detailError}
           action={<Button disabled={detailLoading || busy} onClick={() => setDetailRefresh(n => n + 1)}>重试项目资料</Button>} />}
@@ -322,7 +330,7 @@ export default function Projects() {
           {current.total > SIZE && <Pagination current={docPage} total={current.total} pageSize={SIZE} showSizeChanger={false}
             disabled={!detailReady} onChange={next => navigate({ docPage: String(next) })} />}
         </>}
-      </Card>}
+      </WorkspaceDetailCard>}
     </main>
     {newDocument && <CreateProjectDocumentModal project={newDocument} contextKey={location.key}
       onClose={() => setNewDocument(null)} onCreated={openProjectDocument} onBusyChange={setDocumentBusy} />}
