@@ -8,7 +8,14 @@
     <title>CoPage · 在线协同文档</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="page-load-message" aria-labelledby="startup-title">
+        <h1 id="startup-title">正在打开 CoPage</h1>
+        <p>页面资源正在加载。如果一直停留在这里，请检查网络后重试。</p>
+        <p><a class="startup-retry" href="">重新加载页面</a></p>
+        <noscript><p>需要启用 JavaScript 才能使用 CoPage。启用后请重新加载页面。</p></noscript>
+      </main>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
