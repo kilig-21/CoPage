@@ -109,7 +109,8 @@ public class ProjectRepository {
             user,user,manage,user,project,user,keyword,keyword,size,((long)page-1)*size);
     }
     private static final String CANDIDATES="""
-        FROM document d LEFT JOIN doc_collaborator c ON c.doc_id=d.id AND c.user_id=?
+        FROM document d LEFT JOIN user u ON u.id=d.owner_id
+        LEFT JOIN doc_collaborator c ON c.doc_id=d.id AND c.user_id=?
         WHERE d.is_deleted=0 AND (d.owner_id=? OR (?=false AND c.permission IN(1,2)))
         AND NOT EXISTS(SELECT 1 FROM project_document pd WHERE pd.project_id=? AND pd.doc_id=d.id)
         AND (?='' OR LOCATE(?,d.title)>0)
@@ -118,14 +119,15 @@ public class ProjectRepository {
         return jdbc.queryForObject("SELECT COUNT(*) "+CANDIDATES,Long.class,user,user,group,project,keyword,keyword);
     }
     public List<Candidate> candidates(long project,long user,boolean group,String keyword,int page,int size) {
-        return jdbc.query("SELECT d.id,d.title,CASE WHEN d.owner_id=? THEN 2 ELSE c.permission END permission "+CANDIDATES+
+        return jdbc.query("SELECT d.id,d.title,CASE WHEN d.owner_id=? THEN 2 ELSE c.permission END permission,d.owner_id,u.nickname,d.update_time "+CANDIDATES+
                 " ORDER BY d.update_time DESC,d.id DESC LIMIT ? OFFSET ?",
-            (r,n)->new Candidate(r.getLong(1),r.getString(2),r.getInt(3)),user,user,user,group,project,keyword,keyword,size,((long)page-1)*size);
+            (r,n)->new Candidate(r.getLong(1),r.getString(2),r.getInt(3),r.getLong(4),r.getString(5),
+                r.getObject(6,LocalDateTime.class).format(TIME)),user,user,user,group,project,keyword,keyword,size,((long)page-1)*size);
     }
     public record Project(long id,String name,String description,long ownerId,long groupId,boolean archived) { }
     public record Summary(long id,String name,String description,long ownerId,long groupId,String groupName,boolean archived,boolean canManage,long visibleDocumentCount,String updateTime) { }
     public record Document(long id,long ownerId,int permission) { }
     public record AssociationState(long docId,String docTitle,String associationId) { }
     public record DocumentSummary(long id,String title,long ownerId,String ownerName,String associationId,String updateTime,int permission,boolean canRemove) { }
-    public record Candidate(long id,String title,int permission) { }
+    public record Candidate(long id,String title,int permission,long ownerId,String ownerName,String updateTime) { }
 }

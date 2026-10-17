@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Alert, Button, Empty, Input, List, Modal, Pagination, Typography } from 'antd'
+import { Alert, Button, Empty, Input, List, Modal, Pagination, Space, Tag, Typography } from 'antd'
 import request from '../api/request'
+import { documentHref } from '../navigation/documents'
 
-export default function ProjectDocumentsModal({ project, busy, uncertain, error, onClose, onAdd, onReview }) {
+export default function ProjectDocumentsModal({ project, from, busy, uncertain, error, onClose, onAdd, onReview }) {
   const [input, setInput] = useState('')
   const [keyword, setKeyword] = useState('')
   const [page, setPage] = useState(1)
@@ -27,7 +28,7 @@ export default function ProjectDocumentsModal({ project, busy, uncertain, error,
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [project.id, keyword, page, refresh])
-  return <Modal open title="加入已有文档" width={720} onCancel={busy ? undefined : onClose}
+  return <Modal open title="加入已有文档" className="project-document-picker-modal" width={720} onCancel={busy ? undefined : onClose}
     closable={!busy} maskClosable={!busy} keyboard={!busy} footer={[
       uncertain && <Button key="review" disabled={busy} onClick={onReview}>核对项目文档</Button>,
       <Button key="close" disabled={busy} onClick={onClose}>关闭</Button>,
@@ -42,8 +43,16 @@ export default function ProjectDocumentsModal({ project, busy, uncertain, error,
       <Button disabled={busy || loading} onClick={() => setRefresh(n => n + 1)}>重试读取</Button>} />}
     <List rowKey="id" loading={loading} dataSource={current?.list || []} className="project-document-picker"
       locale={{ emptyText: loading ? '正在加载…' : !current ? '文档列表暂不可用' : <Empty description="没有可加入的文档，试试其他标题或先创建一篇" /> }}
-      renderItem={doc => <List.Item actions={[<Button key="add" disabled={busy || loading || uncertain || !current}
-        onClick={() => { if (!busy && !loading && !uncertain && current) onAdd(doc) }}>加入项目</Button>]}><List.Item.Meta title={doc.title} /></List.Item>} />
+      renderItem={doc => <List.Item actions={[
+        <a key="view" className="document-open-link" href={documentHref(doc.id, from)} target="_blank" rel="noopener noreferrer"
+          aria-label={'查看文档 #' + doc.id + '（新标签页）'}>查看文档（新标签页）</a>,
+        <Button key="add" disabled={busy || loading || uncertain || !current}
+          onClick={() => { if (!busy && !loading && !uncertain && current) onAdd(doc) }}>加入项目</Button>,
+      ]}><List.Item.Meta title={doc.title} description={<Space wrap>
+        <span>文档 #{doc.id}</span><Tag>{doc.permission === 2 ? '可编辑' : '只读'}</Tag>
+        <span>{typeof doc.ownerName === 'string' && doc.ownerName.trim() ? doc.ownerName : '所有者 #' + doc.ownerId}</span>
+        <span>更新于 {doc.updateTime}</span>
+      </Space>} /></List.Item>} />
     {current?.total > 20 && <Pagination current={page} total={current.total} pageSize={20} showSizeChanger={false}
       disabled={busy || loading || uncertain} onChange={setPage} />}
   </Modal>

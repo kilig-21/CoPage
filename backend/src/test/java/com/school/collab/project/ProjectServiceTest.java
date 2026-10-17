@@ -146,9 +146,33 @@ class ProjectServiceTest {
     @Test void candidatesAreScopedToProjectContextAndNeverIncludeBody() {
         as(2);project(1,3,false);when(groups.access(3,false)).thenReturn(new GroupService.Access(3,"组","member"));
         when(repo.candidateCount(10,2,true,"会议")).thenReturn(1L);
-        when(repo.candidates(10,2,true,"会议",1,20)).thenReturn(List.of(new ProjectRepository.Candidate(5,"会议",2)));
+        when(repo.candidates(10,2,true,"会议",1,20)).thenReturn(List.of(new ProjectRepository.Candidate(5,"会议",2,2,"成员","2026-10-18 09:10:11")));
         var result=service.candidates(10," 会议 ",1,20);assertEquals(1,result.total());assertEquals(5,result.list().getFirst().id());
-        var json=new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(result.list().getFirst());assertFalse(json.has("content"));
+        var json=new ObjectMapper().valueToTree(result.list().getFirst());
+        var fields=new HashSet<String>();json.fieldNames().forEachRemaining(fields::add);
+        assertEquals(Set.of("id","title","permission","ownerId","ownerName","updateTime"),fields);
+        assertEquals(2,json.path("permission").asInt());assertEquals(2,json.path("ownerId").asLong());
+        assertEquals("成员",json.path("ownerName").asText());assertEquals("2026-10-18 09:10:11",json.path("updateTime").asText());
+        verify(repo).candidateCount(10,2,true,"会议");verify(repo).candidates(10,2,true,"会议",1,20);
+    }
+    @Test void personalCandidatesPreserveSharedReadOnlyMetadataAndNullableOldOwnerName() {
+        as(2);project(2,0,false);
+        var candidate=new ProjectRepository.Candidate(5,"同名资料",1,1,null,"2026-10-18 09:10:11");
+        when(repo.candidateCount(10,2,false,"")).thenReturn(21L);
+        when(repo.candidates(10,2,false,"",2,20)).thenReturn(List.of(candidate));
+        var result=service.candidates(10,"",2,20);
+        assertEquals(21,result.total());assertEquals(candidate,result.list().getFirst());
+        assertTrue(new ObjectMapper().valueToTree(candidate).get("ownerName").isNull());
+        verify(repo).candidateCount(10,2,false,"");verify(repo).candidates(10,2,false,"",2,20);
+    }
+    @Test void inaccessibleAndArchivedProjectsNeverQueryCandidateMetadata() {
+        code(ErrorCode.UNAUTHORIZED,()->service.candidates(10,"",1,20));verifyNoInteractions(repo,groups);
+        as(2);project(1,0,false);code(ErrorCode.FORBIDDEN,()->service.candidates(10,"",1,20));
+        project(2,0,true);code(ErrorCode.NOT_FOUND,()->service.candidates(10,"",1,20));
+        project(1,3,false);when(groups.access(3,false)).thenThrow(new BizException(ErrorCode.FORBIDDEN));
+        code(ErrorCode.FORBIDDEN,()->service.candidates(10,"",1,20));
+        verify(repo,never()).candidateCount(anyLong(),anyLong(),anyBoolean(),anyString());
+        verify(repo,never()).candidates(anyLong(),anyLong(),anyBoolean(),anyString(),anyInt(),anyInt());
     }
     @Test void projectStateReadsActiveAndArchivedOwnersMetadataWithoutLoadingDocuments() {
         as(2);

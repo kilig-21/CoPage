@@ -345,7 +345,7 @@ export default function Projects() {
         else if (createReady && (values.groupId === 0 || (values.groupId === context?.id && canCreateGroup))) operation.run(target,
           (config, prepared) => creations.create(values, config, prepared), openCreated, { trackedCreation: true })
       }} />}
-    {adding && current && <ProjectDocumentsModal key={current.id} project={current} busy={busy} uncertain={uncertain}
+    {adding && current && <ProjectDocumentsModal key={current.id} project={current} from={sourcePath} busy={busy} uncertain={uncertain}
       error={operationError} onClose={() => setAdding(false)} onReview={review}
       onAdd={doc => mutate({ kind: 'add', projectId: current.id, groupId: current.groupId, docId: doc.id, title: doc.title }, config =>
         request.post('/projects/' + current.id + '/documents', { docId: doc.id }, config), () => setAdding(false))} />}

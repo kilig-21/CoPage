@@ -10,7 +10,17 @@
 .project-document-local-note { margin: 16px 0 0; }
 .project-document-pending .ant-list-item-meta { min-width: 0; }
 .project-document-pending .ant-list-item-meta-description { overflow-wrap: anywhere; }
+.project-document-picker-modal { top: 32px; padding-bottom: 24px; }
+.project-document-picker-modal .ant-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - 64px); }
+.project-document-picker-modal .ant-modal-header, .project-document-picker-modal .ant-modal-footer { flex-shrink: 0; }
+.project-document-picker-modal .ant-modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.project-document-picker-modal .ant-modal-title { padding-right: 32px; overflow-wrap: anywhere; }
+.project-document-picker-modal .ant-typography, .project-document-picker .ant-list-item-meta-description { overflow-wrap: anywhere; }
 @media (max-width: 640px) {
+  .project-document-picker-modal { top: 24px; }
+  .project-document-picker-modal .ant-modal-content { max-height: calc(100dvh - 48px); }
+  .project-document-picker-modal .ant-btn, .project-document-picker-modal .ant-input,
+  .project-document-picker-modal .ant-modal-close { min-height: 44px; }
   .project-read-alert { flex-wrap: wrap; gap: 8px; }
   .project-read-alert .ant-alert-content { min-width: 0; }
   .project-read-alert .ant-alert-action { flex-basis: 100%; margin-inline-start: 0; padding-inline-start: 28px; }
