@@ -200,7 +200,7 @@ body { margin: 0; min-width: 0; }
   .group-page .ant-alert .ant-alert-content { min-width: 0; overflow-wrap: anywhere; }
   .group-page .ant-alert .ant-alert-action { flex: 0 0 100%; margin: 8px 0 0; padding-left: 22px; }
   .group-creation-review .ant-list .ant-list-item { flex-wrap: wrap; }
-  .group-creation-review .ant-btn, .group-create-modal .ant-modal-footer .ant-btn { min-height: 44px; }
+  .group-creation-review .ant-btn, .group-create-modal .ant-modal-footer .ant-btn, .group-wait-confirm .ant-btn { min-height: 44px; }
   .group-creation-review .ant-card-head { padding-inline: 16px; }
   .group-creation-review .ant-card-body { padding: 16px; }
 }
