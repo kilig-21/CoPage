@@ -4,6 +4,7 @@ import { ArrowRightOutlined, FileTextOutlined } from '@ant-design/icons'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import request from '../api/request'
+import { parseAccountProfile } from '../auth/accountProfile'
 import UserGuide from '../components/UserGuide'
 import WorkspaceOverview from '../components/WorkspaceOverview'
 import WorkspaceHeader from '../components/WorkspaceHeader'
@@ -45,9 +46,9 @@ export default function Home() {
     const controller = new AbortController()
     setProfileLoading(true); setProfileError(''); setProfile(null)
     request.get('/account/me', { signal: controller.signal }).then(({ data }) => {
-      if (!controller.signal.aborted) setProfile(data)
+      if (!controller.signal.aborted) setProfile(parseAccountProfile(data))
     }).catch(failure => {
-      if (!controller.signal.aborted) setProfileError([400, 401, 403, 404].includes(failure?.code)
+      if (!controller.signal.aborted) setProfileError(failure?.reason === 'ACCOUNT_PROFILE_RESPONSE' ? failure.message : [400, 401, 403, 404].includes(failure?.code)
         ? failure.message : '账号资料暂时无法加载，可单独重试。')
     }).finally(() => { if (!controller.signal.aborted) setProfileLoading(false) })
     return () => controller.abort()
@@ -57,7 +58,7 @@ export default function Home() {
     <main id="workspace-main" tabIndex={-1} className="content-wrap workbench">
       <div className="page-heading cp-workbench-heading"><div>
         <Typography.Text className="cp-workbench-kicker">你的资料与协作</Typography.Text>
-        <Typography.Title level={1}>{profile ? profile.nickname + '，欢迎回来' : '你的协作工作台'}</Typography.Title>
+        <Typography.Title level={1}>{profile ? (profile.nickname?.trim() || profile.username) + '，欢迎回来' : '你的协作工作台'}</Typography.Title>
         <Typography.Paragraph type="secondary">接着写下想法，或从一份模板开始新的工作。</Typography.Paragraph>
       </div><Space wrap className="cp-workbench-actions">
         <Button size="large" onClick={() => navigate('/docs')}>管理文档</Button>
