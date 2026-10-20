@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { safeReturnPath, saveSession, logoutSession, expireSession, subscribeSessionChanges, createReconnectSessionCheck } from './session.js'
+import { safeReturnPath, captureLoginIdentity, saveSession, logoutSession, expireSession, subscribeSessionChanges, createReconnectSessionCheck } from './session.js'
 
 test('login only returns to supported internal pages', () => {
   assert.equal(safeReturnPath('/docs/60'), '/docs/60')
@@ -125,6 +125,91 @@ test('登录成功提交完整身份，写入过程不留下可用于读取错�
   saveSession(storage, { token: 'new-A', username: 'testA' })
   assert.equal(data.get('collab-token'), 'new-A')
   assert.equal(data.get('collab-user'), 'testA')
+})
+
+test('旧登录正常回复在会话通知尚未处理时也不能覆盖另一标签的新登录', async () => {
+  const data = new Map([['copage-draft:v1:testA:26:x', 'draft-A'], ['copage-draft:v1:testB:26:y', 'draft-B']])
+  let writes = 0, deliver
+  const storage = { getItem: key => data.get(key) ?? null,
+    removeItem: key => { writes++; data.delete(key) }, setItem: (key, value) => { writes++; data.set(key, value) } }
+  const expectedIdentity = captureLoginIdentity(storage)
+  const oldReply = new Promise(resolve => { deliver = resolve }).then(response => saveSession(storage, response, { expectedIdentity }))
+  // 另一标签先完成B登录；本页尚未收到任何storage通知，原A请求也未被abort。
+  saveSession(storage, { token: 'new-B', username: 'testB' })
+  const before = [...data]; writes = 0
+  deliver({ token: 'late-A', username: 'testA' })
+  await assert.rejects(oldReply, /登录状态已在其他页面更改/)
+  assert.equal(writes, 0); assert.deepEqual([...data], before)
+})
+
+test('登录身份快照冻结原两字段，兼容未登录及退出后残留用户名，不随存储改变', () => {
+  for (const initial of [[], [['collab-user', 'old-user']], [['collab-token', 'A'], ['collab-user', 'testA']]]) {
+    const data = new Map(initial), storage = { getItem: key => data.get(key) ?? null }
+    const expected = { token: data.get('collab-token') ?? null, username: data.get('collab-user') ?? null }
+    const snapshot = captureLoginIdentity(storage)
+    assert.deepEqual(snapshot, expected); assert.equal(Object.isFrozen(snapshot), true)
+    data.set('collab-token', 'B'); data.set('collab-user', 'testB')
+    assert.deepEqual(snapshot, expected)
+    assert.throws(() => { snapshot.username = 'replaced' }, TypeError)
+  }
+})
+
+test('原身份未变时expectedIdentity正常提交新会话，仅按既有顺序写两个身份键', () => {
+  for (const initial of [[], [['collab-user', 'old-user']], [['collab-token', 'A'], ['collab-user', 'testA']]]) {
+    const data = new Map([...initial, ['copage-draft:v1:testA:26:x', 'draft-A']]), writes = []
+    const storage = { getItem: key => data.get(key) ?? null,
+      removeItem: key => { writes.push(['remove', key]); data.delete(key) },
+      setItem: (key, value) => { writes.push(['set', key, value]); data.set(key, value) } }
+    const snapshot = captureLoginIdentity(storage)
+    saveSession(storage, { token: 'new-B', username: 'testB' }, { expectedIdentity: snapshot })
+    assert.deepEqual(writes, [['remove', 'collab-token'], ['set', 'collab-user', 'testB'], ['set', 'collab-token', 'new-B']])
+    assert.equal(data.get('collab-token'), 'new-B'); assert.equal(data.get('collab-user'), 'testB')
+    assert.equal(data.get('copage-draft:v1:testA:26:x'), 'draft-A')
+  }
+})
+
+test('用户名单字段变化、同账号新令牌或退出后token缺失均拒绝旧回复且零写', () => {
+  for (const change of [data => data.set('collab-user', 'testB'), data => data.set('collab-token', 'new-A'),
+    data => data.delete('collab-token'), data => { data.delete('collab-token'); data.delete('collab-user') }]) {
+    const data = new Map([['collab-token', 'A'], ['collab-user', 'testA'], ['draft-A', 'draft-A'], ['draft-B', 'draft-B']])
+    let writes = 0
+    const storage = { getItem: key => data.get(key) ?? null, removeItem: key => { writes++; data.delete(key) },
+      setItem: (key, value) => { writes++; data.set(key, value) } }
+    const snapshot = captureLoginIdentity(storage)
+    change(data); const before = [...data]
+    assert.throws(() => saveSession(storage, { token: 'late-A', username: 'testA' }, { expectedIdentity: snapshot }), /登录状态已在其他页面更改/)
+    assert.equal(writes, 0); assert.deepEqual([...data], before)
+  }
+})
+
+test('捕获或提交前任一身份字段读取失败时中文拒绝，不移除令牌或修改草稿', () => {
+  for (const field of ['collab-token', 'collab-user']) {
+    const data = new Map([['collab-token', 'B'], ['collab-user', 'testB'], ['draft-B', 'saved']])
+    let blocked = false, writes = 0
+    const storage = { getItem: key => { if (blocked && key === field) throw new DOMException('blocked', 'SecurityError'); return data.get(key) ?? null },
+      removeItem: key => { writes++; data.delete(key) }, setItem: (key, value) => { writes++; data.set(key, value) } }
+    const snapshot = captureLoginIdentity(storage), before = [...data]
+    blocked = true
+    assert.throws(() => captureLoginIdentity(storage), /无法读取当前登录状态.*身份和草稿未改动/)
+    assert.throws(() => saveSession(storage, { token: 'late-A', username: 'testA' }, { expectedIdentity: snapshot }), /无法读取当前登录状态/)
+    assert.equal(writes, 0); assert.deepEqual([...data], before)
+    blocked = false
+    saveSession(storage, { token: 'new-A', username: 'testA' }, { expectedIdentity: snapshot })
+    assert.equal(data.get('collab-token'), 'new-A'); assert.equal(data.get('draft-B'), 'saved')
+  }
+})
+
+test('expectedIdentity不可识别时拒绝写入；新登录信息仍优先验证', () => {
+  let reads = 0, writes = 0
+  const storage = { getItem: () => { reads++; throw Error('blocked') }, removeItem: () => writes++, setItem: () => writes++ }
+  for (const expectedIdentity of [null, {}, [], { token: null }, { token: 1, username: null },
+    { token: null, username: null, extra: true }]) {
+    assert.throws(() => saveSession(storage, { token: 'A', username: 'testA' }, { expectedIdentity }), /账号状态无法确认/)
+  }
+  assert.throws(() => saveSession(storage, { token: '', username: 'testA' }, {
+    expectedIdentity: Object.freeze({ token: null, username: null }),
+  }), /登录信息不完整/)
+  assert.equal(reads, 0); assert.equal(writes, 0)
 })
 
 test('登录保存各步骤失败时身份仍一致，草稿不变且解除失败后可重试', () => {

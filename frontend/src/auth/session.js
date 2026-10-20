@@ -2,9 +2,29 @@ export function safeReturnPath(path) {
   return typeof path === 'string' && /^\/(?:docs(?:\/\d+)?|home|groups|projects|templates|trash|search|account)(?:[?#].*)?$/.test(path) ? path : '/docs'
 }
 
-export function saveSession(storage, { token, username }) {
+export function captureLoginIdentity(storage) {
+  try {
+    return Object.freeze({ token: storage.getItem('collab-token') ?? null, username: storage.getItem('collab-user') ?? null })
+  } catch {
+    throw new Error('浏览器无法读取当前登录状态，请恢复本站存储后重试；当前身份和草稿未改动。')
+  }
+}
+
+export function saveSession(storage, { token, username }, { expectedIdentity } = {}) {
   if (typeof token !== 'string' || !token.trim() || typeof username !== 'string' || !username.trim()) {
     throw new Error('登录信息不完整，请重试')
+  }
+  if (expectedIdentity !== undefined) {
+    if (!expectedIdentity || typeof expectedIdentity !== 'object' || Array.isArray(expectedIdentity) ||
+        Object.keys(expectedIdentity).length !== 2 || !Object.hasOwn(expectedIdentity, 'token') || !Object.hasOwn(expectedIdentity, 'username') ||
+        ![expectedIdentity.token, expectedIdentity.username].every(value => value === null || typeof value === 'string')) {
+      throw new Error('本次登录前的账号状态无法确认，请重新登录；当前身份和草稿未改动。')
+    }
+    // 通知尚未到达时也比较原身份；这是写入前核对，不是跨标签原子锁。
+    const current = captureLoginIdentity(storage)
+    if (current.token !== expectedIdentity.token || current.username !== expectedIdentity.username) {
+      throw new Error('登录状态已在其他页面更改，本次登录未覆盖当前账号。请确认当前账号后重新登录。')
+    }
   }
   try {
     // 先停止旧身份，再保存账号名；只有完整写入账号名后才能提交新令牌。

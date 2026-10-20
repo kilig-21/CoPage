@@ -3,7 +3,7 @@ import { Alert, Button, Card, Form, Input, Typography } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
 import request from '../api/request'
 import UserGuide from '../components/UserGuide'
-import { safeReturnPath, saveSession } from '../auth/session'
+import { captureLoginIdentity, safeReturnPath, saveSession } from '../auth/session'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -20,6 +20,12 @@ export default function Login() {
   useEffect(() => () => requestControllerRef.current?.abort(), [])
 
   async function onFinish(values) {
+    if (requestControllerRef.current) return
+    let expectedIdentity
+    if (!registering) {
+      try { expectedIdentity = captureLoginIdentity(localStorage) }
+      catch (failure) { setError(failure.message); return }
+    }
     const controller = new AbortController()
     requestControllerRef.current = controller
     setSubmitting(true)
@@ -37,7 +43,7 @@ export default function Login() {
       }
       const response = await request.post('/auth/login', payload, { signal: controller.signal })
       if (controller.signal.aborted) return
-      saveSession(localStorage, { token: response.data.token, username: response.data.user.username })
+      saveSession(localStorage, { token: response.data.token, username: response.data.user.username }, { expectedIdentity })
       navigate(safeReturnPath(location.state?.from || '/home'), { replace: true })
     } catch (error) {
       if (!controller.signal.aborted) {
