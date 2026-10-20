@@ -91,9 +91,9 @@ export default function Search() {
       <div className="page-heading"><div><Typography.Title level={2}>搜索文档</Typography.Title>
         <Typography.Paragraph type="secondary">从有权限访问的标题和正文中，找到需要的资料。</Typography.Paragraph></div>
         <Button type="text" aria-label="返回文档列表" icon={<ArrowLeftOutlined />} onClick={() => navigate('/docs')}>返回文档列表</Button></div>
-      <Input.Search aria-label="搜索标题和正文" placeholder="搜索标题和正文" value={input} maxLength={100} onChange={(event) => setInput(event.target.value)} onSearch={search} loading={loading} size="large" enterButton="搜索" className="search-box" />
+      <Input.Search aria-label="搜索标题和正文" placeholder="搜索标题和正文" value={input} maxLength={100} onChange={(event) => setInput(event.target.value)} onSearch={search} size="large" enterButton="搜索" className="search-box" />
       {error && <Alert type="error" showIcon message={error} action={validQuery && <Button size="small" disabled={loading} onClick={retrySearch}>重试</Button>} />}
-      <Card className="search-results-card">
+      <Card role="region" aria-label="搜索结果" aria-busy={loading} className="search-results-card">
         {ready && <Typography.Paragraph type="secondary">找到 {total} 篇可访问的文档</Typography.Paragraph>}
         {ready && total > 10000 && <Typography.Paragraph type="secondary">最多显示前 10000 条结果，试试更具体的关键词。</Typography.Paragraph>}
         <List rowKey="id" loading={loading} dataSource={results}
