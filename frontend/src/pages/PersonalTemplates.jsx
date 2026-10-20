@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
@@ -40,6 +40,7 @@ export default function PersonalTemplates() {
   const instance = useRef(null)
   const selection = useRef(null)
   const detailRequest = useRef(null)
+  const feedbackRef = useRef(null)
   function closeTemplate() {
     selection.current = null
     detailRequest.current?.abort(); detailRequest.current = null
@@ -101,6 +102,12 @@ export default function PersonalTemplates() {
   const currentEditing = editing?.session === selected?.session && editing?.templateId === selected?.id ? editing : null
   const changedVersion = Boolean(currentEditing && currentDetail && currentEditing.version !== currentDetail.version)
   const ready = Boolean(data && !loading && !busy && !uncertain)
+  useLayoutEffect(() => {
+    if (error || detailError || changedVersion) {
+      const body = feedbackRef.current?.closest('.ant-modal-body')
+      if (body) body.scrollTop = 0
+    }
+  }, [error, detailError, changedVersion, selected?.session])
   async function mutate(kind, action, onSuccess, reviewTarget) {
     const confirming = kind === 'instance' && uncertain?.kind === 'instance' && instance.current
     if (mutation.current || !(kind === 'instance' ? !busy && (!uncertain || confirming) && (confirming || (data && !loading)) : ready)) return
@@ -202,6 +209,7 @@ export default function PersonalTemplates() {
             mutate('update', signal => request.put('/personal-templates/' + draft.templateId, { name: draft.name.trim(), description: draft.description.trim(), category: draft.category, expectedVersion: draft.version }, { signal }), () => { closeTemplate(); setNotice('模板资料已保存'); filter(draft.category, draft.name.trim()); setRefresh(n => n + 1) }, { name: draft.name.trim(), category: draft.category })
           }}>保存资料</Button>,
       ]}>
+      <div ref={feedbackRef} />
       {error && <Alert type={uncertain ? 'warning' : 'error'} showIcon message={error} />}
       {detailError && <Alert className="template-detail-notice" type="error" showIcon message={detailError} />}
       <Button disabled={busy || detailLoading} onClick={reread}>重新读取模板</Button>

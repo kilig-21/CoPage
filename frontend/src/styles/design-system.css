@@ -141,12 +141,6 @@ body { background: var(--cp-paper); }
   .document-transfer-modal .ant-modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .document-transfer-modal .ant-radio-wrapper { min-height: 44px; align-items: center; }
   .document-transfer-modal input[type='file'] { max-width: 100%; }
-  .personal-template-modal .ant-btn, .personal-template-modal .ant-input { min-height: 44px; }
-  .personal-template-modal .ant-modal-close { width: 44px; height: 44px; }
-  .personal-template-modal .ant-radio-wrapper { min-height: 44px; align-items: center; }
-  .personal-template-modal .ant-modal-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-  .personal-template-modal .ant-modal-footer .ant-btn { margin-inline-start: 0; }
-  .personal-template-modal { top: 24px; }
   .builtin-template-modal { top: 24px; padding-bottom: 24px; }
   .builtin-template-modal .ant-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); }
   .builtin-template-modal .ant-modal-header, .builtin-template-modal .ant-modal-footer { flex-shrink: 0; }
@@ -171,6 +165,21 @@ body { background: var(--cp-paper); }
 .personal-template-modal .ant-modal-title { padding-inline-end: 40px; }
 .personal-template-modal .template-detail-notice { margin-block: 12px; }
 .personal-template-modal .ant-input-textarea-show-count { margin-bottom: 20px; }
+@media (max-width: 640px), (max-height: 600px) {
+  .personal-template-modal { top: 24px; padding-bottom: 24px; }
+  .personal-template-modal .ant-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); }
+  .personal-template-modal .ant-modal-header, .personal-template-modal .ant-modal-footer { flex-shrink: 0; }
+  .personal-template-modal .ant-modal-header { margin-inline-end: 44px; max-height: 25dvh; overflow-y: auto; }
+  .personal-template-modal .ant-modal-header .ant-modal-title { padding-inline-end: 0; }
+  .personal-template-modal .ant-modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .personal-template-modal .ant-typography, .personal-template-modal .ant-alert-message { overflow-wrap: anywhere; }
+  .personal-template-modal .ant-btn, .personal-template-modal .ant-input { min-height: 44px; }
+  .personal-template-modal .ant-modal-close { width: 44px; height: 44px; }
+  .personal-template-modal .ant-radio-wrapper { min-height: 44px; align-items: center; }
+  .personal-template-modal .ant-modal-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .personal-template-modal .ant-modal-footer .ant-btn { margin-inline-start: 0; max-width: 100%; height: auto; white-space: normal; }
+  .personal-template-modal .document-preview .ql-editor { height: auto; max-height: none; overflow-y: visible; }
+}
 .personal-template-save-modal { top: 32px; padding-bottom: 24px; }
 .personal-template-save-modal .ant-modal-body { max-height: calc(100dvh - 220px); overflow-y: auto; overscroll-behavior: contain; }
 .personal-template-save-modal .ant-typography, .personal-template-save-modal .ant-alert-message { overflow-wrap: anywhere; }
