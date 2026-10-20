@@ -71,18 +71,18 @@ export default function Trash() {
       </Space>
       {error&&<Alert type="error" showIcon message={error} action={<Button disabled={loading} onClick={()=>setRefresh(n=>n+1)}>重试</Button>} />}
       {restoration.uncertain&&<Alert className="lifecycle-review-alert" type="warning" showIcon
-        message={restoration.error||'恢复结果未确认，请先核对当前状态。'} description={'待核对文档：'+restoration.uncertain.title}
+        message={restoration.error||'恢复结果未确认，请先核对当前状态。'} description={'待核对文档：'+restoration.uncertain.title+'（文档 #'+restoration.uncertain.id+'）'}
         action={<Button disabled={restoration.busy} loading={restoration.checking} onClick={restoration.review}>核对恢复结果</Button>} />}
       {restoration.error&&!restoration.uncertain&&<Alert type="error" showIcon message={restoration.error} />}
       {restoration.notice&&<Alert className="lifecycle-review-alert" type={restoration.notice.type} showIcon message={restoration.notice.message}
         action={restoration.notice.openId&&<Button onClick={()=>navigate(documentHref(restoration.notice.openId,sourcePath))}>打开恢复的文档</Button>} />}
       <Card className="trash-list-card"><List rowKey="id" loading={reading} dataSource={listReady?docs:[]}
         locale={{emptyText:reading?'正在加载…':error?'列表暂不可用':<Empty description={keyword?'没有匹配标题的已删除文档，试试其他关键词或清除查找':'回收站是空的'} />}}
-        renderItem={doc=><List.Item actions={[<Popconfirm key="restore" overlayClassName="document-action-confirm" title={`恢复“${doc.title}”？`}
+        renderItem={doc=><List.Item actions={[<Popconfirm key="restore" overlayClassName="document-action-confirm trash-restore-confirm" title={`恢复“${doc.title}”（文档 #${doc.id}）？`}
           description="恢复后，原协作者将重新获得原来的权限。" okText="确认恢复" cancelText="取消"
           disabled={restoration.blocked} onConfirm={()=>restoration.run(doc)}>
-          <Button disabled={restoration.blocked} loading={restoration.pendingId===doc.id}>恢复文档</Button></Popconfirm>]}>
-          <List.Item.Meta title={doc.title} description={'删除时间：'+doc.deletedAt} />
+          <Button aria-label={`恢复文档 #${doc.id}：${doc.title}`} disabled={restoration.blocked} loading={restoration.pendingId===doc.id}>恢复文档</Button></Popconfirm>]}>
+          <List.Item.Meta title={doc.title} description={<Space wrap><Typography.Text type="secondary">文档 #{doc.id}</Typography.Text><Typography.Text type="secondary">删除时间：{doc.deletedAt}</Typography.Text></Space>} />
         </List.Item>} />
         {listReady&&total>PAGE_SIZE&&<Pagination current={page} pageSize={PAGE_SIZE} total={total} showSizeChanger={false} responsive showLessItems
           disabled={loading||restoration.busy} onChange={setPage} />}

@@ -78,6 +78,9 @@ body { margin: 0; min-width: 0; }
 .trash-list-card .ant-list-item-meta-title { overflow-wrap: anywhere; }
 .document-action-confirm { max-width: calc(100vw - 24px); }
 .document-action-confirm .ant-popconfirm-title { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .trash-restore-confirm .ant-popconfirm-buttons .ant-btn { min-height: 44px; }
+}
 .editor-host .ql-editor img { max-width: 100%; }
 @media (max-width: 640px) {
   .topbar { padding: 12px 16px; }
