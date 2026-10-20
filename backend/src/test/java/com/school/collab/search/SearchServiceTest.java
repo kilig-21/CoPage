@@ -211,4 +211,93 @@ class SearchServiceTest {
         when(documents.find(6L)).thenReturn(Optional.empty());
         assertTrue(service.search("正文", 1, 20).list().isEmpty());
     }
+
+    @Test
+    void 搜索所有者返回可信元数据且不补查成员权限() throws Exception {
+        candidate("辨认", "同名文档", delta("当前正文。\n"));
+        var hit = new ObjectMapper().valueToTree(service.search("辨认", 1, 20).list().getFirst());
+        assertEquals(5, hit.path("id").asLong());
+        assertEquals(1, hit.path("ownerId").asLong());
+        assertEquals("owner", hit.path("ownerName").asText());
+        assertEquals(2, hit.path("permission").asInt());
+        assertTrue(hit.path("isOwner").asBoolean());
+        verify(documents, org.mockito.Mockito.never()).collaboratorPermission(
+                org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    private void sharedMetadata(int permission) throws Exception {
+        UserContext.set(2L, "viewer");
+        when(documents.visibleIds(2)).thenReturn(List.of(5L));
+        when(index.search("辨认", List.of(5L), 1, 20)).thenReturn(new SearchIndex.SearchPage(1, List.of(5L)));
+        when(documents.find(5L)).thenReturn(Optional.of(new DocumentRow(
+                5, "同名文档", delta("当前正文。\n"), 9, 1, "viewer", 7, LocalDateTime.of(2026, 10, 20, 9, 0))));
+        // 若错误地查第二次再投影，则得到0；展示必须复用授权检查的同一个当前权限值。
+        when(documents.collaboratorPermission(5L, 2L)).thenReturn(permission, 0);
+        var hit = new ObjectMapper().valueToTree(service.search("辨认", 1, 20).list().getFirst());
+        assertEquals(1, hit.path("ownerId").asLong());
+        assertEquals("viewer", hit.path("ownerName").asText());
+        assertEquals(permission, hit.path("permission").asInt());
+        assertFalse(hit.path("isOwner").asBoolean(), "昵称恰好等于当前用户名也不代表所有者");
+        verify(documents, org.mockito.Mockito.times(1)).collaboratorPermission(5L, 2L);
+    }
+
+    @Test
+    void 可编辑协作者元数据只查询一次当前权限() throws Exception {
+        sharedMetadata(2);
+    }
+
+    @Test
+    void 只读协作者元数据只查询一次当前权限() throws Exception {
+        sharedMetadata(1);
+    }
+
+    @Test
+    void 空所有者昵称正常返回且公开投影只包含明确字段() throws Exception {
+        UserContext.set(2L, "viewer");
+        when(documents.visibleIds(2)).thenReturn(List.of(5L));
+        when(index.search("辨认", List.of(5L), 1, 20)).thenReturn(new SearchIndex.SearchPage(1, List.of(5L)));
+        when(documents.find(5L)).thenReturn(Optional.of(new DocumentRow(
+                5, "同名文档", delta("当前正文。\n"), 9, 1, null, 7, LocalDateTime.of(2026, 10, 20, 9, 0))));
+        when(documents.collaboratorPermission(5L, 2L)).thenReturn(1);
+        var hit = new ObjectMapper().valueToTree(service.search("辨认", 1, 20).list().getFirst());
+        assertTrue(hit.has("ownerName"));
+        assertTrue(hit.path("ownerName").isNull());
+        assertEquals(1, hit.path("ownerId").asLong());
+        assertEquals(1, hit.path("permission").asInt());
+        assertFalse(hit.path("isOwner").asBoolean());
+        var fields = new java.util.HashSet<String>();
+        hit.fieldNames().forEachRemaining(fields::add);
+        assertEquals(java.util.Set.of("id", "title", "snippet", "updateTime", "ownerId", "ownerName", "permission", "isOwner"), fields);
+        assertEquals("2026-10-20 09:00:00", hit.path("updateTime").asText());
+        verify(documents).collaboratorPermission(5L, 2L);
+    }
+
+    @Test
+    void 已撤权删除或非法权限的旧候选不返回元数据也不解析坏正文() throws Exception {
+        UserContext.set(2L, "viewer");
+        var candidates = List.of(9L, 5L, 7L, 6L, 8L, 10L);
+        when(documents.visibleIds(2)).thenReturn(candidates);
+        when(index.search("辨认", candidates, 1, 20)).thenReturn(new SearchIndex.SearchPage(42, candidates));
+        for (long id : new long[]{9, 5, 7, 8, 10}) {
+            boolean visible = id == 9 || id == 8;
+            when(documents.find(id)).thenReturn(Optional.of(new DocumentRow(
+                    id, visible ? "同名文档" : "不可公开标题", visible ? delta("当前正文。\n") : "unreadable-delta",
+                    1, 1, visible ? "当前所有者" : "不可公开昵称", 0, LocalDateTime.of(2026, 10, 20, 9, 0))));
+        }
+        when(documents.find(6L)).thenReturn(Optional.empty());
+        when(documents.collaboratorPermission(9L, 2L)).thenReturn(1);
+        when(documents.collaboratorPermission(5L, 2L)).thenReturn(0);
+        when(documents.collaboratorPermission(7L, 2L)).thenReturn(9);
+        when(documents.collaboratorPermission(8L, 2L)).thenReturn(2);
+        when(documents.collaboratorPermission(10L, 2L)).thenReturn(-1);
+        var result = service.search("辨认", 1, 20);
+        assertEquals(42, result.total(), "不将ES总数改为过滤后当前页数量");
+        assertEquals(List.of(9L, 8L), result.list().stream().map(SearchService.HitView::id).toList(), "仍保留ES候选排序");
+        var json = new ObjectMapper().valueToTree(result).toString();
+        assertFalse(json.contains("不可公开标题"));
+        assertFalse(json.contains("不可公开昵称"));
+        assertFalse(json.contains("unreadable-delta"));
+        for (long id : new long[]{9, 5, 7, 8, 10}) verify(documents).collaboratorPermission(id, 2L);
+        verify(documents, org.mockito.Mockito.never()).collaboratorPermission(6L, 2L);
+    }
 }

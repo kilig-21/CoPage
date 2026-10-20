@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeftOutlined, FileTextOutlined } from '@ant-design/icons'
-import { Alert, Button, Card, Empty, Input, Layout, List, Typography } from 'antd'
+import { Alert, Button, Card, Empty, Input, Layout, List, Tag, Typography } from 'antd'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import request from '../api/request'
@@ -100,6 +100,12 @@ export default function Search() {
           locale={{ emptyText: loading ? '正在搜索…' : <Empty description={error ? '暂时无法显示搜索结果' : ready ? '没有找到相关文档' : '输入关键词，搜索你有权限访问的标题和正文'} /> }}
           pagination={ready && total > PAGE_SIZE ? { current: page, pageSize: PAGE_SIZE, total: Math.min(total, 10000), showSizeChanger: false, responsive: true, showLessItems: true, onChange: (next) => changePage(next) } : false}
           renderItem={(item) => <List.Item><List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={<Link to={documentHref(item.id, sourcePath)}>{item.title}</Link>} description={<div className="search-result-description">
+            <div className="search-result-metadata">
+              <Tag>{item.isOwner === true ? '所有者' : item.permission === 2 ? '可编辑' : item.permission === 1 ? '只读' : '打开后查看权限'}</Tag>
+              <Typography.Text type="secondary">文档 #{item.id}</Typography.Text>
+              <Typography.Text type="secondary" className="search-result-owner">所有者：{typeof item.ownerName === 'string' && item.ownerName.trim()
+                ? item.ownerName : Number.isSafeInteger(item.ownerId) && item.ownerId > 0 ? `用户 #${item.ownerId}` : '暂不可用'}</Typography.Text>
+            </div>
             <div className="search-result-snippet">{snippetParts(item.snippet).map((part, index) => part.highlighted ? <strong key={index}>{part.text}</strong> : part.text)}</div>
             {typeof item.updateTime === 'string' && item.updateTime && <Typography.Text type="secondary" className="search-result-updated">更新于 {item.updateTime}</Typography.Text>}
           </div>} /></List.Item>} />

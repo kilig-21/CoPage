@@ -34,22 +34,25 @@ public class SearchService {
         List<Long> visible = documents.visibleIds(userId);
         SearchIndex.SearchPage matches = index.search(q, visible, page, size);
         Pattern literal = literalPattern(q);
-        List<HitView> hits = matches.ids().stream()
-                .map(id -> documents.find(id).orElse(null))
-                .filter(row -> row != null && (row.ownerId() == userId
-                        || documents.collaboratorPermission(row.id(), userId) > 0))
-                .map(row -> view(row, literal))
-                .toList();
+        List<HitView> hits = new java.util.ArrayList<>();
+        for (long id : matches.ids()) {
+            DocumentRow row = documents.find(id).orElse(null);
+            if (row == null) continue;
+            boolean isOwner = row.ownerId() == userId;
+            int permission = isOwner ? 2 : documents.collaboratorPermission(row.id(), userId);
+            if (permission != 1 && permission != 2) continue;
+            hits.add(view(row, literal, permission, isOwner));
+        }
         return new SearchView(matches.total(), hits);
     }
 
-    private static HitView view(DocumentRow row, Pattern literal) {
+    private static HitView view(DocumentRow row, Pattern literal, int permission, boolean isOwner) {
         String body = SearchIndex.plainText(row.content());
         String snippet = literal.matcher(body).find() ? highlight(body, literal) : opening(body);
         if (snippet == null) snippet = literal.matcher(row.title()).find()
                 ? "标题匹配，暂无文字摘要" : "暂无文字摘要";
         return new HitView(row.id(), row.title(), snippet,
-                row.updateTime().format(TIME));
+                row.updateTime().format(TIME), row.ownerId(), row.ownerName(), permission, isOwner);
     }
 
     /** 无字面命中时只预览当前正文开头；忽略空行，不把图片地址当作文字。 */
@@ -105,7 +108,8 @@ public class SearchService {
                 .replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;");
     }
 
-    public record HitView(long id, String title, String snippet, String updateTime) {
+    public record HitView(long id, String title, String snippet, String updateTime,
+                          long ownerId, String ownerName, int permission, boolean isOwner) {
     }
 
     public record SearchView(long total, List<HitView> list) {
