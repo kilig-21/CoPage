@@ -41,7 +41,7 @@ export default function CreateGroupModal({ onClose, onCreated, onBusyChange }) {
       }
     }
   }
-  return <Modal className="group-create-modal" open title="创建小组" onCancel={busy ? undefined : onClose}
+  return <Modal className="group-create-modal group-fields-modal" open title="创建小组" onCancel={busy ? undefined : onClose}
     closable={!busy} maskClosable={!busy} keyboard={!busy} confirmLoading={busy} onOk={save}
     okText={confirmed ? '查看已确认小组' : pending ? '确认原小组' : '创建小组'} cancelText={pending ? '稍后确认' : '关闭'}
     okButtonProps={{ disabled: !confirmed && !pending && !name.trim() }} cancelButtonProps={{ disabled: busy }}>

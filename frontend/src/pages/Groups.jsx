@@ -17,7 +17,7 @@ const validId = raw => Number.isSafeInteger(Number(raw)) && Number(raw) > 0 ? Nu
 function GroupFields({ fields, busy, uncertain, error, onClose, onReview, onSave }) {
   const [name, setName] = useState(fields.name || '')
   const [description, setDescription] = useState(fields.description || '')
-  return <Modal open title="修改小组资料" closable={!busy}
+  return <Modal className="group-fields-modal" open title="修改小组资料" closable={!busy}
     maskClosable={!busy} keyboard={!busy} onCancel={onClose} footer={[
       <Button key="cancel" disabled={busy} onClick={onClose}>取消</Button>,
       uncertain && <Button key="review" disabled={busy} onClick={onReview}>核对当前列表</Button>,
