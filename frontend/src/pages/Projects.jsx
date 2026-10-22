@@ -19,7 +19,7 @@ function Fields({ value, context, ready, busy, uncertain, error, notice, onSave,
   const [name, setName] = useState(value.name || '')
   const [description, setDescription] = useState(value.description || '')
   const [groupId, setGroupId] = useState(value.groupId || 0)
-  return <Modal open title={value.id ? '修改项目资料' : '创建项目'} closable={!busy} maskClosable={!busy} keyboard={!busy}
+  return <Modal className="project-fields-modal" open title={value.id ? '修改项目资料' : '创建项目'} closable={!busy} maskClosable={!busy} keyboard={!busy}
     onCancel={busy ? undefined : onClose} footer={[
       <Button key="close" disabled={busy} onClick={onClose}>取消</Button>,
       uncertain && <Button key="review" disabled={busy} onClick={onReview}>{value.id ? '核对操作结果' : '确认原创建'}</Button>,
