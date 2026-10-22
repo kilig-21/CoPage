@@ -32,7 +32,8 @@ export default function PendingProjectDocuments({ contextKey, disabled, onBusyCh
       response = response.confirmTracking(); next.accepted = true; onCreated(response.data)
     } catch (failure) {
       if (current()) setError(next.accepted ? '原文档已确认，请从我的文档打开。'
-        : (failure?.message || '暂时无法确认原创建。') + ' 原记录保留，可稍后继续。')
+        : ([400, 401, 403, 404].includes(failure?.code) && typeof failure.message === 'string' && failure.message
+          ? failure.message : '暂时无法取得原创建结果。') + ' 原记录保留，可稍后继续确认。')
     } finally {
       if (attempt.current === next) { attempt.current = null; if (alive.current) { setBusy(false); onBusyChange(false) } }
     }
