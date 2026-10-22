@@ -2,6 +2,8 @@ package com.school.collab.collab.service;
 
 import com.school.collab.collab.CollabException;
 import com.school.collab.collab.persist.DocumentPersistence;
+import com.school.collab.collab.persist.DocPersistenceQueue;
+import com.school.collab.collab.persist.OperationFingerprint;
 import com.school.collab.collab.store.CollabDocumentSnapshot;
 import com.school.collab.collab.store.InMemoryDocumentStateStore;
 import com.school.collab.collab.store.VersionedOperation;
@@ -22,10 +24,86 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 class DocRevServiceTest {
+
+    @Test
+    void 持久化拒绝过期权限后不改热状态不确认不广播也不发快照消息() {
+        DocumentPersistence persistence = mock(DocumentPersistence.class);
+        DocPersistenceQueue queue = mock(DocPersistenceQueue.class);
+        var store = new InMemoryDocumentStateStore();
+        when(persistence.snapshot(7)).thenReturn(new CollabDocumentSnapshot(0, new Delta().insert("\n")));
+        doThrow(new CollabException(403, "当前用户没有文档编辑权限")).when(persistence).persist(
+                eq(7L), eq(0L), any(Delta.class), any(Delta.class), eq(2L), eq("client"), eq("op"), any(String.class));
+        DocRevService service = new DocRevService(store, persistence, queue);
+        AtomicInteger callbacks = new AtomicInteger();
+        assertEquals(403, assertThrows(CollabException.class, () -> service.commit(7, 0,
+                new Delta().insert("不能落库"), 2L, "client", "op", ignored -> callbacks.incrementAndGet())).getCode());
+        assertEquals(0, store.snapshot(7).revision());
+        assertEquals("\n", text(store.snapshot(7).content()));
+        assertEquals(0, callbacks.get());
+        verifyNoInteractions(queue);
+    }
+
+    @Test
+    void 已落库收据仍只返回原确认而不再次进入权限门禁或写正文() {
+        DocumentPersistence persistence = mock(DocumentPersistence.class);
+        DocPersistenceQueue queue = mock(DocPersistenceQueue.class);
+        Delta operation = new Delta().insert("原操作");
+        when(persistence.receipt(7, 2, "client", "op")).thenReturn(
+                new DocumentPersistence.Receipt(9, OperationFingerprint.of(0, operation)));
+        var store = new InMemoryDocumentStateStore();
+        DocRevService service = new DocRevService(store, persistence, queue);
+        AtomicInteger callbacks = new AtomicInteger();
+        var result = service.commit(7, 0, operation, 2L, "client", "op", ignored -> callbacks.incrementAndGet());
+        assertFalse(result.applied());
+        assertEquals(9, result.revision());
+        assertEquals(0, callbacks.get());
+        assertEquals(0, store.snapshot(7).revision());
+        verify(persistence).receipt(7, 2, "client", "op");
+        verifyNoMoreInteractions(persistence);
+        verifyNoInteractions(queue);
+    }
+
+    @Test
+    void 旧缓存历史补写仍无当前用户且不生成新操作收据() {
+        DocumentPersistence persistence = mock(DocumentPersistence.class);
+        when(persistence.snapshot(7)).thenReturn(new CollabDocumentSnapshot(0, new Delta().insert("\n")));
+        var store = new InMemoryDocumentStateStore();
+        Delta operation = new Delta().insert("旧历史");
+        store.save(7, new CollabDocumentSnapshot(1, new Delta().insert("旧历史\n")),
+                new VersionedOperation(1, operation), 2000);
+        DocRevService service = new DocRevService(store, persistence);
+        assertEquals(1, service.snapshot(7).revision());
+        verify(persistence).snapshot(7);
+        verify(persistence).persist(eq(7L), eq(0L),
+                org.mockito.ArgumentMatchers.argThat(value -> "旧历史\n".equals(text(value))),
+                org.mockito.ArgumentMatchers.argThat(value -> value.getOps().equals(operation.getOps())), eq(null));
+        verifyNoMoreInteractions(persistence);
+    }
+
+    @Test
+    void 所有者恢复仍携原请求身份持久化并只在成功后确认() {
+        DocumentPersistence persistence = mock(DocumentPersistence.class);
+        when(persistence.snapshot(7)).thenReturn(new CollabDocumentSnapshot(0, new Delta().insert("\n")));
+        var store = new InMemoryDocumentStateStore();
+        DocRevService service = new DocRevService(store, persistence);
+        AtomicInteger callbacks = new AtomicInteger();
+        var result = service.restore(7, 0, 0, 2, "restore-request", () -> new Delta().insert("历史正文\n"),
+                ignored -> callbacks.incrementAndGet());
+        assertTrue(result.applied());
+        assertEquals(1, result.revision());
+        assertEquals(1, callbacks.get());
+        assertEquals("历史正文\n", text(store.snapshot(7).content()));
+        verify(persistence).persist(eq(7L), eq(0L),
+                org.mockito.ArgumentMatchers.argThat(value -> "历史正文\n".equals(text(value))), any(Delta.class),
+                eq(2L), eq("history-api"), eq("restore-request"), any(String.class));
+    }
 
     @Test
     void 文档末尾换行不能被删除或变成图片且拒绝后版本和请求收据不改变() {

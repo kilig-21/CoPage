@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process'
 import { runRecoveryCheck } from './production-recovery-smoke.mjs'
 import { runProxyCheck } from './production-proxy-smoke.mjs'
 import { runDocumentRenamePermissionCheck } from './document-rename-permission-check.mjs'
+import { runDocumentEditPermissionCheck } from './document-edit-permission-smoke.mjs'
 
 const cwd = fileURLToPath(new URL('../', import.meta.url))
 const secret = () => randomBytes(32).toString('hex')
@@ -65,7 +66,8 @@ const recoverySmoke = process.argv.includes('--recovery-smoke')
 const proxySmoke = process.argv.includes('--proxy-smoke')
 const expirySmoke = process.argv.includes('--session-expiry-smoke')
 const renamePermissionSmoke = process.argv.includes('--rename-permission-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke
+const editPermissionSmoke = process.argv.includes('--edit-permission-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke
 const runtimeImages = process.argv.filter(value => value.startsWith('--runtime-image='))
 assert.ok(runtimeImages.length <= 1, '预构建运行时镜像只能指定一次')
 const runtimeImage = runtimeImages[0]?.slice('--runtime-image='.length)
@@ -147,6 +149,9 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       })
       assert.equal(registration.status, 200)
       assert.equal((await registration.json()).code, 0)
+      if (editPermissionSmoke) {
+        await runDocumentEditPermissionCheck({ docker, source: qaDocker, sql, ports, cwd, env: qaEnv })
+      }
       const smoke = spawnSync(process.execPath, ['scripts/collab-smoke.mjs'], {
         cwd, encoding: 'utf8', timeout: 120_000,
         env: { ...process.env, COPAGE_SMOKE_PORT_A: String(ports[0]), COPAGE_SMOKE_PORT_B: String(ports[1]),

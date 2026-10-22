@@ -193,6 +193,7 @@ public class DocumentPersistence {
                 || operationJson.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 4 * 1024 * 1024) {
             throw new CollabException(400, "文档正文最多 2 MiB，单次修改最多 4 MiB；图片使用上传地址保存");
         }
+        requireCurrentEditor(docId, userId);
         int updated = jdbc.update("""
                 UPDATE document SET content = ?, revision = revision + 1,
                        update_time = CURRENT_TIMESTAMP
@@ -203,6 +204,22 @@ public class DocumentPersistence {
         }
         jdbc.update("INSERT INTO doc_operation (doc_id, revision, op, user_id) VALUES (?, ?, ?, ?)",
                 docId, expectedRevision + 1, operationJson, userId);
+    }
+
+    private void requireCurrentEditor(long docId, Long userId) {
+        // null 只用于已接受的旧 Redis 历史补写，不把历史作者冒充当前编辑者。
+        if (userId == null) return;
+        if (userId <= 0) throw new CollabException(403, "当前用户没有文档编辑权限");
+        // 与协作者变更共用 SQL 文档行锁；仅在 Redis 锁内复查仍会跨过权限事务。
+        var owners = jdbc.query("SELECT owner_id FROM document WHERE id = ? AND is_deleted = 0 FOR UPDATE",
+                (rs, n) -> rs.getLong("owner_id"), docId);
+        if (owners.isEmpty()) throw new CollabException(404, "文档不存在或已删除");
+        if (owners.getFirst().longValue() == userId.longValue()) return;
+        // 当前锁读不依赖外层事务可能已有的普通读取快照。
+        var permissions = jdbc.query("SELECT permission FROM doc_collaborator WHERE doc_id = ? AND user_id = ? FOR UPDATE",
+                (rs, n) -> rs.getInt("permission"), docId, userId);
+        if (permissions.isEmpty() || permissions.getFirst() != 2)
+            throw new CollabException(403, "当前用户没有文档编辑权限");
     }
 
     private Delta read(String json) {
