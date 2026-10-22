@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, List, Space, Typography } from 'antd'
 import { confirmProjectDocument, projectDocumentIdentity, sameProjectDocumentIdentity } from '../api/projectDocuments'
 import usePendingProjectDocuments from '../api/usePendingProjectDocuments'
+import { subscribeProjectDocumentEvents } from '../api/projectDocumentEvents'
 
 export default function PendingProjectDocuments({ contextKey, disabled, onBusyChange, onCreated }) {
   const pending = usePendingProjectDocuments()
@@ -16,8 +17,9 @@ export default function PendingProjectDocuments({ contextKey, disabled, onBusyCh
       if (alive.current) { setBusy(false); setError('') }
       if (old) onBusyChange(false)
     }
-    window.addEventListener('storage', cancel); window.addEventListener('copage-auth-changed', cancel)
-    return () => { alive.current = false; cancel(); window.removeEventListener('storage', cancel); window.removeEventListener('copage-auth-changed', cancel) }
+    const unsubscribe = subscribeProjectDocumentEvents({ eventTarget: window, getStorage: () => localStorage,
+      readIdentity: projectDocumentIdentity, onIdentityInvalidated: cancel })
+    return () => { alive.current = false; unsubscribe(); cancel() }
   }, [contextKey, onBusyChange])
   async function confirm(record) {
     if (attempt.current || disabled || !sameProjectDocumentIdentity(pending.identity)) return

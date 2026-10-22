@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { listPendingProjectDocuments, projectDocumentIdentity, sameProjectDocumentIdentity } from './projectDocuments'
+import { subscribeProjectDocumentEvents } from './projectDocumentEvents'
 
 export default function usePendingProjectDocuments() {
   const [refresh, setRefresh] = useState(0)
@@ -7,9 +8,9 @@ export default function usePendingProjectDocuments() {
   const generation = useRef(0)
   useEffect(() => {
     const reload = () => { generation.current++; setState({ records: [], loading: true, error: '', identity: null }); setRefresh(value => value + 1) }
-    const events = ['storage', 'copage-auth-changed', 'copage-project-documents-changed']
-    for (const event of events) window.addEventListener(event, reload)
-    return () => { generation.current++; for (const event of events) window.removeEventListener(event, reload) }
+    const unsubscribe = subscribeProjectDocumentEvents({ eventTarget: window, getStorage: () => localStorage,
+      readIdentity: projectDocumentIdentity, onRecordsChanged: reload })
+    return () => { generation.current++; unsubscribe() }
   }, [])
   useEffect(() => {
     const controller = new AbortController(), ticket = ++generation.current, identity = projectDocumentIdentity()
