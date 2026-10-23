@@ -1,0 +1,6 @@
+.account-feedback { margin-top: 16px; scroll-margin-bottom: 16px; }
+.account-feedback .ant-alert-content { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .account-feedback .ant-alert { flex-wrap: wrap; }
+  .account-feedback .ant-alert-action { flex-basis: 100%; margin: 12px 0 0; padding-left: 22px; }
+}

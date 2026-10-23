@@ -5,6 +5,7 @@ import request from '../api/request'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import { expireSession } from '../auth/session'
 import { createAccountSettings, isAccountSessionFailure } from '../api/accountSettings'
+import '../styles/account.css'
 
 export default function Account() {
   const navigate = useNavigate()
@@ -15,18 +16,34 @@ export default function Account() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [feedbackFor, setFeedbackFor] = useState('')
   const [sessionBlocked, setSessionBlocked] = useState(false)
   const [nicknameForm] = Form.useForm()
   const [passwordForm] = Form.useForm()
   const alive = useRef(true)
   const mutation = useRef(null)
   const settings = useRef(null)
+  const feedback = useRef(null)
+  const nicknameAction = useRef(null)
+  const passwordAction = useRef(null)
   function accountSettings() {
     if (!settings.current) settings.current = createAccountSettings({ storage: localStorage,
       get: (...args) => request.get(...args), put: (...args) => request.put(...args), post: (...args) => request.post(...args) })
     return settings.current
   }
   const relogin = () => navigate('/login', { replace: true, state: { sessionChanged: true, from: '/account' } })
+  useEffect(() => {
+    if (!error && !notice) return
+    const action = (feedbackFor === 'nickname' ? nicknameAction : passwordAction).current
+    if (!action || !feedback.current) return
+    const bounds = action.getBoundingClientRect()
+    const headerBottom = document.querySelector('.workspace-header')?.getBoundingClientRect().bottom || 0
+    // 仍在查看本次操作时显示附近的结果；已经滚动离开则不拉回，也不移动键盘焦点。
+    if (bounds.bottom > Math.max(0, headerBottom) && bounds.top < window.innerHeight) {
+      feedback.current.style.scrollMarginTop = `${Math.max(0, headerBottom) + 12}px`
+      feedback.current.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+    }
+  }, [error, notice, feedbackFor])
   useEffect(() => {
     alive.current = true
     return () => { alive.current = false; mutation.current?.abort() }
@@ -52,7 +69,7 @@ export default function Account() {
   async function saveNickname(values) {
     if (mutation.current || sessionBlocked) return
     const controller = new AbortController(); mutation.current = controller
-    setBusy(true); setError(''); setNotice('')
+    setBusy(true); setError(''); setNotice(''); setFeedbackFor('nickname')
     try {
       const submittedNickname = values.nickname.trim()
       const verified = await accountSettings().saveNickname(profile, submittedNickname, controller.signal)
@@ -76,7 +93,7 @@ export default function Account() {
   async function changePassword(values) {
     if (mutation.current || sessionBlocked) return
     const controller = new AbortController(); mutation.current = controller
-    setBusy(true); setError(''); setNotice('')
+    setBusy(true); setError(''); setNotice(''); setFeedbackFor('password')
     try {
       const currentSettings = accountSettings()
       await currentSettings.changePassword({ currentPassword: values.currentPassword, newPassword: values.newPassword }, controller.signal)
@@ -104,8 +121,6 @@ export default function Account() {
       <Typography.Title level={2}>我的账号</Typography.Title>
       {loadError && <Alert type="error" showIcon message={loadError} action={sessionBlocked
         ? <Button onClick={relogin}>重新登录</Button> : <Button onClick={() => setRefresh(value => value + 1)}>重试</Button>} />}
-      {error && <Alert type="error" showIcon message={error} action={sessionBlocked && <Button onClick={relogin}>重新登录</Button>} />}
-      {notice && <Alert type="success" showIcon message={notice} />}
       <Spin spinning={loading}>
         {profile && <Space direction="vertical" style={{ width: '100%' }} size="large">
           <Card title="个人信息">
@@ -114,8 +129,12 @@ export default function Account() {
               <Form.Item label="昵称" name="nickname" rules={[{ required: true, whitespace: true, message: '请输入昵称' }, { max: 50, message: '昵称最多50个字符' }]}>
                 <Input maxLength={50} autoComplete="nickname" />
               </Form.Item>
-              <Button type="primary" htmlType="submit" loading={busy}>保存昵称</Button>
+              <div ref={nicknameAction}><Button type="primary" htmlType="submit" loading={busy}>保存昵称</Button></div>
             </Form>
+            {feedbackFor === 'nickname' && (error || notice) && <div ref={feedback} className="account-feedback">
+              {error ? <Alert type="error" showIcon message={error} action={sessionBlocked && <Button onClick={relogin}>重新登录</Button>} />
+                : <Alert type="success" showIcon role="status" message={notice} />}
+            </div>}
           </Card>
           <Card title="修改密码">
             <Typography.Paragraph>修改后所有旧登录将失效，请用新密码重新登录。文档、成员权限和本地未确认草稿会保留。</Typography.Paragraph>
@@ -125,8 +144,11 @@ export default function Account() {
                 !value || new TextEncoder().encode(value).length <= 72 ? Promise.resolve() : Promise.reject(new Error('新密码的UTF-8长度不能超过72字节')) }]}><Input.Password autoComplete="new-password" /></Form.Item>
               <Form.Item label="确认新密码" name="confirmPassword" dependencies={['newPassword']} rules={[{ required: true, message: '请再次输入新密码' }, ({ getFieldValue }) => ({ validator: (_, value) =>
                 !value || value === getFieldValue('newPassword') ? Promise.resolve() : Promise.reject(new Error('两次新密码不一致')) })]}><Input.Password autoComplete="new-password" /></Form.Item>
-              <Button type="primary" htmlType="submit" loading={busy}>更新密码并重新登录</Button>
+              <div ref={passwordAction}><Button type="primary" htmlType="submit" loading={busy}>更新密码并重新登录</Button></div>
             </Form>
+            {feedbackFor === 'password' && error && <div ref={feedback} className="account-feedback">
+              <Alert type="error" showIcon message={error} action={sessionBlocked && <Button onClick={relogin}>重新登录</Button>} />
+            </div>}
           </Card>
         </Space>}
       </Spin>
