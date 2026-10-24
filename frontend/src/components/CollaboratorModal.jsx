@@ -17,6 +17,17 @@ export default function CollaboratorModal({ doc, onClose, returnToShare = false 
   const base = '/doc/' + doc.id + '/collaborators'
 
   useEffect(() => {
+    const closeFromPage = event => {
+      if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented || busy || mutation.current ||
+          event.target !== document.body || document.activeElement !== document.body) return
+      event.preventDefault()
+      onClose()
+    }
+    window.addEventListener('keydown', closeFromPage)
+    return () => window.removeEventListener('keydown', closeFromPage)
+  }, [busy, onClose])
+
+  useEffect(() => {
     let active = true
     const controller = new AbortController()
     setLoading(true)
@@ -57,7 +68,7 @@ export default function CollaboratorModal({ doc, onClose, returnToShare = false 
     {error && <Alert type="error" showIcon message={error} action={<Button size="small" disabled={busy || loading} onClick={() => { setError(''); setRefresh((value) => value + 1) }}>刷新列表</Button>} />}
     <Form form={form} layout="vertical" initialValues={{ permission: 1 }} onFinish={(values) => mutate(signal => request.post(base, { ...values, username: values.username.trim() }, { signal }), () => form.resetFields(['username']))}>
       <Form.Item label="已注册用户名" name="username" rules={[{ required: true, whitespace: true, message: '请输入用户名' }, { max: 50, message: '用户名最多 50 个字符' }]}><Input maxLength={50} disabled={busy} autoComplete="off" /></Form.Item>
-      <Space align="start">
+      <Space align="start" wrap>
         <Form.Item label="访问权限" name="permission"><Select options={options} disabled={busy} style={{ width: 130 }} /></Form.Item>
         <Form.Item label=" "><Button type="primary" htmlType="submit" loading={busy} disabled={!listReady}>添加协作者</Button></Form.Item>
       </Space>

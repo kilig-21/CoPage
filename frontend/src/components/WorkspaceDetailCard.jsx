@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Card } from 'antd'
 
 // 只消费“打开详情”的意图；同一资料的刷新、筛选和分页不重新移动焦点。
-export default function WorkspaceDetailCard({ id, title, arrival, waiting, children, ...props }) {
+export default function WorkspaceDetailCard({ id, title, arrival, waiting, children, className, ...props }) {
   const heading = useRef(null)
   const previousArrival = useRef(arrival)
   const pending = useRef(true)
@@ -42,7 +42,7 @@ export default function WorkspaceDetailCard({ id, title, arrival, waiting, child
     })
     return () => cancelAnimationFrame(frame)
   }, [arrival, waiting])
-  return <Card {...props} id={id} role="region" aria-labelledby={id + '-title'}
+  return <Card {...props} className={'workspace-detail-card' + (className ? ' ' + className : '')} id={id} role="region" aria-labelledby={id + '-title'}
     title={<h3 id={id + '-title'} ref={heading} tabIndex={-1} className="workspace-detail-title">{title}</h3>}>
     {children}
   </Card>

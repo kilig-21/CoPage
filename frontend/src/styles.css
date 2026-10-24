@@ -102,6 +102,18 @@ body { margin: 0; min-width: 0; }
 .copy-creation-review .ant-list-item-meta { min-width: 0; }
 .copy-creation-review .ant-list-item-meta-title { overflow-wrap: anywhere; }
 .document-share-modal .ant-alert { margin-top: 12px; }
+@media screen and (max-width: 640px), screen and (max-height: 640px) {
+  .document-collaborators-modal { top: 24px; padding-bottom: 24px; }
+  .document-collaborators-modal .ant-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); }
+  .document-collaborators-modal .ant-modal-header, .document-collaborators-modal .ant-modal-footer { flex-shrink: 0; }
+  .document-collaborators-modal .ant-modal-header { padding-inline-end: 44px; max-height: 25dvh; overflow-y: auto; }
+  .document-collaborators-modal .ant-modal-title { overflow-wrap: anywhere; }
+  .document-collaborators-modal .ant-modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .document-collaborators-modal .ant-btn, .document-collaborators-modal .ant-input { min-height: 44px; }
+  .document-collaborators-modal .ant-select-single { height: 44px; }
+  .document-collaborators-modal .ant-modal-close { width: 44px; height: 44px; }
+  .document-collaborators-modal .ant-modal-footer .ant-btn { max-width: 100%; height: auto; white-space: normal; }
+}
 @media (max-width: 640px) {
   .user-guide-drawer .ant-drawer-body { padding: 16px; }
   .user-guide-drawer .ant-drawer-close { width: 44px; min-height: 44px; margin-inline-end: 8px; }
@@ -206,6 +218,13 @@ body { margin: 0; min-width: 0; }
 .group-inbox-empty .ant-card-head-title { padding: 0; white-space: normal; }
 .group-inbox-empty .ant-card-body { display: none; }
 .group-page .ant-list-item-meta-title, .group-page .ant-list-item-meta-description { overflow-wrap: anywhere; }
+.organization-list-summary, .organization-list-summary > .ant-space-item { min-width: 0; max-width: 100%; }
+.organization-list-summary .ant-tag { max-width: 100%; margin-inline-end: 0; white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .workspace-detail-card.ant-card > .ant-card-head > .ant-card-head-wrapper { flex-direction: column; align-items: stretch; gap: 8px; padding-block: 16px; }
+  .workspace-detail-card.ant-card > .ant-card-head .ant-card-head-title { flex: none; width: 100%; padding-block: 0; white-space: normal; overflow-wrap: anywhere; }
+  .workspace-detail-card.ant-card > .ant-card-head .ant-card-extra { align-self: flex-end; max-width: 100%; margin-inline-start: 0; padding-block: 0; }
+}
 .group-creation-review { border-color: var(--cp-border, #d6dce5); }
 .group-creation-review .ant-card-head-title { white-space: normal; }
 .group-creation-review .ant-list-item-meta { min-width: 0; }

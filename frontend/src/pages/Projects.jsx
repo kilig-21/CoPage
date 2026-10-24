@@ -292,7 +292,7 @@ export default function Projects() {
           ] : [] : [<Button key="open" disabled={!ready} aria-expanded={selected === project.id}
             aria-controls={selected === project.id ? 'project-detail' : undefined}
             onClick={() => { setDetailArrival(n => n + 1); navigate({ project: String(project.id) }) }}>查看项目</Button>]}>
-            <List.Item.Meta title={project.name} description={<Space wrap><Tag>{project.groupId ? '小组：' + project.groupName : '个人项目'}</Tag>
+            <List.Item.Meta title={project.name} description={<Space wrap className="organization-list-summary"><Tag>{project.groupId ? '小组：' + project.groupName : '个人项目'}</Tag>
               <span>{project.visibleDocumentCount} 篇可访问文档</span><span>{project.description || '尚未填写简介'}</span></Space>} />
           </List.Item>} />
         {listed?.total > SIZE && <Pagination current={page} total={listed.total} pageSize={SIZE} showSizeChanger={false}

@@ -311,7 +311,7 @@ export default function Groups() {
           ] : [] : [<Button key="open" disabled={!groupsAvailable || busy} aria-expanded={selected === group.id}
             aria-controls={selected === group.id ? 'group-detail' : undefined}
             onClick={() => { setDetailArrival(n => n + 1); choose(group.id) }}>查看成员</Button>]}>
-            <List.Item.Meta title={group.name} description={<Space wrap><Tag>{roles[group.role]}</Tag><span>小组 #{group.id}</span>
+            <List.Item.Meta title={group.name} description={<Space wrap className="organization-list-summary"><Tag>{roles[group.role]}</Tag><span>小组 #{group.id}</span>
               <span>{group.memberCount} 位成员</span><span>{group.description || '尚未填写简介'}</span></Space>} />
           </List.Item>} />
         {groups?.total > SIZE && <Pagination current={page} total={groups.total} pageSize={SIZE}
