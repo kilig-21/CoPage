@@ -19,6 +19,7 @@ export default function PrintModal({ docId, canPrint, onClose }) {
   const [missingImages, setMissingImages] = useState(0)
   const [acceptMissing, setAcceptMissing] = useState(false)
   const sheet = useRef(null)
+  const notices = useRef(null)
   const permissionCheck = useRef(null)
   const canPrintRef = useRef(canPrint)
   canPrintRef.current = canPrint
@@ -27,6 +28,9 @@ export default function PrintModal({ docId, canPrint, onClose }) {
     document.body.append(portal)
     return () => portal.remove()
   }, [portal])
+  useLayoutEffect(() => {
+    if (error || missingImages) notices.current?.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+  }, [error, missingImages])
   useEffect(() => {
     const timer = setInterval(() => setReady(canPrintRef.current()), 200)
     return () => { clearInterval(timer); permissionCheck.current?.abort() }
@@ -101,6 +105,11 @@ export default function PrintModal({ docId, canPrint, onClose }) {
   }
   useEffect(() => {
     const shortcut = event => {
+      if (event.key === 'Escape' && !event.isComposing) {
+        event.preventDefault()
+        onClose()
+        return
+      }
       if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey ||
           event.isComposing || event.key.toLowerCase() !== 'p') return
       event.preventDefault()
@@ -110,7 +119,7 @@ export default function PrintModal({ docId, canPrint, onClose }) {
     return () => window.removeEventListener('keydown', shortcut)
   })
   const disabled = !ready || loading || printing || !snapshot || !assetsReady || (missingImages > 0 && !acceptMissing)
-  return <Modal title="打印 / 另存为 PDF" open width={880} getContainer={portal} onCancel={onClose}
+  return <Modal className="document-print-modal" title="打印 / 另存为 PDF" open width={880} getContainer={portal} onCancel={onClose}
     footer={<Space wrap>
       <Button disabled={loading || printing || !ready} onClick={() => setAttempt(value => value + 1)}>刷新预览</Button>
       <Button onClick={onClose}>关闭</Button>
@@ -120,10 +129,12 @@ export default function PrintModal({ docId, canPrint, onClose }) {
       <Typography.Paragraph>预览为已保存的固定版本，不随其他人的后续编辑变化。需要最新内容时请刷新预览；打印窗口中可选择“另存为 PDF”。纸张、页边距和页眉页脚由浏览器设置。</Typography.Paragraph>
       <Typography.Paragraph type="secondary">不包含本地未确认草稿、成员权限或历史记录。图片不打包源文件；无法加载时请重试。关闭或取消打印不会修改文档。</Typography.Paragraph>
       {!ready && <Alert type="warning" showIcon message="请先等待连接、同步和保存完成" />}
-      {error && <Alert type="error" showIcon message={error} />}
-      {(loading || (snapshot && !assetsReady)) && <div role="status"><Spin size="small" /> {loading ? '正在读取已保存版本…' : '正在加载打印图片…'}</div>}
-      {missingImages > 0 && <Alert type="warning" showIcon message={missingImages + ' 张图片未能加载'}
-        description={<Checkbox checked={acceptMissing} onChange={event => setAcceptMissing(event.target.checked)}>我接受缺图，仅打印当前可见内容</Checkbox>} />}
+      <div ref={notices}>
+        {error && <Alert type="error" showIcon message={error} />}
+        {(loading || (snapshot && !assetsReady)) && <div role="status"><Spin size="small" /> {loading ? '正在读取已保存版本…' : '正在加载打印图片…'}</div>}
+        {missingImages > 0 && <Alert type="warning" showIcon message={missingImages + ' 张图片未能加载'}
+          description={<Checkbox checked={acceptMissing} onChange={event => setAcceptMissing(event.target.checked)}>我接受缺图，仅打印当前可见内容</Checkbox>} />}
+      </div>
     </div>
     <article ref={sheet} className="document-print-sheet" aria-label="打印文档预览">
       {snapshot ? <>
