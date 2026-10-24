@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, Button, Checkbox, Modal, Space, Spin, Typography } from 'antd'
 import request from '../api/request'
+import { confirmPrintAccess, parsePrintSnapshot } from '../api/printSnapshot'
 import DocumentPreview from './DocumentPreview'
 
 export default function PrintModal({ docId, canPrint, onClose }) {
@@ -45,10 +46,10 @@ export default function PrintModal({ docId, canPrint, onClose }) {
       return () => controller.abort()
     }
     request.get('/doc/' + docId, { signal: controller.signal })
-      .then(({ data }) => {
+      .then(response => {
         if (controller.signal.aborted) return
         if (!canPrintRef.current()) throw new Error('连接或编辑状态已变化，请等待同步后刷新预览')
-        setSnapshot(data)
+        setSnapshot(parsePrintSnapshot(response, docId))
       })
       .catch(ex => { if (!controller.signal.aborted) setError(ex.message || '打印预览读取失败，请重试') })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
@@ -90,8 +91,9 @@ export default function PrintModal({ docId, canPrint, onClose }) {
     setPrinting(true); setError('')
     try {
       // 重新校验仍可访问，打印的是明确标注版本的固定副本。
-      await request.get('/doc/' + docId + '/metadata', { signal: controller.signal })
+      const response = await request.get('/doc/' + docId + '/metadata', { signal: controller.signal })
       if (controller.signal.aborted) return
+      confirmPrintAccess(response, docId)
       if (!canPrintRef.current()) throw new Error('连接或编辑状态已变化，请等待同步后重试')
       const oldTitle = document.title
       try { document.title = snapshot.title + ' · CoPage'; window.print() }
@@ -142,7 +144,7 @@ export default function PrintModal({ docId, canPrint, onClose }) {
         <p className="document-print-meta">CoPage · 已保存版本 {snapshot.revision}</p>
         {missingImages > 0 && <p className="document-print-meta">部分图片未能加载，本副本可能缺图。</p>}
         <DocumentPreview content={snapshot.content} label="打印正文" />
-      </> : <p>打印预览尚未就绪，请关闭打印窗口后重试。</p>}
+      </> : <p>打印预览尚未就绪，请刷新预览后重试。</p>}
     </article>
   </Modal>
 }
