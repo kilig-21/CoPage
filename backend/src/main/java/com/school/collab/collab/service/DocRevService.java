@@ -10,6 +10,7 @@ import com.school.collab.collab.store.InMemoryDocumentStateStore;
 import com.school.collab.collab.store.VersionedOperation;
 import com.school.collab.ot.Delta;
 import com.school.collab.ot.DeltaApply;
+import com.school.collab.ot.DeltaDiff;
 import com.school.collab.ot.DeltaTransform;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -200,9 +201,18 @@ public class DocRevService {
                 new Delta().insert("restore:" + targetRevision));
         return store.withDocumentLock(docId, () -> commitLocked(docId, expectedRevision,
                 current -> {
-                    Delta replacement = target.get().copy();
-                    if (current.content().length() > 0) replacement.delete(current.content().length());
-                    return replacement;
+                    try {
+                        Delta restored = target.get();
+                        Delta operation = DeltaDiff.diff(current.content(), restored);
+                        // Fragmented diffs can exceed the existing operation
+                        // limit even when the restored document fits. Reject
+                        // before applying or reserving the request receipt.
+                        if (persistence != null) persistence.validateSize(restored, operation);
+                        return operation;
+                    } catch (DeltaDiff.ComplexityLimitException | DeltaDiff.TerminalNewlineAttributeException
+                             | DeltaDiff.OperationSizeLimitException failure) {
+                        throw new CollabException(400, failure.getMessage());
+                    }
                 }, userId, "history-api", requestId, hash, true, afterCommit));
     }
 

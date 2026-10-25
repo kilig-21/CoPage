@@ -189,10 +189,7 @@ public class DocumentPersistence {
                                   Delta operation, Long userId) {
         String contentJson = write(content);
         String operationJson = write(operation);
-        if (contentJson.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 2 * 1024 * 1024
-                || operationJson.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 4 * 1024 * 1024) {
-            throw new CollabException(400, "文档正文最多 2 MiB，单次修改最多 4 MiB；图片使用上传地址保存");
-        }
+        validateSerializedSize(contentJson, operationJson);
         requireCurrentEditor(docId, userId);
         int updated = jdbc.update("""
                 UPDATE document SET content = ?, revision = revision + 1,
@@ -204,6 +201,19 @@ public class DocumentPersistence {
         }
         jdbc.update("INSERT INTO doc_operation (doc_id, revision, op, user_id) VALUES (?, ?, ?, ?)",
                 docId, expectedRevision + 1, operationJson, userId);
+    }
+
+    /** Check a generated restore before applying a potentially fragmented
+     * operation; persistence still enforces the same limits transactionally. */
+    public void validateSize(Delta content, Delta operation) {
+        validateSerializedSize(write(content), write(operation));
+    }
+
+    private void validateSerializedSize(String contentJson, String operationJson) {
+        if (contentJson.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 2 * 1024 * 1024
+                || operationJson.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 4 * 1024 * 1024) {
+            throw new CollabException(400, "文档正文最多 2 MiB，单次修改最多 4 MiB；图片使用上传地址保存");
+        }
     }
 
     private void requireCurrentEditor(long docId, Long userId) {

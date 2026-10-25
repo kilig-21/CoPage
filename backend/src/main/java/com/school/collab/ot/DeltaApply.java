@@ -19,27 +19,27 @@ public final class DeltaApply {
         validateDocument(document);
 
         OpIterator source = new OpIterator(document.getOps());
-        Delta result = new Delta();
+        DocumentBuilder result = new DocumentBuilder();
 
         for (Op operation : change.getOps()) {
             switch (operation.kind()) {
-                case INSERT -> result.push(operation);
+                case INSERT -> result.append(operation);
                 case RETAIN -> retain(source, result, operation.length(), operation.getAttributes());
                 case DELETE -> discard(source, operation.length());
             }
         }
 
         while (source.hasNext()) {
-            result.push(source.next());
+            result.append(source.next());
         }
-        return result;
+        return result.finish();
     }
 
-    private static void retain(OpIterator source, Delta result, int remaining, Map<String, Object> attributes) {
+    private static void retain(OpIterator source, DocumentBuilder result, int remaining, Map<String, Object> attributes) {
         while (remaining > 0) {
             Op part = nextDocumentPart(source, remaining);
             remaining -= part.length();
-            result.push(applyAttributes(part, attributes));
+            result.append(applyAttributes(part, attributes));
         }
     }
 
@@ -77,6 +77,41 @@ public final class DeltaApply {
             if (!operation.isInsert()) {
                 throw new IllegalArgumentException("文档 Delta 只能包含 insert 操作");
             }
+        }
+    }
+
+    /** Buffer a complete text run once instead of copying the accumulated
+     * document for every small retain/insert in a fragmented change. */
+    private static final class DocumentBuilder {
+        private final Delta result = new Delta();
+        private StringBuilder text;
+        private Map<String, Object> attributes;
+
+        private void append(Op operation) {
+            if (!operation.isTextInsert()) {
+                flush();
+                result.push(operation);
+                return;
+            }
+            Map<String, Object> nextAttributes = operation.getAttributes();
+            if (text != null && !Objects.equals(attributes, nextAttributes)) flush();
+            if (text == null) {
+                text = new StringBuilder();
+                attributes = nextAttributes;
+            }
+            text.append(operation.text());
+        }
+
+        private void flush() {
+            if (text == null) return;
+            result.insert(text.toString(), attributes);
+            text = null;
+            attributes = null;
+        }
+
+        private Delta finish() {
+            flush();
+            return result;
         }
     }
 }

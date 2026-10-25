@@ -67,7 +67,8 @@ const proxySmoke = process.argv.includes('--proxy-smoke')
 const expirySmoke = process.argv.includes('--session-expiry-smoke')
 const renamePermissionSmoke = process.argv.includes('--rename-permission-smoke')
 const editPermissionSmoke = process.argv.includes('--edit-permission-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke
+const historyRestoreSmoke = process.argv.includes('--history-restore-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke
 const runtimeImages = process.argv.filter(value => value.startsWith('--runtime-image='))
 assert.ok(runtimeImages.length <= 1, '预构建运行时镜像只能指定一次')
 const runtimeImage = runtimeImages[0]?.slice('--runtime-image='.length)
@@ -163,6 +164,10 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       console.log('PASS: 两个 prod 后端均就绪，独立注册账号跨实例协同通过，未创建演示账号')
       if (renamePermissionSmoke) {
         await runDocumentRenamePermissionCheck({ docker, source: qaDocker, sql, ports, username, password, cwd, env: qaEnv })
+      }
+      if (historyRestoreSmoke) {
+        const { runHistoryRestoreCollaborationCheck } = await import('./history-restore-collaboration-check.mjs')
+        await runHistoryRestoreCollaborationCheck({ docker, source: qaDocker, sql, ports, username, password })
       }
       if (expirySmoke) {
         const expiry = spawnSync(process.execPath, ['scripts/session-expiry-smoke.mjs'], {

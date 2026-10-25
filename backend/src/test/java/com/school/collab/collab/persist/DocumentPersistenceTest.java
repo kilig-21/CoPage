@@ -19,6 +19,21 @@ class DocumentPersistenceTest {
     private final Delta content = new Delta().insert("已保存正文\n");
     private final Delta operation = new Delta().insert("已保存正文");
 
+    @Test
+    void 预检沿用真实序列化UTF8容量且不读写数据库() {
+        assertDoesNotThrow(() -> persistence.validateSize(
+                new Delta().insert("a".repeat(2_000_000) + "\n"),
+                new Delta().insert("b".repeat(4_000_000))));
+        assertEquals(400, assertThrows(CollabException.class, () -> persistence.validateSize(
+                new Delta().insert("文".repeat(700_000) + "\n"), operation)).getCode());
+        assertEquals(400, assertThrows(CollabException.class, () -> persistence.validateSize(
+                content, new Delta().insert("x".repeat(4 * 1024 * 1024)))).getCode());
+        // Escaped control characters consume their actual JSON bytes too.
+        assertEquals(400, assertThrows(CollabException.class, () -> persistence.validateSize(
+                new Delta().insert("\0".repeat(400_000) + "\n"), operation)).getCode());
+        verifyNoInteractions(jdbc);
+    }
+
     private void document(long owner) {
         doReturn(List.of(owner)).when(jdbc).query(contains("FROM document"), any(RowMapper.class), eq(7L));
         doReturn(1).when(jdbc).update(contains("UPDATE document SET content"), anyString(), eq(7L), eq(0L));

@@ -117,6 +117,11 @@ public final class Delta {
         return ops.stream().mapToInt(Op::length).sum();
     }
 
+    /** Normalized operation count without copying every operation. */
+    public int operationCount() {
+        return ops.size();
+    }
+
     /** 本次编辑对文档总长度的净变化。 */
     public int changeLength() {
         return ops.stream().mapToInt(op -> {

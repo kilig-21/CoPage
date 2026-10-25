@@ -5,12 +5,48 @@ import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
 
 class DeltaApplyTest {
+
+    @Test
+    void 大量细粒度修改应线性聚合正文而不反复复制累计字符串() {
+        int repetitions = 50_000;
+        Delta document = new Delta().insert("abcd".repeat(repetitions) + "\n");
+        Delta change = new Delta();
+        for (int i = 0; i < repetitions; i++) change.retain(3).delete(1).insert("e");
+        var original = document.getOps();
+        var operations = change.getOps();
+        assertTimeout(Duration.ofSeconds(5), () -> {
+            Delta applied = DeltaApply.apply(document, change);
+            assertEquals(new Delta().insert("abce".repeat(repetitions) + "\n").getOps(), applied.getOps());
+        });
+        assertEquals(original, document.getOps());
+        assertEquals(operations, change.getOps());
+    }
+
+    @Test
+    void 文本聚合仍应保留格式边界嵌入旧null以及未覆盖尾部() {
+        var image = new ObjectMapper().createObjectNode().put("image", "https://example.test/b.png");
+        Map<String, Object> legacy = new LinkedHashMap<>();
+        legacy.put("legacy", null);
+        Delta document = new Delta().insert("ab", Map.of("bold", true))
+                .push(Op.insertEmbed(image, Map.of("width", "10")))
+                .insert("cd", legacy).insert("\n");
+        var original = document.getOps();
+        Delta change = new Delta().retain(1).insert("X", Map.of("bold", true))
+                .retain(2).insert("Y", legacy);
+        Delta expected = new Delta().insert("aXb", Map.of("bold", true))
+                .push(Op.insertEmbed(image, Map.of("width", "10")))
+                .insert("Ycd", legacy).insert("\n");
+        assertEquals(expected.getOps(), DeltaApply.apply(document, change).getOps());
+        assertEquals(original, document.getOps());
+    }
 
     @Test
     void 应插入文本并保留未覆盖的尾部内容() {

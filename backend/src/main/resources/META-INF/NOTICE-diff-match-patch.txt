@@ -1,0 +1,13 @@
+DeltaDiff.java contains a modified adaptation of the linear-space Myers
+bidirectional bisection algorithm from Google diff-match-patch.
+
+Copyright 2006 Google Inc.
+Licensed under the Apache License, Version 2.0.
+The license is included at META-INF/licenses/diff-match-patch.txt.
+
+Source:
+https://github.com/google/diff-match-patch/blob/master/java/src/name/fraser/neil/plaintext/diff_match_patch.java
+
+CoPage adaptations (2026): operate on document code points and embeds, emit
+UTF-16 Delta operations and attribute changes, preserve the terminal newline,
+use an explicit task stack and a deterministic work budget.

@@ -12,6 +12,7 @@ import com.school.collab.ot.Op;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -31,6 +32,127 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 class DocRevServiceTest {
+
+    @Test
+    void 恢复后晚到旧基线插入仍位于末尾换行之前并且原请求只确认一次() {
+        DocRevService service = new DocRevService();
+        service.commit(70, 0, new Delta().insert("当前正文"));
+        AtomicInteger callbacks = new AtomicInteger();
+        var restored = service.restore(70, 1, 0, 1, "restore-diff", () -> new Delta().insert("历史版本\n"), ignored -> callbacks.incrementAndGet());
+        assertEquals(2, restored.revision());
+        var late = service.commit(70, 1, new Delta().retain(4).insert("晚到"), 2L, "peer", "late", ignored -> callbacks.incrementAndGet());
+        assertEquals(3, late.revision());
+        assertEquals("历史版本晚到\n", text(service.snapshot(70).content()));
+        assertFalse(service.restore(70, 1, 0, 1, "restore-diff", () -> { throw new AssertionError("重放必须先读收据"); }, ignored -> callbacks.incrementAndGet()).applied());
+        assertFalse(service.commit(70, 1, new Delta().retain(4).insert("晚到"), 2L, "peer", "late", ignored -> callbacks.incrementAndGet()).applied());
+        assertEquals(2, callbacks.get()); assertEquals(3, service.snapshot(70).revision());
+    }
+
+    @Test
+    void 恢复保留共同文字身份而不吞掉晚到格式且版本冲突不调用目标工厂() {
+        DocRevService service = new DocRevService();
+        service.commit(71, 0, new Delta().insert("共享旧段"));
+        service.restore(71, 1, 0, 1, "restore-format", () -> new Delta().insert("共享新段\n"), ignored -> { });
+        service.commit(71, 1, new Delta().retain(2, Map.of("bold", true)));
+        assertEquals(new Delta().insert("共享", Map.of("bold", true)).insert("新段\n").getOps(), service.snapshot(71).content().getOps());
+        assertEquals(40902, assertThrows(CollabException.class, () -> service.restore(71, 1, 0, 1, "stale",
+                () -> { throw new AssertionError("版本门禁必须先于diff"); }, ignored -> { })).getCode());
+        assertEquals(40904, assertThrows(CollabException.class, () -> service.restore(71, 1, 1, 1, "restore-format",
+                () -> { throw new AssertionError("原UUID指纹必须先于diff"); }, ignored -> { })).getCode());
+    }
+
+    @Test
+    void 恢复相同内容仍生成一个新版本并可继续接收旧基线编辑() {
+        DocRevService service = new DocRevService();
+        service.restore(72, 0, 0, 1, "same", () -> new Delta().insert("\n"), ignored -> { });
+        assertEquals(1, service.snapshot(72).revision());
+        service.commit(72, 0, new Delta().insert("仍能编辑"));
+        assertEquals("仍能编辑\n", text(service.snapshot(72).content()));
+    }
+
+    @Test
+    void 普通两万字整体改写也能恢复且同请求仅确认一次() {
+        var store = new InMemoryDocumentStateStore();
+        DocRevService service = new DocRevService(store, null);
+        Delta before = new Delta().insert("会议记录：讨论项目进度，明确下周任务及负责人。\n".repeat(1000) + "\n");
+        Delta target = new Delta().insert("客户访谈：确认产品需求，整理交付计划和验收时间。\n".repeat(1000) + "\n");
+        service.commit(73, 0, new Delta().insert(text(before)).delete(1));
+        AtomicInteger callbacks = new AtomicInteger();
+        assertTrue(service.restore(73, 1, 0, 1, "large-rewrite", () -> target,
+                ignored -> callbacks.incrementAndGet()).applied());
+        assertEquals(target.getOps(), store.snapshot(73).content().getOps());
+        assertEquals(1, store.operationsAfter(73, 1).size());
+        assertFalse(service.restore(73, 1, 0, 1, "large-rewrite",
+                () -> { throw new AssertionError("大文重放也先读取原收据"); }, ignored -> callbacks.incrementAndGet()).applied());
+        assertEquals(2, store.snapshot(73).revision()); assertEquals(1, callbacks.get());
+    }
+
+    @Test
+    void 末尾换行新增空值格式拒绝时不写持久化收据热状态及通知() {
+        DocumentPersistence persistence = mock(DocumentPersistence.class);
+        DocPersistenceQueue queue = mock(DocPersistenceQueue.class);
+        var store = new InMemoryDocumentStateStore();
+        when(persistence.snapshot(74)).thenReturn(new CollabDocumentSnapshot(8, new Delta().insert("正文\n")));
+        DocRevService service = new DocRevService(store, persistence, queue);
+        AtomicInteger callbacks = new AtomicInteger();
+        Delta target = new Delta().insert("正文").insert("\n", java.util.Collections.singletonMap("align", null));
+        CollabException failure = assertThrows(CollabException.class, () -> service.restore(74, 8, 2, 1, "terminal-null",
+                () -> target, ignored -> callbacks.incrementAndGet()));
+        assertEquals(400, failure.getCode()); assertTrue(failure.getMessage().contains("空值格式"));
+        assertEquals(0, store.snapshot(74).revision()); assertEquals("\n", text(store.snapshot(74).content()));
+        assertTrue(store.operationsAfter(74, 0).isEmpty()); assertEquals(0, callbacks.get());
+        verify(persistence).receipt(74, 1, "history-api", "terminal-null");
+        verify(persistence).snapshot(74); verify(persistence).minimumRevision(74);
+        verifyNoMoreInteractions(persistence); verifyNoInteractions(queue);
+    }
+
+    @Test
+    void 两MiB正文最坏高碎片恢复在构造百万操作前拒绝且不写数据() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        int padding = 2 * 1024 * 1024 - mapper.writeValueAsBytes(new Delta().insert("\n")).length;
+        String repeated = "abcd".repeat(padding / 4 + 1).substring(0, padding);
+        Delta before = new Delta().insert(repeated + "\n"), target = new Delta().insert(repeated.replace('d', 'e') + "\n");
+        assertEquals(2 * 1024 * 1024, mapper.writeValueAsBytes(before).length);
+        assertEquals(2 * 1024 * 1024, mapper.writeValueAsBytes(target).length);
+        DocumentPersistence persistence = mock(DocumentPersistence.class);
+        DocPersistenceQueue queue = mock(DocPersistenceQueue.class);
+        var store = new InMemoryDocumentStateStore();
+        when(persistence.snapshot(75)).thenReturn(new CollabDocumentSnapshot(8, before));
+        DocRevService service = new DocRevService(store, persistence, queue);
+        AtomicInteger callbacks = new AtomicInteger();
+        long started = System.nanoTime();
+        CollabException failure = org.junit.jupiter.api.Assertions.assertTimeout(java.time.Duration.ofSeconds(10),
+                () -> assertThrows(CollabException.class, () -> service.restore(75, 8, 2, 1, "fragmented",
+                        () -> target, ignored -> callbacks.incrementAndGet())));
+        assertEquals(400, failure.getCode()); assertTrue(failure.getMessage().contains("单次修改最多 4 MiB"));
+        assertEquals(before.getOps(), new Delta().insert(repeated + "\n").getOps());
+        assertEquals(0, store.snapshot(75).revision()); assertTrue(store.operationsAfter(75, 0).isEmpty());
+        assertEquals(0, callbacks.get());
+        verify(persistence).receipt(75, 1, "history-api", "fragmented");
+        verify(persistence).snapshot(75); verify(persistence).minimumRevision(75);
+        verifyNoMoreInteractions(persistence); verifyNoInteractions(queue);
+        System.out.printf("RESTORE_DIFF two-MiB-fragmented-rewrite outcome=operation-capacity-rejected elapsedMs=%.3f%n",
+                (System.nanoTime() - started) / 1_000_000.0);
+    }
+
+    @Test
+    void 恢复操作的精确容量检查在应用正文和生成收据之前执行() {
+        DocumentPersistence persistence = mock(DocumentPersistence.class);
+        DocPersistenceQueue queue = mock(DocPersistenceQueue.class);
+        var store = new InMemoryDocumentStateStore();
+        when(persistence.snapshot(76)).thenReturn(new CollabDocumentSnapshot(8, new Delta().insert("正文\n")));
+        doThrow(new CollabException(400, "单次修改最多 4 MiB")).when(persistence).validateSize(any(Delta.class), any(Delta.class));
+        DocRevService service = new DocRevService(store, persistence, queue);
+        AtomicInteger callbacks = new AtomicInteger();
+        assertEquals(400, assertThrows(CollabException.class, () -> service.restore(76, 8, 2, 1, "exact-size",
+                () -> new Delta().insert("目标\n"), ignored -> callbacks.incrementAndGet())).getCode());
+        assertEquals(0, store.snapshot(76).revision()); assertTrue(store.operationsAfter(76, 0).isEmpty());
+        assertEquals(0, callbacks.get());
+        verify(persistence).receipt(76, 1, "history-api", "exact-size");
+        verify(persistence).snapshot(76); verify(persistence).minimumRevision(76);
+        verify(persistence).validateSize(any(Delta.class), any(Delta.class));
+        verifyNoMoreInteractions(persistence); verifyNoInteractions(queue);
+    }
 
     @Test
     void 持久化拒绝过期权限后不改热状态不确认不广播也不发快照消息() {
