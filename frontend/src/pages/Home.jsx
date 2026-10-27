@@ -56,9 +56,9 @@ export default function Home() {
   return <Layout className="app-shell">
     <WorkspaceHeader title="工作台" onGuide={() => setShowGuide(true)} />
     <main id="workspace-main" tabIndex={-1} className="content-wrap workbench">
-      <div className="page-heading cp-workbench-heading"><div>
-        <Typography.Text className="cp-workbench-kicker">你的资料与协作</Typography.Text>
-        <Typography.Title level={1}>{profile ? (profile.nickname?.trim() || profile.username) + '，欢迎回来' : '你的协作工作台'}</Typography.Title>
+      <div className="page-heading cp-workbench-heading"><div className="cp-workbench-intro">
+        <Typography.Text className="cp-workbench-kicker">{profile ? <>你好，<span className="cp-workbench-account-name">{profile.nickname?.trim() || profile.username}</span></> : '你的资料与协作'}</Typography.Text>
+        <Typography.Title level={1}>{profile ? '欢迎回来' : '你的协作工作台'}</Typography.Title>
         <Typography.Paragraph type="secondary">接着写下想法，或从一份模板开始新的工作。</Typography.Paragraph>
       </div><Space wrap className="cp-workbench-actions">
         <Button size="large" onClick={() => navigate('/docs')}>管理文档</Button>
