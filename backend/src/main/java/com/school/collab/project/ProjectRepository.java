@@ -105,7 +105,7 @@ public class ProjectRepository {
             AND (?='' OR LOCATE(?,d.title)>0)
             ORDER BY d.update_time DESC,d.id DESC LIMIT ? OFFSET ?
             """,(r,n)->new DocumentSummary(r.getLong(1),r.getString(2),r.getLong(3),r.getString(4),r.getString(5),
-                r.getObject(6, LocalDateTime.class).format(TIME),r.getInt(7),r.getBoolean(8)),
+                r.getObject(6, LocalDateTime.class).format(TIME),r.getInt(7),r.getBoolean(8),r.getLong(3)==user),
             user,user,manage,user,project,user,keyword,keyword,size,((long)page-1)*size);
     }
     private static final String CANDIDATES="""
@@ -122,12 +122,12 @@ public class ProjectRepository {
         return jdbc.query("SELECT d.id,d.title,CASE WHEN d.owner_id=? THEN 2 ELSE c.permission END permission,d.owner_id,u.nickname,d.update_time "+CANDIDATES+
                 " ORDER BY d.update_time DESC,d.id DESC LIMIT ? OFFSET ?",
             (r,n)->new Candidate(r.getLong(1),r.getString(2),r.getInt(3),r.getLong(4),r.getString(5),
-                r.getObject(6,LocalDateTime.class).format(TIME)),user,user,user,group,project,keyword,keyword,size,((long)page-1)*size);
+                r.getObject(6,LocalDateTime.class).format(TIME),r.getLong(4)==user),user,user,user,group,project,keyword,keyword,size,((long)page-1)*size);
     }
     public record Project(long id,String name,String description,long ownerId,long groupId,boolean archived) { }
     public record Summary(long id,String name,String description,long ownerId,long groupId,String groupName,boolean archived,boolean canManage,long visibleDocumentCount,String updateTime) { }
     public record Document(long id,long ownerId,int permission) { }
     public record AssociationState(long docId,String docTitle,String associationId) { }
-    public record DocumentSummary(long id,String title,long ownerId,String ownerName,String associationId,String updateTime,int permission,boolean canRemove) { }
-    public record Candidate(long id,String title,int permission,long ownerId,String ownerName,String updateTime) { }
+    public record DocumentSummary(long id,String title,long ownerId,String ownerName,String associationId,String updateTime,int permission,boolean canRemove,boolean isOwner) { }
+    public record Candidate(long id,String title,int permission,long ownerId,String ownerName,String updateTime,boolean isOwner) { }
 }

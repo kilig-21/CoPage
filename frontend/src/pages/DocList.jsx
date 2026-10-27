@@ -154,7 +154,9 @@ export default function DocList() {
                 </Popconfirm>,
               ].filter(Boolean)}>
                 <List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={<Link to={documentHref(doc.id, sourcePath)}>{doc.title}</Link>}
-                  description={<Space wrap><Tag>{doc.isOwner ? '所有者' : doc.permission === 2 ? '可编辑' : '只读'}</Tag><span>{doc.ownerName + ' · ' + doc.updateTime}</span></Space>} />
+                  description={<Space wrap><Tag>{doc.isOwner ? '所有者' : doc.permission === 2 ? '可编辑' : '只读'}</Tag>
+                    <span>{typeof doc.ownerName === 'string' && doc.ownerName.trim() ? doc.ownerName
+                      : Number.isSafeInteger(doc.ownerId) && doc.ownerId > 0 ? '用户 #' + doc.ownerId : '所有者暂不可用'} · {doc.updateTime}</span></Space>} />
               </List.Item>
             )}
           />

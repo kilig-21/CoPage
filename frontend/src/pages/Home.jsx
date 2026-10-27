@@ -82,7 +82,8 @@ export default function Home() {
             <List.Item.Meta avatar={<FileTextOutlined className="cp-recent-document-icon" />}
               title={<Link to={documentHref(doc.id, sourcePath)}>{doc.title}</Link>}
               description={<Space wrap className="cp-recent-document-meta"><Tag>{doc.isOwner ? '所有者' : doc.permission === 2 ? '可编辑' : '只读'}</Tag>
-                <span>{doc.ownerName + ' · 更新于 ' + doc.updateTime}</span></Space>} />
+                <span>{typeof doc.ownerName === 'string' && doc.ownerName.trim() ? doc.ownerName
+                  : Number.isSafeInteger(doc.ownerId) && doc.ownerId > 0 ? '用户 #' + doc.ownerId : '所有者暂不可用'} · 更新于 {doc.updateTime}</span></Space>} />
             <Link className="cp-document-open" to={documentHref(doc.id, sourcePath)}>打开 <ArrowRightOutlined /></Link>
           </List.Item>} /></>}
         {!loading && !data && <Typography.Paragraph>恢复连接后重试，即可查看当前可访问的资料。</Typography.Paragraph>}

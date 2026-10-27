@@ -49,8 +49,8 @@ export default function ProjectDocumentsModal({ project, from, busy, uncertain, 
         <Button key="add" disabled={busy || loading || uncertain || !current}
           onClick={() => { if (!busy && !loading && !uncertain && current) onAdd(doc) }}>加入项目</Button>,
       ]}><List.Item.Meta title={doc.title} description={<Space wrap>
-        <span>文档 #{doc.id}</span><Tag>{doc.permission === 2 ? '可编辑' : '只读'}</Tag>
-        <span>{typeof doc.ownerName === 'string' && doc.ownerName.trim() ? doc.ownerName : '所有者 #' + doc.ownerId}</span>
+        <span>文档 #{doc.id}</span><Tag>{doc.isOwner === true ? '所有者' : doc.permission === 2 ? '可编辑' : doc.permission === 1 ? '只读' : '打开后查看权限'}</Tag>
+        <span>所有者：{typeof doc.ownerName === 'string' && doc.ownerName.trim() ? doc.ownerName : '用户 #' + doc.ownerId}</span>
         <span>更新于 {doc.updateTime}</span>
       </Space>} /></List.Item>} />
     {current?.total > 20 && <Pagination current={page} total={current.total} pageSize={20} showSizeChanger={false}

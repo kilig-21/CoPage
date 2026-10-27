@@ -325,7 +325,10 @@ export default function Projects() {
                   request.delete('/projects/' + current.id + '/documents/' + doc.id, { ...config, params: { associationId: doc.associationId } }))}>
                 <Button disabled={!detailReady} danger>移出项目</Button></Popconfirm>,
             ].filter(Boolean)}><List.Item.Meta title={<Link to={documentHref(doc.id, sourcePath)}>{doc.title}</Link>}
-              description={<Space wrap><Tag>{doc.permission === 2 ? '可编辑' : '只读'}</Tag><span>{doc.ownerName + ' · ' + doc.updateTime}</span></Space>} />
+              description={<Space wrap><Tag>{doc.isOwner === true ? '所有者' : doc.permission === 2 ? '可编辑' : doc.permission === 1 ? '只读' : '打开后查看权限'}</Tag>
+                <span>文档 #{doc.id}</span>
+                <span>所有者：{typeof doc.ownerName === 'string' && doc.ownerName.trim() ? doc.ownerName : '用户 #' + doc.ownerId}</span>
+                <span>更新于 {doc.updateTime}</span></Space>} />
             </List.Item>} />
           {current.total > SIZE && <Pagination current={docPage} total={current.total} pageSize={SIZE} showSizeChanger={false}
             disabled={!detailReady} onChange={next => navigate({ docPage: String(next) })} />}
