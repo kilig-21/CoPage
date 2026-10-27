@@ -19,6 +19,8 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState('')
   const previewRegion = useRef(null)
+  const previewActions = useRef(null)
+  const restoreFeedbackRegion = useRef(null)
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -38,6 +40,27 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
   const preview = restoreOperation.isCurrent(previewContext.current) ? storedPreview : null
   const retention = history ? storedRetention : null
   const writing = busy || restoreOperation.busy
+  const restoreError = restoreOperation.error
+  const restoreNotice = restoreOperation.notice?.message
+  const restoreRequestId = restoreOperation.target?.requestId
+  useEffect(() => {
+    if (!restoreError && !restoreNotice && !restoreRequestId) return
+    const frame = requestAnimationFrame(() => {
+      const action = previewActions.current
+      const feedback = restoreFeedbackRegion.current
+      const body = feedback?.closest('.ant-drawer-body')
+      if (!action || !feedback || !body) return
+      const bounds = action.getBoundingClientRect()
+      const bodyBounds = body.getBoundingClientRect()
+      // Only reveal a new result while the user is still beside its controls.
+      // Keep keyboard focus and leave readers who have scrolled away in place.
+      if (bounds.bottom > Math.max(0, bodyBounds.top) &&
+          bounds.top < Math.min(window.innerHeight, bodyBounds.bottom)) {
+        feedback.scrollIntoView({ block: 'nearest', behavior: 'instant' })
+      }
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [restoreError, restoreNotice, restoreRequestId])
   const base = `/doc/${docId}/history`
   const beginRequest = () => {
     const context = restoreOperation.captureContext()
@@ -166,11 +189,8 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
       ? [{ revision: history.currentRevision, name: '当前版本' }] : []),
     ...(history ? versions : []), ...named,
   ].map(v => [v.revision, v])).values()].sort((a, b) => b.revision - a.revision)
-  return <Drawer rootClassName="history-drawer" title="历史版本" aria-label="历史版本" open width={720} onClose={onClose} maskClosable={!writing} closable={!writing} keyboard={!writing}>
-    {contextHolder}
-    <Typography.Paragraph>查看已保存的版本。恢复会生成新版本，旧记录仍保留；重要版本会在普通历史清理后继续保留。</Typography.Paragraph>
-    {error && <Alert type="warning" showIcon message={error} />}
-    {notice && <Alert type="success" showIcon message={notice} />}
+  const restoreFeedback = (restoreError || restoreOperation.notice || restoreOperation.target) &&
+    <div ref={restoreFeedbackRegion} className="history-restore-feedback" role="region" aria-label="历史恢复结果">
     {restoreOperation.error && <Alert type="warning" showIcon message={restoreOperation.error} />}
     {restoreOperation.notice && <Alert showIcon type={restoreOperation.notice.type} message={restoreOperation.notice.message} />}
     {restoreOperation.target && <Alert type="warning" showIcon
@@ -188,6 +208,13 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
             okText: '确认结束等待', cancelText: '继续等待', onOk: () => restoreOperation.endWaiting(confirmation) })
         }}>结束等待</Button>
       </Space>} />}
+    </div>
+  return <Drawer rootClassName="history-drawer" title="历史版本" aria-label="历史版本" open width={720} onClose={onClose} maskClosable={!writing} closable={!writing} keyboard={!writing}>
+    {contextHolder}
+    <Typography.Paragraph>查看已保存的版本。恢复会生成新版本，旧记录仍保留；重要版本会在普通历史清理后继续保留。</Typography.Paragraph>
+    {error && <Alert type="warning" showIcon message={error} />}
+    {notice && <Alert type="success" showIcon message={notice} />}
+    {!(history && selected != null) && restoreFeedback}
     {history && <Typography.Paragraph type="secondary">当前版本：{history.currentRevision}；连续历史从版本 {history.minimumRevision} 开始。</Typography.Paragraph>}
     {retention && <Alert type="info" showIcon message={retention.protectedDocument ? '该文档受保护，不清理历史' :
       `普通历史保留 ${retention.days} 天，最多 ${retention.maxOperations} 次操作、${Math.round(retention.maxBytes/1024/1024)} MiB。自动清理${retention.enabled?'已开启':'未开启'}。`} />}
@@ -218,7 +245,7 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
       {previewError && <Alert type="warning" showIcon message={previewError}
         action={<Button onClick={() => choose(selected)}>重试此版本</Button>} />}
       {preview && <DocumentPreview content={preview} label="历史版本内容" />}
-      {isOwner && preview && <Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
+      {isOwner && preview && <div ref={previewActions}><Space direction="vertical" style={{ width: '100%', marginTop: 16 }}>
         <Input value={name} maxLength={100} disabled={writing} onChange={e => setName(e.target.value)} placeholder="重要版本名称" aria-label="重要版本名称" />
         <Space wrap>
           <Button disabled={writing || !name.trim()} onClick={() => mark()}>保存重要版本</Button>
@@ -232,7 +259,8 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
             okText: '确认恢复', cancelText: '取消', onOk: () => restore(targetRevision, expectedRevision, context),
           })}}>恢复此版本</Button>
         </Space>
-      </Space>}
+      </Space></div>}
+      {restoreFeedback}
     </section>}
   </Drawer>
 }
