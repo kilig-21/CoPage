@@ -195,7 +195,7 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
     {restoreOperation.notice && <Alert showIcon type={restoreOperation.notice.type} message={restoreOperation.notice.message} />}
     {restoreOperation.target && <Alert type="warning" showIcon
       message={`待确认的恢复：版本 ${restoreOperation.target.targetRevision}`}
-      description="关闭此窗口后仍可继续确认。查看其他版本不会改变待确认的恢复；请确认结果后再恢复其他版本或清理历史。刷新页面或关闭浏览器标签会失去本次记录，请先核对结果。"
+      description="原请求已保存在此浏览器。关闭窗口、刷新或重新登录原账号后，仍可在本篇历史中确认；查看其他版本不会改变原目标。请先确认结果，再恢复其他版本或清理历史。"
       action={<Space wrap>
         <Button loading={restoreOperation.busy} disabled={writing || !isOwner} onClick={() => {
           if (!mutation.current) restoreOperation.retryOriginal()
@@ -203,7 +203,7 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
         <Button disabled={writing} onClick={() => {
           const confirmation = restoreOperation.prepareEndWaiting()
           if (!confirmation) return
-          modal.confirm({ title: '结束原恢复的等待？',
+          modal.confirm({ className: 'history-confirm-modal', title: '结束原恢复的等待？',
             content: `原请求可能已经恢复到版本 ${confirmation.target.targetRevision}。结束等待不会撤销或确认该恢复；再次恢复可能生成另一个版本。请先查看当前正文。`,
             okText: '确认结束等待', cancelText: '继续等待', onOk: () => restoreOperation.endWaiting(confirmation) })
         }}>结束等待</Button>
@@ -222,6 +222,7 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
       const context = restoreOperation.captureContext()
       if (!context) return
       modal.confirm({
+      className:'history-confirm-modal',
       title:'清理超过保留范围的普通历史？',content:`版本 ${retention.proposedMinimumRevision} 之前的普通历史将不可恢复；重要版本和当前正文保留。`,
       okText:'确认清理',cancelText:'取消',onOk:() => compact(context),
     })}}>清理过期历史</Button>}
@@ -250,11 +251,12 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
         <Space wrap>
           <Button disabled={writing || !name.trim()} onClick={() => mark()}>保存重要版本</Button>
           {named.some(n => n.revision === selected) && <Button disabled={writing} onClick={() => mark(true)}>取消标记</Button>}
-          <Button danger loading={restoreOperation.busy} disabled={writing || Boolean(restoreOperation.target) || loading || !history} onClick={() => {
+          <Button danger loading={restoreOperation.busy} disabled={writing || restoreOperation.trackingFailed || Boolean(restoreOperation.target) || loading || !history} onClick={() => {
             const context = restoreOperation.captureContext()
             if (!context) return
             const targetRevision = selected, expectedRevision = history.currentRevision
             modal.confirm({
+            className: 'history-confirm-modal',
             title: `恢复到版本 ${selected}？`, content: '将用该版本的正文生成一个新版本，并同步给其他在线协作者。',
             okText: '确认恢复', cancelText: '取消', onOk: () => restore(targetRevision, expectedRevision, context),
           })}}>恢复此版本</Button>

@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHistoryRestore, restoreReply } from './historyRestore.js'
+import { createHistoryRestoreStore } from './historyRestoreStore.js'
 
 const firstId = '11111111-1111-4111-8111-111111111111'
 const secondId = '22222222-2222-4222-8222-222222222222'
@@ -225,4 +226,125 @@ test('响应验证要求严格原expected+1，而非预览版本或最新列表�
   const target = { targetRevision: 99, expectedRevision: 24, requestId: firstId }
   assert.match(restoreReply(target, { revision: 25, applied: false }), /结果为版本 25/)
   assert.throws(() => restoreReply(target, { revision: 100, applied: true }))
+})
+
+function durableFixture({ lock } = {}) {
+  const disk = new Map([['unrelated-draft', 'keep']]), calls = []
+  let session = { account: 'owner', token: 'secret-token' }, failRead = false, failWrite = false, failRemove = false
+  let response = lost, id = firstId, queue = Promise.resolve()
+  const storage = {
+    getItem: key => { if (failRead) throw Error('denied'); return disk.get(key) ?? null },
+    setItem: (key, value) => { if (failWrite) throw Error('quota'); disk.set(key, value) },
+    removeItem: key => { if (failRemove) throw Error('denied'); disk.delete(key) },
+  }
+  const serial = (_name, action) => { const result = queue.then(action); queue = result.catch(() => {}); return result }
+  const store = () => createHistoryRestoreStore({ getStorage: () => storage, withLock: lock === false ? undefined : lock || serial })
+  const open = (extra = {}) => createHistoryRestore({ service: '/api', docId: 509, pending: store(),
+    readIdentity: () => session, ready: () => true, newRequestId: () => id,
+    perform: (target, config) => { calls.push({ target, config }); return response(target, config) }, ...extra })
+  return { disk, storage, store, open, calls, response: value => { response = value }, id: value => { id = value },
+    identity: value => { session = value }, fail: (kind, value) => { if (kind === 'read') failRead = value; if (kind === 'write') failWrite = value; if (kind === 'remove') failRemove = value },
+    slot: () => [...disk.keys()].find(k => k !== 'unrelated-draft') }
+}
+
+test('持久记录经独立实例重开与原账号新token仍保留UUID，只在主动确认时发送', async () => {
+  const f = durableFixture(), old = f.open(); await old.start(1, 9)
+  const raw = f.disk.get(f.slot()); assert.equal(raw.includes('secret-token'), false)
+  assert.deepEqual(Object.keys(JSON.parse(raw)).sort(), ['expectedRevision', 'requestId', 'targetRevision', 'version'])
+  old.deactivate(); f.identity({ account: 'owner', token: 'new-token' })
+  const reopened = f.open(); assert.equal(reopened.snapshot().target.requestId, firstId)
+  await reopened.start(3, 10); assert.equal(f.calls.length, 1)
+  f.response(async () => ({ data: { revision: 10, applied: false } })); await reopened.retryOriginal()
+  assert.deepEqual(f.calls[1].target, { targetRevision: 1, expectedRevision: 9, requestId: firstId })
+  assert.equal(f.calls[1].config.copageExpectedSessionToken, 'new-token')
+  assert.equal(reopened.snapshot().target, null); assert.equal(f.disk.size, 1); assert.equal(f.disk.get('unrelated-draft'), 'keep')
+})
+test('持久记录按账号、文档和服务隔离，退出后不展示原等待', async () => {
+  const f = durableFixture(), a = f.open(); await a.start(1, 9)
+  for (const extra of [{ service: 'http://other/api' }, { docId: 510 }]) assert.equal(f.open(extra).snapshot().target, null)
+  f.identity({ account: 'other', token: 'other-token' }); a.syncIdentity(); assert.equal(a.snapshot().target, null)
+  assert.equal(f.open().snapshot().target, null)
+  f.identity({ account: 'owner', token: 'again' }); a.syncIdentity(); assert.equal(a.snapshot().target.requestId, firstId)
+})
+test('记录写入失败或安全锁不可用时零发送，且不降级成仅内存恢复', async () => {
+  for (const kind of ['write', 'lock']) {
+    const f = durableFixture({ lock: kind === 'lock' ? false : undefined }); if (kind === 'write') f.fail('write', true)
+    const op = f.open(); await op.start(1, 9)
+    assert.equal(f.calls.length, 0); assert.equal(f.disk.size, 1); assert.equal(op.snapshot().trackingFailed, true); assert.equal(op.snapshot().busy, false)
+  }
+})
+test('坏记录、超大记录和版本不符均保留原字节、不自动覆盖或发送', async () => {
+  for (const bad of ['{bad', 'x'.repeat(1025), JSON.stringify({ version: 2, requestId: firstId, targetRevision: 1, expectedRevision: 9 }),
+    JSON.stringify({ version: 1, requestId: firstId, targetRevision: 1, expectedRevision: 9, token: 'unexpected' })]) {
+    const f = durableFixture(); await f.open().start(1, 9); const slot = f.slot(); f.disk.set(slot, bad)
+    const op = f.open(); await op.start(2, 10); await op.retryOriginal()
+    assert.equal(f.disk.get(slot), bad); assert.equal(f.calls.length, 1); assert.equal(op.snapshot().trackingFailed, true)
+  }
+})
+test('暂时读取失败隐藏旧目标；恢复存储后能重新找回原等待', async () => {
+  const f = durableFixture(), op = f.open(); await op.start(1, 9); f.fail('read', true)
+  op.syncIdentity(); assert.equal(op.snapshot().target, null); await op.start(1, 10); assert.equal(f.calls.length, 1)
+  f.fail('read', false); op.syncIdentity(); assert.equal(op.snapshot().target.requestId, firstId); assert.equal(op.snapshot().trackingFailed, false)
+})
+test('两个独立标签同时准备时只创建一个UUID，后来的标签只显示原确认入口', async () => {
+  const f = durableFixture(), a = f.open({ newRequestId: () => firstId }); const pa = a.start(1, 9)
+  const b = f.open({ newRequestId: () => secondId }); const pb = b.start(3, 9)
+  await Promise.all([pa, pb]); assert.equal(f.calls.length, 1)
+  assert.equal(a.snapshot().target.requestId, b.snapshot().target.requestId)
+  assert.deepEqual(a.snapshot().target, { targetRevision: 1, expectedRevision: 9, requestId: firstId })
+  assert.equal(JSON.parse(f.disk.get(f.slot())).requestId, firstId)
+})
+test('等待跨标签锁时退出/关闭，锁后来授予也零写入零发送', async () => {
+  for (const action of ['logout', 'close']) {
+    const gate = deferred(), f = durableFixture({ lock: async (_key, task) => { await gate.promise; return task() } }), op = f.open()
+    const run = op.start(1, 9)
+    if (action === 'logout') { f.identity({ account: 'other', token: 'other' }); op.syncIdentity() } else op.deactivate()
+    gate.resolve(); await run
+    assert.equal(f.calls.length, 0); assert.equal(f.disk.size, 1); assert.equal(op.snapshot().busy, false)
+  }
+})
+test('服务端确认成功但本地删除失败仍报告已确认并保留原UUID供去重重试', async () => {
+  const f = durableFixture(), op = f.open(); f.fail('remove', true)
+  f.response(async () => ({ data: { revision: 10, applied: true } })); await op.start(1, 9)
+  assert.match(op.snapshot().notice.message, /已恢复/); assert.match(op.snapshot().error, /恢复已确认.*本地确认记录/)
+  assert.equal(op.snapshot().target.requestId, firstId); assert.ok(f.slot())
+  f.fail('remove', false); f.response(async () => ({ data: { revision: 10, applied: false } })); await op.retryOriginal()
+  assert.equal(op.snapshot().target, null); assert.equal(f.disk.size, 1); assert.equal(f.calls[1].target.requestId, firstId)
+})
+test('没有storage事件时迟到旧成功也不能清理被替换的持久记录', async () => {
+  const f = durableFixture(), wait = deferred(), op = f.open(); f.response(() => wait.promise)
+  const run = op.start(1, 9); for (let i = 0; i < 20 && !f.calls.length; i++) await Promise.resolve(); assert.equal(f.calls.length, 1)
+  const replacement = JSON.stringify({ version: 1, requestId: secondId, targetRevision: 2, expectedRevision: 10 })
+  f.disk.set(f.slot(), replacement); wait.resolve({ data: { revision: 10, applied: true } }); await run
+  assert.equal(f.disk.get(f.slot()), replacement); assert.equal(op.snapshot().target.requestId, secondId); assert.equal(op.snapshot().notice, null)
+})
+test('确认期间其他标签清理原槽，storage同步会取消在途确认并忽略迟到成功', async () => {
+  const f = durableFixture(), wait = deferred(), op = f.open(); f.response(() => wait.promise)
+  const run = op.start(1, 9); for (let i = 0; i < 20 && !f.calls.length; i++) await Promise.resolve(); assert.equal(f.calls.length, 1)
+  f.disk.delete(f.slot()); op.syncIdentity(); assert.equal(f.calls[0].config.signal.aborted, true)
+  wait.resolve({ data: { revision: 10, applied: true } }); await run
+  assert.equal(op.snapshot().target, null); assert.equal(op.snapshot().notice, null)
+})
+test('异步结束等待核对原槽；旧弹窗不能删除新记录', async () => {
+  const f = durableFixture(), op = f.open(); await op.start(1, 9); const ticket = op.prepareEndWaiting()
+  const replacement = JSON.stringify({ version: 1, requestId: secondId, targetRevision: 2, expectedRevision: 10 })
+  f.disk.set(f.slot(), replacement)
+  assert.equal(await op.endWaiting(ticket), false); assert.equal(f.disk.get(f.slot()), replacement); assert.equal(op.snapshot().target.requestId, secondId)
+  assert.equal(await op.endWaiting(op.prepareEndWaiting()), true); assert.equal(f.disk.size, 1)
+})
+test('无关草稿storage事件不会打断同UUID的在途确认', async () => {
+  const f = durableFixture(), wait = deferred(), op = f.open(); f.response(() => wait.promise)
+  const run = op.start(1, 9); for (let i = 0; i < 20 && !f.calls.length; i++) await Promise.resolve(); assert.equal(f.calls.length, 1)
+  f.disk.set('unrelated-draft', 'another tab editing'); op.syncIdentity()
+  assert.equal(f.calls[0].config.signal.aborted, false); assert.equal(op.snapshot().busy, true)
+  wait.resolve({ data: { revision: 10, applied: true } }); await run
+  assert.match(op.snapshot().notice.message, /已恢复/); assert.equal(f.disk.get('unrelated-draft'), 'another tab editing')
+})
+test('切换账号且原请求槽不可读时也立即隐藏旧成功，旧读取上下文失效', async () => {
+  const f = durableFixture(), op = f.open(); f.response(async () => ({ data: { revision: 10, applied: true } }))
+  await op.start(1, 9); assert.ok(op.snapshot().notice)
+  const old = op.captureContext(), epoch = op.snapshot().identityEpoch
+  f.identity({ account: 'other', token: 'other-token' }); f.fail('read', true); op.syncIdentity()
+  assert.equal(op.snapshot().notice, null); assert.equal(op.snapshot().target, null)
+  assert.equal(op.snapshot().identityEpoch, epoch + 1); assert.equal(op.isCurrent(old), false)
 })

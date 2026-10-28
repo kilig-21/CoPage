@@ -1,8 +1,9 @@
-// 仅当前标签的内存保存请求元信息，不保存正文、账号令牌或浏览器持久数据。
+// The browser hook injects a persistent metadata store; tests may use a Map.
 const pendingRestores = new Map()
 const revision = value => Number.isSafeInteger(value) && value >= 0
 const uuid = value => typeof value === 'string' && /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(value)
 const unknown = '原恢复结果未确认。刷新列表、查看其他版本或关闭窗口不会结束等待。'
+const trackingFailure = '浏览器暂时无法可靠读取或保存历史恢复确认记录。原记录保留，请恢复本站存储后重新打开历史；尚未发送替代请求。'
 
 export function restoreReply(target, data) {
   if (!revision(data?.revision) || data.revision !== target.expectedRevision + 1 || typeof data.applied !== 'boolean')
@@ -12,9 +13,9 @@ export function restoreReply(target, data) {
 
 export function createHistoryRestore({ service, docId, readIdentity, ready, perform, confirmed = () => {}, changed = () => {},
   pending = pendingRestores, newRequestId = () => globalThis.crypto.randomUUID() }) {
-  let owner = null, attempt = null, active = true, generation = 0
+  let owner = null, attempt = null, preparation = null, active = true, generation = 0
   const scope = Symbol('history-restore-context')
-  let state = { target: null, busy: false, reviewFailed: false, error: '', notice: null, identityEpoch: 0 }
+  let state = { target: null, busy: false, reviewFailed: false, trackingFailed: false, error: '', notice: null, identityEpoch: 0 }
   const emit = patch => { state = { ...state, ...patch }; changed(state) }
   const identity = () => {
     const value = readIdentity()
@@ -22,28 +23,47 @@ export function createHistoryRestore({ service, docId, readIdentity, ready, perf
     return value
   }
   const key = account => JSON.stringify([service, account, docId])
+  const exclusive = (account, action, signal) => pending.exclusive
+    ? pending.exclusive(key(account), action, signal) : action()
+  const trackingError = () => emit({ target: null, trackingFailed: true, notice: null, error: trackingFailure })
+  function readTarget(account) {
+    try { return pending.get(key(account)) || null }
+    catch (error) { trackingError(); throw error }
+  }
   function cancel() {
+    const preparing = preparation
+    preparation = null
+    preparing?.controller.abort()
     const old = attempt
-    if (!old) return
+    if (!old && !preparing) return
     attempt = null
-    old.controller.abort()
-    emit({ busy: false, target: owner ? pending.get(key(owner.account)) || null : null,
-      error: old.accepted ? state.error : unknown })
+    old?.controller.abort()
+    let target = null
+    try { target = owner ? readTarget(owner.account) : null } catch { /* Fail closed. */ }
+    emit({ busy: false, target, error: state.trackingFailed ? trackingFailure : old?.accepted ? state.error : unknown })
   }
   function syncIdentity() {
+    let next
     try {
-      const next = identity()
-      if (!owner || owner.account !== next.account || owner.token !== next.token) {
-        cancel()
-        owner = next
-        const target = pending.get(key(next.account)) || null
-        emit({ target, busy: false, reviewFailed: false, error: target ? unknown : '', notice: null, identityEpoch: state.identityEpoch + 1 })
-      }
+      next = identity()
     } catch {
       cancel(); const hadOwner = Boolean(owner); owner = null
       emit({ target: null, busy: false, reviewFailed: false, notice: null, identityEpoch: state.identityEpoch + (hadOwner ? 1 : 0),
         error: '浏览器暂时无法读取当前账号，恢复后再确认原恢复。' })
+      return
     }
+    const changedOwner = !owner || owner.account !== next.account || owner.token !== next.token
+    if (changedOwner) {
+      cancel(); owner = next
+      emit({ target: null, busy: false, reviewFailed: false, trackingFailed: false, error: '', notice: null,
+        identityEpoch: state.identityEpoch + 1 })
+    }
+    let target
+    try { target = readTarget(next.account) } catch { return }
+    if (!changedOwner && !state.trackingFailed && target === state.target) return
+    if (attempt && target !== attempt.target) cancel()
+    emit({ target, busy: Boolean(attempt || preparation), reviewFailed: false, trackingFailed: false,
+      error: target ? unknown : '', notice: null })
   }
   function captureContext() {
     if (!active) return null
@@ -64,23 +84,37 @@ export function createHistoryRestore({ service, docId, readIdentity, ready, perf
   }
   const config = (context, signal) => ({ signal, copageExpectedSessionToken: context.token })
   function available() {
-    if (attempt) return false
+    if (attempt || preparation) return false
     try { if (ready()) return true } catch { /* 无法确认当前权限/连接时不发送。 */ }
     emit({ error: '请确认当前仍有恢复权限，并等待连接、当前编辑保存和图片上传完成后再确认恢复。' })
     return false
   }
   async function send(target, context) {
+    try {
+      if (!isCurrent(context) || readTarget(context.account) !== target) { syncIdentity(); return }
+    } catch { return }
     const next = { target, context, controller: new AbortController(), accepted: false }
     attempt = next
     emit({ target, busy: true, reviewFailed: false, error: '', notice: null })
     const current = () => attempt === next && !next.controller.signal.aborted && isCurrent(context)
     try {
       const response = await perform(target, config(context, next.controller.signal))
-      if (!current() || pending.get(key(context.account)) !== target) return
+      if (!current()) return
+      if (readTarget(context.account) !== target) { syncIdentity(); return }
       const message = restoreReply(target, response.data)
       next.accepted = true
-      pending.delete(key(context.account))
-      emit({ target: null, reviewFailed: false, error: '', notice: { type: response.data.applied ? 'success' : 'info', message } })
+      let cleaned = false
+      try {
+        const remove = () => current() && readTarget(context.account) === target && pending.delete(key(context.account), target)
+        const result = exclusive(context.account, remove, next.controller.signal)
+        cleaned = result?.then ? await result : result
+      } catch { /* A verified server result remains verified even if local cleanup fails. */ }
+      if (!current()) return
+      let remaining = target
+      try { remaining = readTarget(context.account) } catch { /* Preserve the warning. */ }
+      emit({ target: remaining, reviewFailed: false, trackingFailed: state.trackingFailed,
+        error: cleaned ? '' : '恢复已确认，但本地确认记录未能结束；请恢复本站存储后确认原请求，不会自动重复恢复。',
+        notice: { type: response.data.applied ? 'success' : 'info', message } })
       await confirmed(target, response.data)
     } catch (failure) {
       if (current()) emit(next.accepted ? { error: '恢复已确认，列表暂未更新；请刷新列表查看。' }
@@ -90,8 +124,9 @@ export function createHistoryRestore({ service, docId, readIdentity, ready, perf
         const visible = current()
         attempt = null
         emit({ busy: false })
-        if (!visible) { syncIdentity(); if (owner?.account === context.account && !next.accepted)
-          emit({ target: pending.get(key(context.account)) || null, error: unknown }) }
+        if (!visible) { syncIdentity(); if (owner?.account === context.account && !next.accepted) {
+          try { emit({ target: readTarget(context.account), error: unknown }) } catch { /* Fail closed. */ }
+        } }
       }
     }
   }
@@ -99,34 +134,65 @@ export function createHistoryRestore({ service, docId, readIdentity, ready, perf
     const context = captureContext()
     if (!context || !Number.isSafeInteger(docId) || docId <= 0 || typeof service !== 'string' ||
       !revision(targetRevision) || !revision(expectedRevision) || expectedRevision === Number.MAX_SAFE_INTEGER ||
-      pending.has(key(context.account)) || !available()) return
-    let requestId
-    try { requestId = newRequestId(); if (!uuid(requestId)) throw Error('无效请求编号') }
-    catch { emit({ error: '无法生成恢复请求编号，请稍后重试。' }); return }
-    const target = Object.freeze({ targetRevision, expectedRevision, requestId })
-    pending.set(key(context.account), target)
-    await send(target, context)
+      !available()) return
+    const preparing = { controller: new AbortController() }
+    preparation = preparing
+    emit({ busy: true, error: '', notice: null })
+    try {
+      const prepare = () => {
+        if (preparation !== preparing || !isCurrent(context)) return null
+        const existing = readTarget(context.account)
+        if (existing) { emit({ target: existing, trackingFailed: false, error: unknown }); return null }
+        let requestId
+        try { requestId = newRequestId(); if (!uuid(requestId)) throw Error('无效请求编号') }
+        catch { emit({ error: '无法生成恢复请求编号，请稍后重试。' }); return null }
+        const target = Object.freeze({ targetRevision, expectedRevision, requestId })
+        pending.set(key(context.account), target)
+        emit({ target, trackingFailed: false })
+        return target
+      }
+      const result = exclusive(context.account, prepare, preparing.controller.signal)
+      const target = result?.then ? await result : result
+      if (preparation !== preparing) return
+      preparation = null
+      emit({ busy: false })
+      if (target && isCurrent(context) && available()) await send(target, context)
+    } catch {
+      if (preparation === preparing && isCurrent(context)) trackingError()
+    } finally {
+      if (preparation === preparing) { preparation = null; emit({ busy: false }) }
+    }
   }
   async function retryOriginal() {
     const context = captureContext()
     if (!context || !available()) return
-    const target = pending.get(key(context.account))
-    if (!target || target !== state.target) return
+    let target
+    try { target = readTarget(context.account) } catch { return }
+    if (!target || target !== state.target) { syncIdentity(); return }
     await send(target, context)
   }
   function prepareEndWaiting() {
     const context = captureContext()
-    if (!context || attempt || !state.target || pending.get(key(context.account)) !== state.target) return null
+    if (!context || attempt || preparation || !state.target) return null
+    try { if (readTarget(context.account) !== state.target) { syncIdentity(); return null } } catch { return null }
     return { context, target: state.target }
   }
   function endWaiting(confirmation) {
-    if (!confirmation || attempt || !isCurrent(confirmation.context) || !owner ||
+    if (!confirmation || attempt || preparation || !isCurrent(confirmation.context) || !owner ||
       owner.account !== confirmation.context.account || owner.token !== confirmation.context.token ||
-      state.target !== confirmation.target || pending.get(key(owner.account)) !== confirmation.target) return false
-    pending.delete(key(owner.account))
-    emit({ target: null, reviewFailed: false, error: '', notice: { type: 'warning',
-      message: `已结束等待。原恢复到版本 ${confirmation.target.targetRevision} 的请求可能已经生效；请查看当前正文后再决定是否恢复，没有自动重试或撤销。` } })
-    return true
+      state.target !== confirmation.target) return false
+    const remove = () => {
+      if (attempt || preparation || !isCurrent(confirmation.context) || state.target !== confirmation.target) return false
+      if (readTarget(confirmation.context.account) !== confirmation.target) { syncIdentity(); return false }
+      if (!pending.delete(key(confirmation.context.account), confirmation.target)) return false
+      emit({ target: null, reviewFailed: false, trackingFailed: false, error: '', notice: { type: 'warning',
+        message: `已结束等待。原恢复到版本 ${confirmation.target.targetRevision} 的请求可能已经生效；请查看当前正文后再决定是否恢复，没有自动重试或撤销。` } })
+      return true
+    }
+    try {
+      const result = exclusive(confirmation.context.account, remove)
+      return result?.then ? result.catch(() => { if (isCurrent(confirmation.context)) trackingError(); return false }) : result
+    } catch { trackingError(); return false }
   }
   function deactivate() { active = false; generation++; cancel() }
   function activate() { active = true; syncIdentity() }

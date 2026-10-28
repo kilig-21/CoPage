@@ -140,6 +140,7 @@ body { margin: 0; min-width: 0; }
   .history-drawer .ant-alert-content { min-width: 0; overflow-wrap: anywhere; }
   .history-drawer .ant-alert-action { flex: 0 0 100%; margin: 12px 0 0; padding-left: 22px; }
   .history-drawer .ant-drawer-body .ant-btn { min-height: 44px; }
+  .history-confirm-modal .ant-modal-confirm-btns .ant-btn { min-height: 44px; }
   .history-drawer .ant-drawer-close { width: 44px; min-height: 44px; margin-inline-end: 8px; }
 }
 

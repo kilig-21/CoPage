@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import request from './request'
 import { createHistoryRestore } from './historyRestore'
+import { createHistoryRestoreStore } from './historyRestoreStore'
+
+const pending = createHistoryRestoreStore({ getStorage: () => localStorage,
+  withLock: (name, action, signal) => {
+    const locks = globalThis.navigator?.locks
+    if (!locks?.request) throw Error('浏览器暂不支持安全保存恢复确认，请使用当前版本浏览器。')
+    return locks.request(name, { mode: 'exclusive', ...(signal ? { signal } : {}) }, action)
+  },
+})
 
 export default function useHistoryRestore(docId, isOwner, canRestore, onConfirmed) {
   const mounted = useRef(false), callbacks = useRef(null)
@@ -14,7 +23,7 @@ export default function useHistoryRestore(docId, isOwner, canRestore, onConfirme
     previous?.controller.deactivate()
     const entry = { docId, service, controller: null }
     scope.current = entry
-    entry.controller = createHistoryRestore({ service, docId,
+    entry.controller = createHistoryRestore({ service, docId, pending,
       readIdentity: () => ({ token: localStorage.getItem('collab-token'), account: localStorage.getItem('collab-user') }),
       ready: () => callbacks.current.isOwner && callbacks.current.canRestore(),
       perform: (target, config) => request.post(`/doc/${docId}/history/${target.targetRevision}/restore`,
