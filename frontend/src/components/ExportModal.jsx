@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, Modal, Radio, Typography } from 'antd'
 import request from '../api/request'
-import { parseDocumentExport } from '../api/documentExport'
+import { confirmDocumentExportAccess, parseDocumentExportReply } from '../api/documentExport'
 import { downloadTextFile } from '../editor/downloadTextFile'
 
 export default function ExportModal({ docId, onClose, canExport }) {
@@ -39,11 +39,12 @@ export default function ExportModal({ docId, onClose, canExport }) {
       const response = await request.get(`/doc/${docId}/export`, { params: { format }, signal: controller.signal })
       if (!alive.current || controller.signal.aborted) return
       if (!canExportRef.current()) throw new Error('连接或访问权限已变化，请重新核对文档后再导出')
-      const data = parseDocumentExport(response?.data, format)
+      const data = parseDocumentExportReply(response, format)
       // 响应可能在撤权之后到达；生成下载文件前以当前服务端访问权限再核对一次。
-      await request.get(`/doc/${docId}/metadata`, { signal: controller.signal })
+      const access = await request.get(`/doc/${docId}/metadata`, { signal: controller.signal })
       if (!alive.current || controller.signal.aborted) return
       if (!canExportRef.current()) throw new Error('连接或访问权限已变化，请重新核对文档后再导出')
+      confirmDocumentExportAccess(access, docId)
       downloadTextFile(data.content, data.filename, data.mediaType)
       setNotice(`已生成服务端版本 ${data.revision} 的副本，请查看浏览器下载`)
     } catch (ex) {

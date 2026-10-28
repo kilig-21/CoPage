@@ -1,3 +1,5 @@
+import { isDocumentSnapshotContent } from './documentSnapshotContent.js'
+
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 const documentId = value => Number.isSafeInteger(value) && value > 0
 const invalidSnapshot = () => new Error('打印预览回复不完整或格式不符，尚未生成打印副本。请刷新预览，原文档仍保留。')
@@ -7,23 +9,7 @@ export function parsePrintSnapshot(reply, expectedId) {
   const value = reply?.data
   if (!record(reply) || reply.code !== 0 || !documentId(expectedId) || !record(value) ||
       value.id !== expectedId || typeof value.title !== 'string' || !value.title.trim() ||
-      !Number.isSafeInteger(value.revision) || value.revision < 0 || !record(value.content) ||
-      !Array.isArray(value.content.ops) || !value.content.ops.length) throw invalidSnapshot()
-  for (const op of value.content.ops) {
-    if (!record(op) || !Object.hasOwn(op, 'insert') ||
-        Object.keys(op).some(key => !['insert', 'attributes'].includes(key))) throw invalidSnapshot()
-    if (typeof op.insert === 'string') {
-      if (!op.insert.length) throw invalidSnapshot()
-    } else if (!record(op.insert) || Object.keys(op.insert).length !== 1 ||
-        typeof op.insert.image !== 'string' || !op.insert.image.length) throw invalidSnapshot()
-    if (Object.hasOwn(op, 'attributes') && (!record(op.attributes) ||
-        Object.values(op.attributes).some(value => value !== null &&
-          !['string', 'boolean'].includes(typeof value) && !(typeof value === 'number' && Number.isFinite(value))))) {
-      throw invalidSnapshot()
-    }
-  }
-  const last = value.content.ops.at(-1).insert
-  if (typeof last !== 'string' || !last.endsWith('\n')) throw invalidSnapshot()
+      !Number.isSafeInteger(value.revision) || value.revision < 0 || !isDocumentSnapshotContent(value.content)) throw invalidSnapshot()
   return value
 }
 

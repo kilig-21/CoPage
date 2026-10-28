@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { parseDocumentExport } from './documentExport.js'
+import { confirmDocumentExportAccess, parseDocumentExport, parseDocumentExportReply } from './documentExport.js'
 
 const copy = content => ({ filename: '资料 🧭.copage.json', mediaType: 'application/json;charset=utf-8',
   content: JSON.stringify({ format: 'copage', version: 1, title: '资料 🧭', content }), revision: 0 })
@@ -40,11 +40,34 @@ test('富文本封装可解析且为CoPage版本1，保留原始JSON字节不重
 })
 
 test('完整存量正文超过10000片段或2MiB仍按原字节下载，不复制导入限制', () => {
-  const fragments = copy({ ops: Array.from({ length: 10001 }, (_, i) => ({ insert: i % 2 ? '乙' : '甲', attributes: { bold: i % 2 === 0 } })) })
+  const fragments = copy({ ops: [...Array.from({ length: 10001 }, (_, i) => ({ insert: i % 2 ? '乙' : '甲', attributes: { bold: i % 2 === 0 } })), {insert:'\n'}] })
   assert.equal(parseDocumentExport(fragments, 'copage').content, fragments.content)
   const large = copy({ ops: [{ insert: '长'.repeat(750000) + '\n' }] })
   assert.ok(new TextEncoder().encode(large.content).length > 2 * 1024 * 1024)
   assert.equal(parseDocumentExport(large, 'copage').content, large.content)
+})
+
+test('正确格式标记不足以证明有完整正文，缺失或编辑操作不能下载为有效副本', () => {
+  for (const content of [undefined, null, [], {}, {ops:[]}, {ops:[{retain:1}]}, {ops:[{delete:1}]},
+    {ops:[{insert:'正文',retain:1},{insert:'\n'}]}, {ops:[{insert:'没有完整结尾'}]},
+    {ops:[{insert:''},{insert:'\n'}]}, {ops:[{insert:{image:1}},{insert:'\n'}]},
+    {ops:[{insert:'正文',attributes:{bold:{value:true}}},{insert:'\n'}]}]) invalid(copy(content))
+})
+test('完整导出保留文字、图片、旧标量属性及原始JSON字节，不重写为导入格式', () => {
+  const content = '{\n "format":"copage", "version":1, "title":"原稿", "content":{"ops":[{"insert":"原稿🧭","attributes":{"legacy":true,"header":null}},{"insert":{"image":"https://example.invalid/image.png"},"attributes":{"width":"50%"}},{"insert":"\\n"}]},"extra":true\n}\n'
+  const value = {...valid,content}
+  assert.equal(parseDocumentExportReply({code:0,data:value},'copage').content, content)
+})
+test('导出回复必须明确成功，错误code携带完整文件也不能提示下载成功', () => {
+  for (const reply of [null, [], {}, {data:valid}, {code:'0',data:valid}, {code:403,data:valid}, {code:0}])
+    assert.throws(() => parseDocumentExportReply(reply,'copage'),/未生成副本/)
+  assert.equal(parseDocumentExportReply({code:0,data:valid},'copage').revision,0)
+})
+test('生成下载前末次权限回复必须成功且匹配原文档编号', () => {
+  assert.equal(confirmDocumentExportAccess({code:0,data:{id:3}},3),undefined)
+  for (const reply of [null, [], {}, {code:0}, {code:403,data:{id:3}}, {code:0,data:{id:4}}, {code:0,data:{id:'3'}}])
+    assert.throws(() => confirmDocumentExportAccess(reply,3),/导出权限回复无法确认.*未生成副本/)
+  assert.throws(() => confirmDocumentExportAccess({code:0,data:{id:3}},'3'),/未生成副本/)
 })
 
 test('纯文本空白、换行、Unicode及旧格式副本不被归一化或篡改', () => {
