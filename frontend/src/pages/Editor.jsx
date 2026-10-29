@@ -17,6 +17,7 @@ import { draftRecordsJson } from '../editor/draftRecords'
 import { downloadTextFile } from '../editor/downloadTextFile'
 import DraftBackupDownloads from '../components/DraftBackupDownloads'
 import DocumentFindPanel from '../components/DocumentFindPanel'
+import DocumentImagesModal from '../components/DocumentImagesModal'
 import UserGuide from '../components/UserGuide'
 import PendingCopyHint from '../components/PendingCopyHint'
 import request from '../api/request'
@@ -30,6 +31,7 @@ export default function Editor() {
   const docId = Number(id)
   const topbarRef = useRef(null)
   const statusRef = useRef(null)
+  const toolsButtonRef = useRef(null)
   useEditorStickyOffsets(topbarRef, statusRef)
   const [renaming, setRenaming] = useState(false)
   const [sharing, setSharing] = useState(false)
@@ -45,13 +47,15 @@ export default function Editor() {
   const [templateNotice, setTemplateNotice] = useState(null)
   const templateScope = useRef(null)
   const [showFind, setShowFind] = useState(false)
+  const [showImages, setShowImages] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(false)
   const [titleOpen, setTitleOpen] = useState(false)
   const [findFocusEpoch, setFindFocusEpoch] = useState(0)
   const [draftDownloadNotice, setDraftDownloadNotice] = useState('')
   const { editorHostRef, connection, users, error, title, permission, isOwner,
-    saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, dismissSkippedDraftNotice, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor, revealDocumentMatch } = useQuillCollab(docId)
+    saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, dismissSkippedDraftNotice, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor, revealDocumentMatch,
+    documentImagesState, startDocumentImages, closeDocumentImages, saveDocumentImageDescription } = useQuillCollab(docId)
   useLayoutEffect(() => {
     if (showFind) revealDocumentMatch()
   }, [showFind, findFocusEpoch, revealDocumentMatch])
@@ -62,6 +66,7 @@ export default function Editor() {
   const documentTools = [
     ...(permission === 2 ? [{ key: 'rename', label: '重命名' }] : []),
     { key: 'history', label: '历史版本' }, { key: 'copy', label: '创建副本' },
+    { key: 'images', label: '图片说明' },
     { key: 'template', label: '保存为个人模板', disabled: Boolean(templateNotice?.type === 'warning' && currentTemplateContext(templateNotice.context)) },
     { key: 'export', label: '导出文档' }, { key: 'print', label: '打印 / PDF' },
   ]
@@ -73,6 +78,7 @@ export default function Editor() {
   ]
   function selectTool({ key }) {
     setToolsOpen(false)
+    if (key === 'images') { startDocumentImages(); setShowImages(true); return }
     if (key === 'manage') { openManagement(false); return }
     if (key === 'template') { setSavingTemplate(templateContext()); return }
     const actions = { rename: setRenaming, history: setShowHistory, copy: setShowCopy,
@@ -129,13 +135,14 @@ export default function Editor() {
     if (returnToShare) setSharing(true)
   }
   useEffect(() => { setToolsOpen(false); setTitleOpen(false) }, [docId, permission])
-  useEffect(() => { changeManagement(null); setSharing(false); setShareError('') }, [docId])
+  useEffect(() => { changeManagement(null); setSharing(false); setShareError(''); setShowImages(false) }, [docId])
   useEffect(() => { setSavingTemplate(null); setTemplateNotice(null) }, [docId, location.key])
   useEffect(() => {
     const close = event => {
       if (event.type === 'storage' && event.key !== null && !['collab-user', 'collab-token'].includes(event.key)) return
       changeManagement(null); setSharing(false); setShareError('')
       setSavingTemplate(null); setTemplateNotice(null)
+      setShowImages(false)
     }
     window.addEventListener('storage', close)
     window.addEventListener('copage-auth-changed', close)
@@ -145,7 +152,7 @@ export default function Editor() {
     if (!isOwner || permission !== 2) changeManagement(null)
   }, [isOwner, permission])
   useEffect(() => {
-    if (permission <= 0) { setShowHistory(false); setShowCopy(false); setSharing(false); setSavingTemplate(null); setTemplateNotice(null) }
+    if (permission <= 0) { setShowHistory(false); setShowCopy(false); setSharing(false); setSavingTemplate(null); setTemplateNotice(null); setShowImages(false) }
     if (permission !== 2) setRenaming(false)
   }, [permission])
   useEffect(() => {
@@ -165,7 +172,7 @@ export default function Editor() {
   }
   useEffect(() => {
     const shortcut = event => {
-      if (permission <= 0 || recoveryDraft || renaming || sharing || managing || savingTemplate || showHistory || showExport || showPrint || showCopy || showGuide ||
+      if (permission <= 0 || recoveryDraft || renaming || sharing || managing || savingTemplate || showHistory || showExport || showPrint || showCopy || showGuide || showImages ||
           event.isComposing || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || !['f', 'p'].includes(event.key.toLowerCase())) return
       event.preventDefault()
       if (event.key.toLowerCase() === 'p') { setToolsOpen(false); setShowPrint(true) }
@@ -173,7 +180,7 @@ export default function Editor() {
     }
     window.addEventListener('keydown', shortcut)
     return () => window.removeEventListener('keydown', shortcut)
-  }, [permission, recoveryDraft, renaming, sharing, managing, savingTemplate, showHistory, showExport, showPrint, showCopy, showGuide, startDocumentFind])
+  }, [permission, recoveryDraft, renaming, sharing, managing, savingTemplate, showHistory, showExport, showPrint, showCopy, showGuide, showImages, startDocumentFind])
   function saveRawDrafts() {
     try {
       downloadTextFile(draftRecordsJson(docId, unreadableDrafts), `原始草稿-${docId}.json`, 'application/json;charset=utf-8')
@@ -204,7 +211,7 @@ export default function Editor() {
           {permission > 0 && <Tooltip title="分享链接"><Button type="text" aria-label="分享链接" icon={<ShareAltOutlined aria-hidden="true" />}
             onClick={() => setSharing(true)}><span className="editor-action-label">分享</span></Button></Tooltip>}
           <Dropdown trigger={['click']} autoFocus open={toolsOpen} onOpenChange={setToolsOpen} menu={{ items: tools, onClick: selectTool }}>
-            <Button type="text" aria-label="更多文档操作" aria-haspopup="menu" aria-expanded={toolsOpen} icon={<MoreOutlined aria-hidden="true" />}>
+            <Button ref={toolsButtonRef} type="text" aria-label="更多文档操作" aria-haspopup="menu" aria-expanded={toolsOpen} icon={<MoreOutlined aria-hidden="true" />}>
               <span className="editor-action-label">更多</span></Button>
           </Dropdown>
         </Space>
@@ -254,6 +261,11 @@ export default function Editor() {
         </section>
       </main>
       {showGuide && <UserGuide initialSection="save" onClose={() => setShowGuide(false)} />}
+      {showImages && permission > 0 && <DocumentImagesModal state={documentImagesState} permission={permission}
+        onSave={saveDocumentImageDescription} onClose={() => {
+          closeDocumentImages(); setShowImages(false)
+          queueMicrotask(() => toolsButtonRef.current?.focus({ preventScroll: true }))
+        }} />}
       {renaming && permission === 2 && <RenameModal doc={{ id: docId, title }} onSaved={refreshTitle} onClose={() => setRenaming(false)} />}
       {sharing && <ShareModal docId={docId} isOwner={isOwner && permission === 2} managementError={shareError} onClose={() => setSharing(false)}
         onManage={() => openManagement(true)} />}

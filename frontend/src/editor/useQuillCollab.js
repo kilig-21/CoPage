@@ -17,6 +17,7 @@ import { createDraftBackup } from './draftBackup'
 import { readDraftRecords } from './draftRecords'
 import { createSkippedDraftNotice } from './skippedDraftNotice'
 import { createDocumentFind, EMPTY_DOCUMENT_FIND } from './documentFind'
+import { createDocumentImages, EMPTY_DOCUMENT_IMAGES } from './documentImages'
 
 function createClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `client-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -45,6 +46,8 @@ export default function useQuillCollab(docId) {
   const documentFindRef = useRef(null)
   const revealDocumentMatch = useCallback(() => documentFindRef.current?.refreshSelection(), [])
   const [documentFindState, setDocumentFindState] = useState(EMPTY_DOCUMENT_FIND)
+  const documentImagesRef = useRef(null)
+  const [documentImagesState, setDocumentImagesState] = useState(EMPTY_DOCUMENT_IMAGES)
   const [loadAttempt, setLoadAttempt] = useState(0)
 
   useEffect(() => {
@@ -67,6 +70,7 @@ export default function useQuillCollab(docId) {
     setPermission(0)
     setIsOwner(false)
     setDocumentFindState(EMPTY_DOCUMENT_FIND)
+    setDocumentImagesState(EMPTY_DOCUMENT_IMAGES)
 
     if (!Number.isSafeInteger(docId) || docId <= 0) {
       setConnection('地址无效')
@@ -148,6 +152,7 @@ export default function useQuillCollab(docId) {
     let imageInsertIndex = null
     let pendingImageOperation = null
     let documentFind = null
+    let imageDescriptions = null
     let uploadController = null
     let titleController = null
     const refreshTitle = async () => {
@@ -166,6 +171,7 @@ export default function useQuillCollab(docId) {
       if (!active) return
       const pending = client.hasUnconfirmedChanges()
       documentFind?.refreshStatus()
+      imageDescriptions?.refreshStatus()
       setSaveStatus(recoveryActionsRef.current ? '等待恢复本地草稿'
         : !connected || !synced ? (pending ? '有修改尚未同步' : '等待同步')
         : uploading ? '正在上传图片'
@@ -176,6 +182,7 @@ export default function useQuillCollab(docId) {
     const updateEditable = () => {
       quill.enable(canEdit && connected && synced)
       documentFind?.refreshStatus()
+      imageDescriptions?.refreshStatus()
       updateToolbar()
     }
     let cursorSendTimer = null
@@ -501,6 +508,7 @@ export default function useQuillCollab(docId) {
       if (imageInsertIndex !== null) imageInsertIndex = delta.transformPosition(imageInsertIndex, true)
       cursorLayer.transform(delta)
       documentFind?.changed(delta)
+      imageDescriptions?.changed(delta)
       if (source !== 'user') return
       scheduleCursor()
       if (composing) {
@@ -572,6 +580,13 @@ export default function useQuillCollab(docId) {
       onState: state => { if (active) setDocumentFindState(state) },
     })
     documentFindRef.current = documentFind
+    imageDescriptions = createDocumentImages(quill, {
+      Delta,
+      canEdit: () => active && canEdit && connected && synced && !uploading && !composing
+        && !client.hasUnconfirmedChanges() && !recoveryActionsRef.current,
+      onState: state => { if (active) setDocumentImagesState(state) },
+    })
+    documentImagesRef.current = imageDescriptions
     quill.on('text-change', onTextChange)
     quill.on('selection-change', onSelectionChange)
     quill.root.addEventListener('compositionstart', onCompositionStart)
@@ -704,6 +719,8 @@ export default function useQuillCollab(docId) {
       exportReadyRef.current = null
       documentFind?.dispose()
       documentFindRef.current = null
+      imageDescriptions?.dispose()
+      documentImagesRef.current = null
       quill.getModule('toolbar')?.container.remove()
       host.replaceChildren()
       quillRef.current = null
@@ -720,6 +737,10 @@ export default function useQuillCollab(docId) {
     canRestoreHistory: () => Boolean(historyReadyRef.current?.()),
     canExportDocument: () => Boolean(exportReadyRef.current?.()),
     documentFindState,
+    documentImagesState,
+    startDocumentImages: () => documentImagesRef.current?.start(),
+    closeDocumentImages: () => documentImagesRef.current?.pause(),
+    saveDocumentImageDescription: (...args) => documentImagesRef.current?.save(...args),
     revealDocumentMatch,
     startDocumentFind: () => { documentFindRef.current?.start() },
     closeDocumentFind: () => { documentFindRef.current?.pause() },
