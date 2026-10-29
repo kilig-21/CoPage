@@ -10,9 +10,10 @@ export default function PendingCopies({ onCreated }) {
   useEffect(() => {
     alive.current = true
     const cancel = () => { const old = attempt.current; attempt.current = null; old?.controller.abort(); if (alive.current) { setBusy(false); setError('') } }
-    window.addEventListener('storage', cancel)
+    const storageChanged = () => { if (attempt.current && !sameCopyIdentity(attempt.current.identity)) cancel() }
+    window.addEventListener('storage', storageChanged)
     window.addEventListener('copage-auth-changed', cancel)
-    return () => { alive.current = false; cancel(); window.removeEventListener('storage', cancel); window.removeEventListener('copage-auth-changed', cancel) }
+    return () => { alive.current = false; cancel(); window.removeEventListener('storage', storageChanged); window.removeEventListener('copage-auth-changed', cancel) }
   }, [])
   async function confirm(summary) {
     if (attempt.current || !sameCopyIdentity(pending.identity)) return
@@ -22,7 +23,8 @@ export default function PendingCopies({ onCreated }) {
     try {
       let response = await confirmCopy(summary, { signal: next.controller.signal, deferCleanup: true })
       if (!current()) return
-      response = response.confirmTracking()
+      response = await response.confirmTracking()
+      if (!current()) return
       next.accepted = true
       onCreated(response.data)
     } catch (failure) {
@@ -36,7 +38,7 @@ export default function PendingCopies({ onCreated }) {
   return <Card className="copy-creation-review" role="region" aria-label="待确认的副本"
     title="待确认的副本" extra={<Button disabled={busy || pending.loading} onClick={pending.refresh}>刷新记录</Button>}>
     <Typography.Paragraph>这些创建尚未取得确认。即使来源已删除或撤权，仍可确认已经创建的私人副本；未创建的请求仍须通过现时来源权限检查。</Typography.Paragraph>
-    <Typography.Paragraph type="secondary">只在当前账号、服务和浏览器标签中保留标题与创建标识，不保存正文。可先继续其他工作，稍后再确认；关闭标签或清站点数据可能失去记录。</Typography.Paragraph>
+    <Typography.Paragraph type="secondary">原来源、标题与创建标识按当前账号和服务保存在本浏览器，不保存正文。关闭标签或重登原账号后仍可主动确认，不会自动重发；清除站点数据或换浏览器可能失去记录。</Typography.Paragraph>
     {pending.error && <Alert type="warning" showIcon message={pending.error} />}
     {error && <Alert type="warning" showIcon message={error} />}
     <List rowKey="key" dataSource={pending.records} renderItem={record => <List.Item actions={[

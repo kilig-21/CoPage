@@ -2,7 +2,12 @@ import { message } from 'antd'
 import request from './request'
 import { createCopyCreator } from './copyCreation'
 
-const creator = createCopyCreator({ getStorage: () => sessionStorage, crypto: globalThis.crypto,
+const creator = createCopyCreator({ getStorage: () => localStorage, getLegacyStorage: () => sessionStorage, crypto: globalThis.crypto,
+  withLock: (name, action, signal) => {
+    const locks = globalThis.navigator?.locks
+    if (!locks?.request) throw Error('浏览器暂不支持安全保存副本确认，请使用当前版本浏览器。')
+    return locks.request(name, { mode: 'exclusive', ...(signal ? { signal } : {}) }, action)
+  },
   post: (path, body, config) => request.post(path, body, config) })
 
 function options(config) {
@@ -33,8 +38,8 @@ function prepared(config) {
 function accepted(result) {
   if (typeof result.confirmTracking === 'function') {
     const confirm = result.confirmTracking
-    return { ...result, confirmTracking: () => {
-      const response = confirm()
+    return { ...result, confirmTracking: async () => {
+      const response = await confirm()
       notifyCopyChanges()
       warnTracking(response)
       return response

@@ -73,6 +73,17 @@ body { margin: 0; min-width: 0; }
   .document-copy-modal .ant-alert .ant-alert-action { flex: 0 0 100%; margin: 8px 0 0; padding-left: 22px; }
 }
 .editor-status-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+@media screen and (max-height: 640px) {
+  .document-copy-modal { top: 24px; padding-bottom: 24px; }
+  .document-copy-modal .ant-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); }
+  .document-copy-modal .ant-modal-header, .document-copy-modal .ant-modal-footer { flex-shrink: 0; }
+  .document-copy-modal .ant-modal-header { padding-inline-end: 44px; }
+  .document-copy-modal .ant-modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+  .document-copy-modal .ant-btn, .document-copy-modal .ant-input { min-height: 44px; }
+  .document-copy-modal .ant-modal-close { width: 44px; height: 44px; }
+  .document-copy-modal .ant-modal-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .document-copy-modal .ant-modal-footer .ant-btn { margin-inline-start: 0; max-width: 100%; height: auto; white-space: normal; }
+}
 .filter-summary { display: flex; align-items: center; flex-wrap: wrap; overflow-wrap: anywhere; margin-bottom: 16px; }
 .doc-list-card .ant-list-item-meta-title,
 .doc-list-card .ant-list-item-meta-description,

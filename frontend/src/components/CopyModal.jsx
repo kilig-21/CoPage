@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal, Typography } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import createDocument from '../api/createDocument'
@@ -16,6 +16,7 @@ export default function CopyModal({ doc, onClose, onCreated, canCopy = () => tru
   const alive = useRef(true)
   const inFlight = useRef(null)
   const prepared = useRef(null)
+  const feedback = useRef(null)
   const canCopyRef = useRef(canCopy)
   canCopyRef.current = canCopy
   useEffect(() => {
@@ -26,6 +27,12 @@ export default function CopyModal({ doc, onClose, onCreated, canCopy = () => tru
     }, 200)
     return () => { alive.current = false; clearInterval(timer); inFlight.current?.abort() }
   }, [])
+  useLayoutEffect(() => {
+    if (error || !ready) {
+      const body = feedback.current?.closest('.ant-modal-body')
+      if (body) body.scrollTop = 0
+    }
+  }, [error, ready])
   async function createCopy() {
     if (inFlight.current) return
     if (confirmed) {
@@ -51,7 +58,8 @@ export default function CopyModal({ doc, onClose, onCreated, canCopy = () => tru
       let result = prepared.current ? await confirmCopy(prepared.current, config)
         : await createDocument('/doc/' + doc.id + '/copy', title.trim() ? { title: title.trim() } : {}, config)
       if (!current()) return
-      result = result.confirmTracking()
+      result = await result.confirmTracking()
+      if (!current()) return
       accepted = true
       setConfirmed(result.data); setUncertain(false)
       prepared.current = null
@@ -68,18 +76,20 @@ export default function CopyModal({ doc, onClose, onCreated, canCopy = () => tru
       if (alive.current) setBusy(false)
     }
   }
-  return <Modal className="document-copy-modal" title="创建独立副本" open onCancel={busy ? undefined : onClose} onOk={createCopy}
+  return <Modal className="document-copy-modal document-transfer-modal" title="创建独立副本" open onCancel={busy ? undefined : onClose} onOk={createCopy}
     okText={confirmed ? '打开已确认副本' : uncertain ? '确认原副本' : '创建副本'} cancelText={confirmed ? '关闭' : uncertain ? '稍后确认' : '取消'} confirmLoading={busy} okButtonProps={{ disabled: !confirmed && !ready && !uncertain }}
     closable={!busy} maskClosable={!busy} keyboard={!busy} cancelButtonProps={{ disabled: busy }}>
+    {(!ready && !confirmed || error) && <div ref={feedback} style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
+      {!ready && !confirmed && <Alert type="warning" showIcon message="请先等待连接、同步和保存完成" />}
+      {error && <Alert type={uncertain ? 'warning' : 'error'} showIcon message={error}
+        action={(uncertain || confirmed) && <Button disabled={busy} onClick={() => {
+          onClose(); navigate('/docs?' + new URLSearchParams({ scope: 'owned', ...(title.trim() ? { keyword: title.trim() } : {}) }).toString())
+        }}>核对我的文档</Button>} />}
+    </div>}
     <Typography.Paragraph>来源：{doc.title}</Typography.Paragraph>
     <Typography.Paragraph>复制操作时服务端已保存的完整版本，保留正文、格式和图片地址。新文档归你所有，不复制协作者权限、历史或本地未确认草稿，也不会修改原文档。</Typography.Paragraph>
-    <Typography.Paragraph type="secondary">图片继续使用原地址，不复制图片文件。待确认记录仅保留标题和创建标识；关闭窗口、刷新或重登原账号后，可以从我的文档确认。关闭浏览器标签可能失去记录。</Typography.Paragraph>
+    <Typography.Paragraph type="secondary">图片继续使用原地址，不复制图片文件。待确认记录按当前账号与服务保存在本浏览器，仅含来源、标题和创建标识；关闭标签、刷新或重登原账号后，可从我的文档主动确认，不会自动重发。清除站点数据或换浏览器可能失去记录。</Typography.Paragraph>
     <Input aria-label="副本文档标题" maxLength={200} disabled={busy || uncertain || Boolean(confirmed)} value={title}
       placeholder="可选：留空使用原标题加“的副本”" onChange={event => setTitle(event.target.value)} />
-    {!ready && !confirmed && <Alert style={{ marginTop: 12 }} type="warning" showIcon message="请先等待连接、同步和保存完成" />}
-    {error && <Alert style={{ marginTop: 12 }} type={uncertain ? 'warning' : 'error'} showIcon message={error}
-      action={(uncertain || confirmed) && <Button disabled={busy} onClick={() => {
-        onClose(); navigate('/docs?' + new URLSearchParams({ scope: 'owned', ...(title.trim() ? { keyword: title.trim() } : {}) }).toString())
-      }}>核对我的文档</Button>} />}
   </Modal>
 }

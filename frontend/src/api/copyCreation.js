@@ -47,7 +47,7 @@ function stored(read, options) {
 }
 
 /** 只保存副本原来源、标题请求、UUID与准备时间；不读取或保存正文和凭据。 */
-export function createCopyCreator({ getStorage, crypto, post }) {
+export function createCopyCreator({ getStorage, getLegacyStorage, withLock = (_name, action) => action(), crypto, post }) {
   const snapshots = new WeakMap()
 
   async function keysFor(sourceId, body, options) {
@@ -107,6 +107,22 @@ export function createCopyCreator({ getStorage, crypto, post }) {
     }
   }
 
+  // Promote only validated records for this account/service. Never scan draft or
+  // credential values, and never replace a different durable request.
+  async function promote(storage, key, options) {
+    if (!getLegacyStorage) return
+    const legacy = stored(getLegacyStorage, options)
+    const raw = stored(() => legacy.getItem(key), options)
+    if (raw === null) return
+    await decode(key, raw, options)
+    const durable = stored(() => storage.getItem(key), options)
+    if (durable !== null && durable !== raw) throw failure('COPY_CREATION_CONFLICT', '本标签与浏览器保存了不同的原副本请求，两份记录均保留；请先核对我的文档。')
+    if (durable === null) stored(() => storage.setItem(key, raw), options)
+    unchanged(storage, key, raw, options)
+    unchanged(legacy, key, raw, options)
+    stored(() => legacy.removeItem(key), options)
+  }
+
   async function send(storage, key, raw, decoded, summary, options) {
     if (options.onPrepared) await options.onPrepared(summary)
     checkCurrent(options)
@@ -120,15 +136,21 @@ export function createCopyCreator({ getStorage, crypto, post }) {
       throw failure('COPY_CREATION_RESPONSE', '副本创建结果无法确认，请确认原请求或核对我的文档；原标识保留。', 500)
     }
     let cleaned = false
-    const confirmTracking = () => {
+    const clearTracking = () => {
       checkCurrent(options)
       if (cleaned) return result
       try {
         if (stored(() => storage.getItem(key), options) !== raw) return { ...result, creationTrackingWarning: changedWarning }
         if (Object.hasOwn(decoded.record, 'legacyRaw')) {
-          const legacy = stored(() => storage.getItem(decoded.legacyKey), options)
-          if (legacy !== null && legacy !== decoded.record.legacyRaw) return { ...result, creationTrackingWarning: changedWarning }
-          if (legacy !== null) { checkCurrent(options); storage.removeItem(decoded.legacyKey) }
+          const stores = [storage, ...(getLegacyStorage ? [stored(getLegacyStorage, options)] : [])]
+          for (const target of stores) {
+            const legacy = stored(() => target.getItem(decoded.legacyKey), options)
+            if (legacy !== null && legacy !== decoded.record.legacyRaw) return { ...result, creationTrackingWarning: changedWarning }
+          }
+          for (const target of stores) {
+            unchanged(storage, key, raw, options)
+            if (stored(() => target.getItem(decoded.legacyKey), options) !== null) stored(() => target.removeItem(decoded.legacyKey), options)
+          }
         }
         // 先结束旧UUID槽，再结束主记录；部分清理失败仍可用主记录确认同一UUID。
         if (stored(() => storage.getItem(key), options) !== raw) return { ...result, creationTrackingWarning: changedWarning }
@@ -141,6 +163,17 @@ export function createCopyCreator({ getStorage, crypto, post }) {
         return { ...result, creationTrackingWarning: warning }
       }
     }
+    const cleanupFailed = error => {
+      if (error.name === 'AbortError') throw error
+      checkCurrent(options)
+      return { ...result, creationTrackingWarning: warning }
+    }
+    const confirmTracking = () => {
+      try {
+        const completion = withLock(key, clearTracking, options.config.signal)
+        return typeof completion?.then === 'function' ? completion.catch(cleanupFailed) : completion
+      } catch (error) { return cleanupFailed(error) }
+    }
     return options.deferCleanup ? { ...result, confirmTracking } : confirmTracking()
   }
 
@@ -149,19 +182,28 @@ export function createCopyCreator({ getStorage, crypto, post }) {
     const body = bodyOf(input), options = optionsOf(config)
     const { key, legacyKey } = await keysFor(sourceId, body, options)
     const storage = stored(getStorage, options)
-    let raw = stored(() => storage.getItem(key), options)
-    if (raw === null) {
-      const legacyRaw = stored(() => storage.getItem(legacyKey), options)
-      if (legacyRaw !== null && (typeof legacyRaw !== 'string' || !UUID.test(legacyRaw))) {
-        throw failure('COPY_CREATION_RECORD', '原副本UUID记录无法校验，已原样保留；尚未发送替代请求。')
+    const raw = await withLock(key, async () => {
+      checkCurrent(options)
+      await promote(storage, key, options)
+      let raw = stored(() => storage.getItem(key), options)
+      if (raw === null) {
+        const localLegacy = stored(() => storage.getItem(legacyKey), options)
+        const sessionLegacy = getLegacyStorage ? stored(() => stored(getLegacyStorage, options).getItem(legacyKey), options) : null
+        if (localLegacy !== null && sessionLegacy !== null && localLegacy !== sessionLegacy) throw failure('COPY_CREATION_CONFLICT', '浏览器保存了不同的原副本标识，两份均保留；尚未发送替代请求。')
+        const legacyRaw = localLegacy ?? sessionLegacy
+        if (legacyRaw !== null && (typeof legacyRaw !== 'string' || !UUID.test(legacyRaw))) {
+          throw failure('COPY_CREATION_RECORD', '原副本UUID记录无法校验，已原样保留；尚未发送替代请求。')
+        }
+        if (legacyRaw === null && !crypto?.randomUUID) throw failure('COPY_CREATION_CRYPTO', '浏览器暂不支持安全副本重试，请使用当前版本浏览器。')
+        const record = { version: 1, requestId: legacyRaw ?? crypto.randomUUID(), sourceId, body, createdAt: Date.now(),
+          ...(legacyRaw !== null ? { legacyRaw } : {}) }
+        raw = JSON.stringify(record)
+        parseRecord(raw)
+        stored(() => storage.setItem(key, raw), options)
       }
-      if (legacyRaw === null && !crypto?.randomUUID) throw failure('COPY_CREATION_CRYPTO', '浏览器暂不支持安全副本重试，请使用当前版本浏览器。')
-      const record = { version: 1, requestId: legacyRaw ?? crypto.randomUUID(), sourceId, body, createdAt: Date.now(),
-        ...(legacyRaw !== null ? { legacyRaw } : {}) }
-      raw = JSON.stringify(record)
-      parseRecord(raw)
-      stored(() => storage.setItem(key, raw), options)
-    }
+      unchanged(storage, key, raw, options)
+      return raw
+    }, options.config.signal)
     const decoded = await decode(key, raw, options)
     unchanged(storage, key, raw, options)
     return send(storage, key, raw, decoded, summaryFor(key, raw, decoded, options), options)
@@ -184,6 +226,16 @@ export function createCopyCreator({ getStorage, crypto, post }) {
 
   async function listPending(config) {
     const options = optionsOf(config), storage = stored(getStorage, options)
+    if (getLegacyStorage) {
+      const legacy = stored(getLegacyStorage, options), keys = new Set()
+      const length = stored(() => legacy.length, options)
+      if (!Number.isSafeInteger(length) || length < 0) throw failure('COPY_CREATION_STORAGE', '旧副本记录暂时无法读取，原记录保留。')
+      for (let index = 0; index < length; index++) {
+        const key = stored(() => legacy.key(index), options)
+        if (typeof key === 'string' && key.startsWith(options.prefix)) keys.add(key)
+      }
+      for (const key of keys) await withLock(key, () => promote(storage, key, options), options.config.signal)
+    }
     const length = stored(() => storage.length, options)
     if (!Number.isSafeInteger(length) || length < 0) throw failure('COPY_CREATION_STORAGE', '副本重试记录暂时无法读取，原记录保留。')
     const keys = new Set()
