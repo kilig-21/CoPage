@@ -3,13 +3,14 @@ import { ArrowLeftOutlined, FileTextOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Empty, Input, Layout, List, Tag, Typography } from 'antd'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
-import request from '../api/request'
+import { usePageRequest } from '../auth/PageSessionContext'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import { snippetParts } from '../search/snippet'
 
 const PAGE_SIZE = 10
 
 export default function Search() {
+  const request = usePageRequest()
   const navigate = useNavigate()
   const location = useLocation()
   const sourcePath = location.pathname + location.search + location.hash

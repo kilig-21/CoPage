@@ -3,9 +3,11 @@ import { Alert, Button, Input, Modal, Typography } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import createDocument from '../api/createDocument'
 import { confirmCopy } from '../api/copyDocuments'
-import { copyIdentity, sameCopyIdentity } from '../api/usePendingCopies'
+import { sameCopyIdentity } from '../api/usePendingCopies'
+import { usePageSession } from '../auth/PageSessionContext'
 
 export default function CopyModal({ doc, onClose, onCreated, canCopy = () => true }) {
+  const pageSession = usePageSession()
   const navigate = useNavigate()
   const [title, setTitle] = useState('')
   const [busy, setBusy] = useState(false)
@@ -13,6 +15,7 @@ export default function CopyModal({ doc, onClose, onCreated, canCopy = () => tru
   const [uncertain, setUncertain] = useState(false)
   const [confirmed, setConfirmed] = useState(null)
   const [ready, setReady] = useState(() => { try { return canCopy() } catch { return false } })
+  const [sessionCurrent, setSessionCurrent] = useState(pageSession.current)
   const alive = useRef(true)
   const inFlight = useRef(null)
   const prepared = useRef(null)
@@ -22,6 +25,8 @@ export default function CopyModal({ doc, onClose, onCreated, canCopy = () => tru
   useEffect(() => {
     alive.current = true
     const timer = setInterval(() => {
+      const current = pageSession.current(); setSessionCurrent(current)
+      if (!current) inFlight.current?.abort()
       try { setReady(Boolean(prepared.current) || canCopyRef.current()) }
       catch { setReady(Boolean(prepared.current)) }
     }, 200)
@@ -35,6 +40,7 @@ export default function CopyModal({ doc, onClose, onCreated, canCopy = () => tru
   }, [error, ready])
   async function createCopy() {
     if (inFlight.current) return
+    if (!pageSession.current()) { setSessionCurrent(false); return }
     if (confirmed) {
       try { onCreated(confirmed) }
       catch { setError('副本已确认，页面未能打开；请从我的文档查看已创建副本。') }
@@ -46,15 +52,15 @@ export default function CopyModal({ doc, onClose, onCreated, canCopy = () => tru
       if (!canCreate) { setError('请先等待连接、同步和保存完成'); return }
     }
     const controller = new AbortController()
-    const identity = copyIdentity()
+    const identity = pageSession.identity
     let accepted = false
     const current = () => alive.current && !controller.signal.aborted && sameCopyIdentity(identity)
     inFlight.current = controller; setBusy(true); setError('')
     try {
-      const config = { signal: controller.signal, deferCleanup: true, onPrepared: summary => {
+      const config = pageSession.options({ signal: controller.signal, deferCleanup: true, onPrepared: summary => {
         if (!current()) throw new DOMException('副本创建页面或账号已变更', 'AbortError')
         prepared.current = summary; setUncertain(true)
-      } }
+      } })
       let result = prepared.current ? await confirmCopy(prepared.current, config)
         : await createDocument('/doc/' + doc.id + '/copy', title.trim() ? { title: title.trim() } : {}, config)
       if (!current()) return
@@ -77,9 +83,10 @@ export default function CopyModal({ doc, onClose, onCreated, canCopy = () => tru
     }
   }
   return <Modal className="document-copy-modal document-transfer-modal" title="创建独立副本" open onCancel={busy ? undefined : onClose} onOk={createCopy}
-    okText={confirmed ? '打开已确认副本' : uncertain ? '确认原副本' : '创建副本'} cancelText={confirmed ? '关闭' : uncertain ? '稍后确认' : '取消'} confirmLoading={busy} okButtonProps={{ disabled: !confirmed && !ready && !uncertain }}
+    okText={confirmed ? '打开已确认副本' : uncertain ? '确认原副本' : '创建副本'} cancelText={confirmed ? '关闭' : uncertain ? '稍后确认' : '取消'} confirmLoading={busy} okButtonProps={{ disabled: !sessionCurrent || (!confirmed && !ready && !uncertain) }}
     closable={!busy} maskClosable={!busy} keyboard={!busy} cancelButtonProps={{ disabled: busy }}>
-    {(!ready && !confirmed || error) && <div ref={feedback} style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
+    {!sessionCurrent && <Alert type="warning" showIcon message="登录状态已变化，本页副本操作已暂停；原输入和待确认记录保留。请重新登录原账号后继续核对。" />}
+    {sessionCurrent && (!ready && !confirmed || error) && <div ref={feedback} style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
       {!ready && !confirmed && <Alert type="warning" showIcon message="请先等待连接、同步和保存完成" />}
       {error && <Alert type={uncertain ? 'warning' : 'error'} showIcon message={error}
         action={(uncertain || confirmed) && <Button disabled={busy} onClick={() => {
@@ -89,7 +96,7 @@ export default function CopyModal({ doc, onClose, onCreated, canCopy = () => tru
     <Typography.Paragraph>来源：{doc.title}</Typography.Paragraph>
     <Typography.Paragraph>复制操作时服务端已保存的完整版本，保留正文、格式和图片地址。新文档归你所有，不复制协作者权限、历史或本地未确认草稿，也不会修改原文档。</Typography.Paragraph>
     <Typography.Paragraph type="secondary">图片继续使用原地址，不复制图片文件。待确认记录按当前账号与服务保存在本浏览器，仅含来源、标题和创建标识；关闭标签、刷新或重登原账号后，可从我的文档主动确认，不会自动重发。清除站点数据或换浏览器可能失去记录。</Typography.Paragraph>
-    <Input aria-label="副本文档标题" maxLength={200} disabled={busy || uncertain || Boolean(confirmed)} value={title}
+    <Input aria-label="副本文档标题" maxLength={200} disabled={!sessionCurrent || busy || uncertain || Boolean(confirmed)} value={title}
       placeholder="可选：留空使用原标题加“的副本”" onChange={event => setTitle(event.target.value)} />
   </Modal>
 }

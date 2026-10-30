@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import request from './request'
+import { usePageSession } from '../auth/PageSessionContext'
 import { createHistoryRestore } from './historyRestore'
 import { createHistoryRestoreStore } from './historyRestoreStore'
 
@@ -12,6 +12,8 @@ const pending = createHistoryRestoreStore({ getStorage: () => localStorage,
 })
 
 export default function useHistoryRestore(docId, isOwner, canRestore, onConfirmed) {
+  const pageSession = usePageSession()
+  const request = pageSession.request
   const mounted = useRef(false), callbacks = useRef(null)
   callbacks.current = { isOwner, canRestore, onConfirmed }
   const [, render] = useState(0)
@@ -24,7 +26,7 @@ export default function useHistoryRestore(docId, isOwner, canRestore, onConfirme
     const entry = { docId, service, controller: null }
     scope.current = entry
     entry.controller = createHistoryRestore({ service, docId, pending,
-      readIdentity: () => ({ token: localStorage.getItem('collab-token'), account: localStorage.getItem('collab-user') }),
+      readIdentity: () => pageSession.current() ? pageSession.identity : null,
       ready: () => callbacks.current.isOwner && callbacks.current.canRestore(),
       perform: (target, config) => request.post(`/doc/${docId}/history/${target.targetRevision}/restore`,
         { expectedRevision: target.expectedRevision, requestId: target.requestId }, config),

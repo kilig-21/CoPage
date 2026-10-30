@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Button, Card, List, Space, Typography } from 'antd'
 import { Link } from 'react-router-dom'
-import request from '../api/request'
+import { usePageRequest } from '../auth/PageSessionContext'
 
 const counters = [
   ['activeGroupCount', '我加入的小组', '/groups'],
@@ -11,6 +11,7 @@ const counters = [
 ]
 
 export default function WorkspaceOverview() {
+  const request = usePageRequest()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')

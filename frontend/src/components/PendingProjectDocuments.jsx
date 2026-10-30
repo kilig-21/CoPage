@@ -3,8 +3,10 @@ import { Alert, Button, Card, List, Space, Typography } from 'antd'
 import { confirmProjectDocument, projectDocumentIdentity, sameProjectDocumentIdentity } from '../api/projectDocuments'
 import usePendingProjectDocuments from '../api/usePendingProjectDocuments'
 import { subscribeProjectDocumentEvents } from '../api/projectDocumentEvents'
+import { usePageSession } from '../auth/PageSessionContext'
 
 export default function PendingProjectDocuments({ contextKey, disabled, onBusyChange, onCreated }) {
+  const pageSession = usePageSession()
   const pending = usePendingProjectDocuments()
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
   const attempt = useRef(null), alive = useRef(false), scope = useRef(contextKey)
@@ -22,12 +24,12 @@ export default function PendingProjectDocuments({ contextKey, disabled, onBusyCh
     return () => { alive.current = false; unsubscribe(); cancel() }
   }, [contextKey, onBusyChange])
   async function confirm(record) {
-    if (attempt.current || disabled || !sameProjectDocumentIdentity(pending.identity)) return
-    const next = { controller: new AbortController(), identity: projectDocumentIdentity(), contextKey, accepted: false }
+    if (attempt.current || disabled || !pageSession.current() || !sameProjectDocumentIdentity(pending.identity)) return
+    const next = { controller: new AbortController(), identity: pageSession.identity, contextKey, accepted: false }
     attempt.current = next; setBusy(true); onBusyChange(true); setError('')
     const current = () => alive.current && attempt.current === next && !next.controller.signal.aborted && scope.current === next.contextKey && sameProjectDocumentIdentity(next.identity)
     try {
-      let response = await confirmProjectDocument(record, { signal: next.controller.signal, deferCleanup: true })
+      let response = await confirmProjectDocument(record, pageSession.options({ signal: next.controller.signal, deferCleanup: true }))
       if (!current()) return
       response = response.confirmTracking(); next.accepted = true; onCreated(response.data)
     } catch (failure) {

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Empty, Form, Input, List, Modal, Popconfirm, Select, Space, Typography } from 'antd'
-import request from '../api/request'
+import { usePageRequest } from '../auth/PageSessionContext'
 
 const options = [{ value: 1, label: '只读' }, { value: 2, label: '可编辑' }]
 
 export default function CollaboratorModal({ doc, onClose, returnToShare = false }) {
+  const request = usePageRequest()
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)

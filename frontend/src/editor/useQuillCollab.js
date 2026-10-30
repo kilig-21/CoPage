@@ -3,7 +3,7 @@ import Quill from 'quill'
 import 'quill/dist/quill.snow.css'
 import CollabSocket from '../ws/CollabSocket'
 import CollabClient from '../ws/CollabClient'
-import request from '../api/request'
+import { usePageSession } from '../auth/PageSessionContext'
 import { createReconnectSessionCheck, expireSession } from '../auth/session'
 import { IMAGE_ACCEPT, createImageInsertion, finishImageInsertion, imageValidationError, uploadEditorImage } from './imageUpload'
 import RemoteCursorLayer from './RemoteCursorLayer'
@@ -24,6 +24,8 @@ function createClientId() {
 }
 
 export default function useQuillCollab(docId) {
+  const pageSession = usePageSession()
+  const request = pageSession.request
   const editorHostRef = useRef(null)
   const quillRef = useRef(null)
   const [connection, setConnection] = useState('未连接')
@@ -76,6 +78,12 @@ export default function useQuillCollab(docId) {
       setConnection('地址无效')
       setSaveStatus('未打开文档')
       setError('文档地址无效，请从文档列表重新打开')
+      return undefined
+    }
+    if (!pageSession.current()) {
+      setConnection('登录已变化')
+      setSaveStatus('未打开文档')
+      setError('页面原账号已变化，请重新登录原账号后继续；原草稿保持。')
       return undefined
     }
 
@@ -132,9 +140,9 @@ export default function useQuillCollab(docId) {
     quillRef.current = quill
     const cursorLayer = new RemoteCursorLayer(quill)
     const Delta = Quill.import('delta')
-    const token = localStorage.getItem('collab-token')
+    const token = pageSession.identity.token
     const sessionCheckController = new AbortController()
-    const username = localStorage.getItem('collab-user')
+    const username = pageSession.identity.account
     const draftPrefix = username ? `copage-draft:v1:${encodeURIComponent(username)}:${docId}:` : null
     const tabKey = `copage-tab-client:${docId}`
     const clientId = sessionStorage.getItem(tabKey) || createClientId()
@@ -369,6 +377,8 @@ export default function useQuillCollab(docId) {
     })
     const socket = new CollabSocket({
       token,
+      isCurrent: () => active && pageSession.current(),
+      onIdentityChanged: () => queueMicrotask(() => { if (active) onSessionChanged() }),
       onOpen: () => {
         if (!active) return
         connected = true
@@ -398,7 +408,7 @@ export default function useQuillCollab(docId) {
       onError: setError,
     })
     const checkReconnectSession = createReconnectSessionCheck({
-      isCurrent: () => active && localStorage.getItem('collab-token') === token,
+      isCurrent: () => active && pageSession.current(),
       getStatus: async () => {
         const origin = (import.meta.env.VITE_BACKEND_HTTP_ORIGIN ?? '').replace(/\/$/, '')
         const response = await fetch(`${origin}/api/doc/${docId}/metadata`, {
@@ -546,18 +556,21 @@ export default function useQuillCollab(docId) {
     }
     const renderRemoteCursors = () => cursorLayer.render()
     const onSessionChanged = () => {
-      if (!active || localStorage.getItem('collab-token') === token) return
+      if (!active || pageSession.current()) return
       // 关闭发送通道后再收集组合输入，保存在捕获的原账号草稿中。
       socket.close()
       abortImageUpload()
       flushComposition()
-      if (!persistDraft()) preserveFailedDraft()
+      const draftPersisted = persistDraft()
+      if (!draftPersisted) preserveFailedDraft()
       connected = false
       synced = false
       client.disconnect()
       composing = false
       compositionInbox.clear()
       updateEditable()
+      setConnection('登录已变化')
+      if (draftPersisted) setError('登录状态已变化，编辑已暂停；原账号未确认的内容保留在本机，请重新登录原账号核对。')
       titleController?.abort()
       sessionCheckController.abort()
       skippedDrafts.dispose()

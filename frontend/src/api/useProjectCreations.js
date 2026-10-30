@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import request from './request'
 import { createProjectCreator } from './projectCreation'
+import { usePageSession } from '../auth/PageSessionContext'
 
 const creator = createProjectCreator({ getStorage: () => localStorage, crypto: globalThis.crypto,
   post: (path, body, config) => request.post(path, body, config) })
@@ -11,7 +12,7 @@ function identity() {
   return { token, account }
 }
 function options(captured, config = {}) {
-  return { ...config, account: captured.account, service,
+  return { ...config, account: captured.account, service, copageExpectedSessionToken: captured.token,
     isCurrent: () => localStorage.getItem('collab-token') === captured.token && localStorage.getItem('collab-user') === captured.account }
 }
 const identityError = '浏览器暂时无法核对当前账号，原创建记录保留；请重新读取待确认创建。'
@@ -23,6 +24,7 @@ function isCurrent(captured) {
   } catch { return false }
 }
 export default function useProjectCreations(busy) {
+  const pageSession = usePageSession()
   const [records, setRecords] = useState(null), [error, setError] = useState(''), [loading, setLoading] = useState(false)
   const [loadedFor, setLoadedFor] = useState(null)
   const [revision, setRevision] = useState(0)
@@ -39,7 +41,7 @@ export default function useProjectCreations(busy) {
     const controller = new AbortController()
     setRecords(null); setLoadedFor(null); setError(''); setLoading(true)
     let captured
-    try { captured = identity() }
+    try { captured = pageSession.assertCurrent() }
     catch { setError('浏览器暂时无法读取当前账号，原创建记录保留；请恢复存储后重试。'); setLoading(false); return }
     setLoadedFor(captured)
     creator.listPending(options(captured, { signal: controller.signal })).then(value => {
@@ -53,7 +55,8 @@ export default function useProjectCreations(busy) {
     return () => controller.abort()
   }, [revision, busy])
   function capturedOptions(config, onPrepared) {
-    const captured = identity()
+    const captured = pageSession.assertCurrent()
+    pageSession.options(config)
     if (captured.token !== config.copageExpectedSessionToken) throw new DOMException('账号已变更', 'AbortError')
     return options(captured, { ...config, onPrepared, deferCleanup: true })
   }

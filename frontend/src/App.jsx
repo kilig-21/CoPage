@@ -4,6 +4,7 @@ import { safeReturnPath, subscribeSessionChanges } from './auth/session'
 import LocalDraftBackup from './components/LocalDraftBackup'
 import StorageUnavailable from './components/StorageUnavailable'
 import { canReadBrowserStorage } from './auth/browserStorage'
+import { PageSessionProvider } from './auth/PageSessionContext'
 
 const Projects = lazy(() => import('./pages/Projects'))
 const Groups = lazy(() => import('./pages/Groups'))
@@ -84,6 +85,7 @@ function SessionApp() {
   }} />
   return (
     <PageBoundary key={`${location.pathname}:${sessionEpoch}`}>
+    <PageSessionProvider>
     <Suspense fallback={<main className="page-load-message" role="status">正在加载页面，请稍候…</main>}>
     <Routes>
       <Route path="/login" element={<Login />} />
@@ -99,6 +101,7 @@ function SessionApp() {
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
     </Suspense>
+    </PageSessionProvider>
     </PageBoundary>
   )
 }

@@ -1,6 +1,7 @@
 import { message } from 'antd'
 import request from './request'
 import { createProjectDocumentCreator } from './projectDocumentCreation'
+import { bindRequestIdentity, readPageIdentity, samePageIdentity } from '../auth/pageSession.js'
 
 const creator = createProjectDocumentCreator({ getStorage: () => localStorage, crypto: globalThis.crypto,
   post: (path, body, config) => request.post(path, body, config) })
@@ -16,10 +17,10 @@ export function sameProjectDocumentIdentity(before) {
   return Boolean(before?.account && before.token && next && before.account === next.account && before.token === next.token && before.service === next.service)
 }
 function options(config) {
-  const identity = projectDocumentIdentity()
-  if (!identity?.account || !identity.token) throw new Error('请恢复原账号登录信息后继续，原创建记录保留。')
-  return { ...config, account: identity.account, service: identity.service,
-    copageExpectedSessionToken: identity.token, isCurrent: () => sameProjectDocumentIdentity(identity) }
+  const read = () => readPageIdentity(localStorage, request.defaults.baseURL)
+  const bound = bindRequestIdentity(config, read), identity = bound.identity
+  return { ...bound.config, account: identity.account, service: identity.service,
+    isCurrent: () => samePageIdentity(identity, read()) }
 }
 function accepted(result) {
   const notify = value => {

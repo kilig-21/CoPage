@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Alert, Button, Empty, Input, List, Modal, Pagination, Space, Tag, Typography } from 'antd'
-import request from '../api/request'
+import { usePageRequest } from '../auth/PageSessionContext'
 import { documentHref } from '../navigation/documents'
 
 export default function ProjectDocumentsModal({ project, from, busy, uncertain, error, onClose, onAdd, onReview }) {
+  const request = usePageRequest()
   const [input, setInput] = useState('')
   const [keyword, setKeyword] = useState('')
   const [page, setPage] = useState(1)

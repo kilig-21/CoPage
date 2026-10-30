@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal, Radio, Typography } from 'antd'
-import request from '../api/request'
+import { usePageSession } from '../auth/PageSessionContext'
 import { templateCategories } from '../templates/categories'
 import { createPersonalTemplateSaver } from '../api/personalTemplateSave'
 
 export default function SavePersonalTemplateModal({ doc, onClose, onSaved, onReview, onUncertain, canSave = () => true }) {
+  const pageSession = usePageSession()
+  const request = pageSession.request
   const [name, setName] = useState(doc.title)
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('collaboration')
@@ -17,7 +19,7 @@ export default function SavePersonalTemplateModal({ doc, onClose, onSaved, onRev
   currentDoc.current = doc.id; saveReady.current = canSave
   const saver = useRef(null)
   if (!saver.current) saver.current = createPersonalTemplateSaver({ docId: source.current,
-    readIdentity: () => ({ account: localStorage.getItem('collab-user'), token: localStorage.getItem('collab-token'), service: request.defaults.baseURL }),
+    readIdentity: () => pageSession.current() ? pageSession.identity : null,
     canSave: () => saveReady.current(), isCurrent: () => alive.current && currentDoc.current === source.current,
     post: (path, body, config) => request.post(path, body, config) })
   useEffect(() => {

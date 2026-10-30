@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal, Select, Typography } from 'antd'
-import request from '../api/request'
-import { createProjectDocument, confirmProjectDocument, projectDocumentIdentity, sameProjectDocumentIdentity } from '../api/projectDocuments'
+import { usePageSession } from '../auth/PageSessionContext'
+import { createProjectDocument, confirmProjectDocument, sameProjectDocumentIdentity } from '../api/projectDocuments'
 import DocumentPreview from './DocumentPreview'
 
 export default function CreateProjectDocumentModal({ project, contextKey, onClose, onCreated, onBusyChange }) {
+  const pageSession = usePageSession()
+  const request = pageSession.request
   const [title, setTitle] = useState('未命名文档'), [templateId, setTemplateId] = useState(null)
   const [templates, setTemplates] = useState([]), [templateError, setTemplateError] = useState(''), [loadingTemplates, setLoadingTemplates] = useState(true)
   const [reload, setReload] = useState(0), [busy, setBusy] = useState(false), [error, setError] = useState('')
@@ -34,16 +36,17 @@ export default function CreateProjectDocumentModal({ project, contextKey, onClos
   }
   async function save() {
     if (attempt.current) return
+    if (!pageSession.current()) { setError('登录状态已变化，本页旧操作未发送；请重新登录原账号继续。'); return }
     if (confirmed) { try { onCreated(confirmed) } catch { setError('文档已确认，请从我的文档打开原文档。') }; return }
-    const controller = new AbortController(), identity = projectDocumentIdentity(), key = contextKey
+    const controller = new AbortController(), identity = pageSession.identity, key = contextKey
     attempt.current = controller; setBusy(true); onBusyChange(true); setError('')
     const current = () => alive.current && attempt.current === controller && !controller.signal.aborted && scope.current === key && sameProjectDocumentIdentity(identity)
     let accepted = false
     try {
-      const config = { signal: controller.signal, deferCleanup: true, onPrepared: record => {
+      const config = pageSession.options({ signal: controller.signal, deferCleanup: true, onPrepared: record => {
         if (!current()) throw new DOMException('创建页面或账号已变化', 'AbortError')
         prepared.current = record; setPending(record)
-      } }
+      } })
       let response = prepared.current ? await confirmProjectDocument(prepared.current, config)
         : await createProjectDocument({ projectId: project.id, projectName: project.name, title: title.trim(), templateId }, config)
       if (!current()) return

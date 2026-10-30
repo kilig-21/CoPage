@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, Button, Checkbox, Modal, Space, Spin, Typography } from 'antd'
-import request from '../api/request'
+import { usePageRequest } from '../auth/PageSessionContext'
 import { confirmPrintAccess, parsePrintSnapshot } from '../api/printSnapshot'
 import DocumentPreview from './DocumentPreview'
 
 export default function PrintModal({ docId, canPrint, onClose }) {
+  const request = usePageRequest()
   const [portal] = useState(() => {
     const node = document.createElement('div')
     node.className = 'document-print-portal'

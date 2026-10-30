@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import CollabSocket from './CollabSocket.js'
+import CollabClient from './CollabClient.js'
+import Delta from 'quill-delta'
 
 function browser(t) {
   const original = Object.fromEntries(['window', 'navigator', 'WebSocket'].map(key =>
@@ -39,6 +41,44 @@ function browser(t) {
   return { Socket, timers, network, emit: type => events.dispatchEvent(new Event(type)),
     fireTimeout(id) { const fn = timers.get(id); timers.delete(id); fn() } }
 }
+
+test('原页面身份失效后不能首次连接，也不靠联网事件重新绑定新账号', t => {
+  const env=browser(t);let current=false,invalidated=0
+  const socket=new CollabSocket({token:'A',isCurrent:()=>current,onIdentityChanged:()=>invalidated++})
+  socket.connect();assert.equal(env.Socket.instances.length,0);assert.equal(invalidated,1)
+  current=true;env.emit('online');socket.connect()
+  assert.equal(env.Socket.instances.length,0);assert.equal(env.timers.size,0)
+})
+
+test('换号在发送和接收时关闭原通道，丢弃迟到消息且不自动重连', t => {
+  const env=browser(t),messages=[];let current=true,invalidated=0
+  const socket=new CollabSocket({token:'A',isCurrent:()=>current,onIdentityChanged:()=>invalidated++,onMessage:m=>messages.push(m)})
+  socket.connect();const transport=env.Socket.instances[0];transport.open()
+  assert.equal(socket.send({type:'cursor'}),true)
+  current=false
+  assert.equal(socket.send({type:'operation'}),false)
+  transport.onmessage({data:JSON.stringify({type:'ack'})})
+  env.emit('online');socket.connect()
+  assert.equal(transport.sent.length,1);assert.deepEqual(messages,[])
+  assert.equal(invalidated,1);assert.equal(env.Socket.instances.length,1);assert.equal(env.timers.size,0)
+})
+
+test('身份切换拦截正文发送时仍可完整导出原pending草稿，不消费迟到ACK', t => {
+  const env=browser(t);let current=true
+  const client=new CollabClient({docId:1,clientId:'original-A',Delta})
+  const socket=new CollabSocket({token:'A',isCurrent:()=>current,onMessage:m=>client.receive(m)})
+  client.attachSocket(socket);socket.connect();const transport=env.Socket.instances[0];transport.open();client.join()
+  client.receive({type:'sync',docId:1,syncId:client.syncId,fromRevision:0,revision:0,historyComplete:true,history:[],pendingCommittedRevision:null,content:{ops:[{insert:'\n'}]}})
+  const before=transport.sent.length;current=false
+  client.submit(new Delta().insert('必须保留的文字🙂'))
+  const originalId=client.pending.opId
+  transport.onmessage({data:JSON.stringify({type:'ack',docId:1,clientId:'original-A',opId:originalId,revision:1})})
+  assert.equal(transport.sent.length,before)
+  const draft=client.exportDraft(new Delta().insert('必须保留的文字🙂\n'))
+  assert.equal(draft.pending.opId,originalId)
+  assert.deepEqual(draft.content.ops,[{insert:'必须保留的文字🙂\n'}])
+  client.close()
+})
 
 test('未确认草稿或正文尚未加载时，联网事件不能自行开启协作连接', t => {
   const env = browser(t)

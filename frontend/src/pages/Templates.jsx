@@ -2,18 +2,20 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Radio, Space, Spin, Tag, Typography } from 'antd'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
-import request from '../api/request'
-import createDocument, { documentCreationIdentity } from '../api/createDocument'
+import { usePageSession } from '../auth/PageSessionContext'
+import createDocument from '../api/createDocument'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import DocumentPreview from '../components/DocumentPreview'
 import UserGuide from '../components/UserGuide'
 
 import { templateCategories as categories } from '../templates/categories'
 export default function Templates() {
+  const pageSession = usePageSession()
+  const request = pageSession.request
   const navigate = useNavigate()
   const location = useLocation()
   const sourcePath = location.pathname + location.search + location.hash
-  const creationIdentity = useRef(documentCreationIdentity())
+  const creationIdentity = useRef(pageSession.identity)
   const [params, setParams] = useSearchParams()
   const category = Object.hasOwn(categories, params.get('category')) ? params.get('category') : 'all'
   const keyword = (params.get('keyword') || '').slice(0, 200).trim()

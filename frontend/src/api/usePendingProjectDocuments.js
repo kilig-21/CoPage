@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { listPendingProjectDocuments, projectDocumentIdentity, sameProjectDocumentIdentity } from './projectDocuments'
 import { subscribeProjectDocumentEvents } from './projectDocumentEvents'
+import { usePageSession } from '../auth/PageSessionContext'
 
 export default function usePendingProjectDocuments() {
+  const pageSession = usePageSession()
   const [refresh, setRefresh] = useState(0)
   const [state, setState] = useState({ records: [], loading: true, error: '', identity: null })
   const generation = useRef(0)
@@ -13,10 +15,10 @@ export default function usePendingProjectDocuments() {
     return () => { generation.current++; unsubscribe() }
   }, [])
   useEffect(() => {
-    const controller = new AbortController(), ticket = ++generation.current, identity = projectDocumentIdentity()
+    const controller = new AbortController(), ticket = ++generation.current, identity = pageSession.identity
     setState({ records: [], loading: true, error: '', identity })
     const current = () => !controller.signal.aborted && generation.current === ticket
-    listPendingProjectDocuments({ signal: controller.signal }).then(records => {
+    Promise.resolve().then(() => listPendingProjectDocuments(pageSession.options({ signal: controller.signal }))).then(records => {
       if (current()) setState(sameProjectDocumentIdentity(identity) ? { records, loading: false, error: '', identity }
         : { records: [], loading: false, error: '当前账号暂时无法核对，原创建记录保留。', identity: null })
     }).catch(failure => { if (current()) setState({ records: [], loading: false, error: failure?.message || '本地创建记录暂不可读，原记录保留。', identity: null }) })

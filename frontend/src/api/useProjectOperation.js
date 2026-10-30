@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import request from './request'
+import { usePageSession } from '../auth/PageSessionContext'
 import { createProjectOperation } from './projectOperation'
 
 export default function useProjectOperation(onConfirmed) {
+  const pageSession = usePageSession()
+  const request = pageSession.request
   const mounted = useRef(false), callback = useRef(onConfirmed), controller = useRef(null)
   callback.current = onConfirmed
   const [, render] = useState(0)
   if (!controller.current) controller.current = createProjectOperation({
-    readIdentity: () => ({ token: localStorage.getItem('collab-token'), account: localStorage.getItem('collab-user') }),
+    readIdentity: () => pageSession.current() ? pageSession.identity : null,
     readState: (target, config) => request.get('/projects/' + target.projectId +
       (['add', 'remove'].includes(target.kind) ? '/documents/' + target.docId : '') + '/state', config),
     changed: () => { if (mounted.current) render(value => value + 1) },

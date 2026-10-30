@@ -1,10 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal, Typography } from 'antd'
-import createDocument, { documentCreationIdentity, sameDocumentCreationIdentity } from '../api/createDocument'
-import request from '../api/request'
+import createDocument, { sameDocumentCreationIdentity } from '../api/createDocument'
+import { usePageSession } from '../auth/PageSessionContext'
 import { createDocumentImporter } from '../api/documentImport'
 
 export default function ImportModal({ onClose, onCreated, onReview, scopeKey, expectedIdentity }) {
+  const pageSession = usePageSession()
+  const request = pageSession.request
   const [file, setFile] = useState(null)
   const [title, setTitle] = useState('')
   const [busy, setBusy] = useState(false)
@@ -16,7 +18,7 @@ export default function ImportModal({ onClose, onCreated, onReview, scopeKey, ex
   const scope = useRef(scopeKey)
   scope.current = scopeKey
   const importer = useRef(null)
-  const identity = useRef(expectedIdentity === undefined ? documentCreationIdentity() : expectedIdentity)
+  const identity = useRef(expectedIdentity === undefined ? pageSession.identity : expectedIdentity)
   const noticeRef = useRef(null)
   if (!importer.current) {
     importer.current = createDocumentImporter({ create: (path, body, config) => createDocument(path, body, { ...config, expectedIdentity: identity.current }),

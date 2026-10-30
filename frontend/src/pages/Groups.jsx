@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Select, Space, Tag, Typography } from 'antd'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
+import { usePageSession } from '../auth/PageSessionContext'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import UserGuide from '../components/UserGuide'
 import CreateGroupModal from '../components/CreateGroupModal'
@@ -37,12 +38,14 @@ function GroupFields({ fields, busy, blocked, uncertain, error, onClose, onRevie
 }
 
 export default function Groups() {
+  const pageSession = usePageSession()
+  const request = pageSession.request
   const [showGuide, setShowGuide] = useState(false)
   const [params, setParams] = useSearchParams()
   const location = useLocation()
   const navigate = useNavigate()
   const [session] = useState(() => {
-    try { return { value: createGroupSession({ readIdentity }) } }
+    try { return { value: createGroupSession({ readIdentity: () => pageSession.current() ? readIdentity() : null }) } }
     catch (error) { return { error } }
   })
   const blockedSession = useRef(session.error || null)

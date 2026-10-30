@@ -1,11 +1,14 @@
 /** 原生 WebSocket 包装：统一处理重连、消息 JSON 解析与显式关闭。 */
 export default class CollabSocket {
-  constructor({ token, onOpen, onMessage, onClose, onError }) {
+  constructor({ token, onOpen, onMessage, onClose, onError, isCurrent = () => true, onIdentityChanged }) {
     this.token = token
     this.onOpen = onOpen
     this.onMessage = onMessage
     this.onClose = onClose
     this.onError = onError
+    this.isCurrent = isCurrent
+    this.onIdentityChanged = onIdentityChanged
+    this.identityInvalidated = false
     this.socket = null
     this.reconnectTimer = null
     this.heartbeatTimer = null
@@ -35,7 +38,7 @@ export default class CollabSocket {
   }
 
   connect() {
-    if (!this.shouldReconnect) return
+    if (!this.shouldReconnect || !this.hasCurrentIdentity()) return
     // 只有编辑器完成正文读取和草稿选择后，才允许网络事件恢复连接。
     // 离线时的显式启动同样记住，等待随后联网完成首次连接。
     this.connectionRequested = true
@@ -51,7 +54,7 @@ export default class CollabSocket {
     this.socket = socket
 
     socket.onopen = () => {
-      if (this.socket !== socket || !this.shouldReconnect) return
+      if (this.socket !== socket || !this.shouldReconnect || !this.hasCurrentIdentity()) return
       this.reconnectDelay = 500
       this.heartbeatTimer = window.setInterval(() => {
         if (this.socket !== socket || !this.shouldReconnect || this.pongTimer !== null) return
@@ -67,7 +70,7 @@ export default class CollabSocket {
       this.onOpen?.()
     }
     socket.onmessage = (event) => {
-      if (this.socket !== socket || !this.shouldReconnect) return
+      if (this.socket !== socket || !this.shouldReconnect || !this.hasCurrentIdentity()) return
       try {
         const message = JSON.parse(event.data)
         if (message.type === 'pong') {
@@ -83,7 +86,7 @@ export default class CollabSocket {
       if (this.socket === socket && this.shouldReconnect) this.onError?.('协同连接发生错误')
     }
     socket.onclose = () => {
-      if (this.socket !== socket || !this.shouldReconnect) return
+      if (this.socket !== socket || !this.shouldReconnect || !this.hasCurrentIdentity()) return
       this.socket = null
       this.stopHeartbeat()
       this.onClose?.()
@@ -92,9 +95,20 @@ export default class CollabSocket {
   }
 
   send(payload) {
-    if (navigator.onLine === false || this.socket?.readyState !== WebSocket.OPEN) return false
+    if (!this.shouldReconnect || !this.hasCurrentIdentity() || navigator.onLine === false || this.socket?.readyState !== WebSocket.OPEN) return false
     this.socket.send(JSON.stringify(payload))
     return true
+  }
+
+  hasCurrentIdentity() {
+    let current = false
+    try { current = this.isCurrent() === true } catch { /* 身份不可读时不发送或重连。 */ }
+    if (current) return true
+    const notify = !this.identityInvalidated
+    this.identityInvalidated = true
+    this.close()
+    if (notify) this.onIdentityChanged?.()
+    return false
   }
 
   close() {

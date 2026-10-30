@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { documentCreationIdentity, sameDocumentCreationIdentity, listPendingDocumentCreations } from './createDocument'
+import { sameDocumentCreationIdentity, listPendingDocumentCreations } from './createDocument'
+import { usePageSession } from '../auth/PageSessionContext'
 
 export default function usePendingDocumentCreations(expectedIdentity) {
-  const identity = useRef(expectedIdentity === undefined ? documentCreationIdentity() : expectedIdentity)
+  const pageSession = usePageSession()
+  const identity = useRef(expectedIdentity === undefined ? pageSession.identity : expectedIdentity)
   const [refresh, setRefresh] = useState(0), generation = useRef(0)
   const [state, setState] = useState({ records: [], unreadable: 0, loading: true, error: '' })
   useEffect(() => {
@@ -23,7 +25,7 @@ export default function usePendingDocumentCreations(expectedIdentity) {
   useEffect(() => {
     const controller = new AbortController(), ticket = ++generation.current
     setState(current => ({ ...current, loading: true, error: '' }))
-    Promise.resolve().then(() => listPendingDocumentCreations({ expectedIdentity: identity.current, signal: controller.signal }))
+    Promise.resolve().then(() => listPendingDocumentCreations(pageSession.options({ expectedIdentity: identity.current, signal: controller.signal })))
       .then(result => {
         if (!controller.signal.aborted && ticket === generation.current && sameDocumentCreationIdentity(identity.current))
           setState({ ...result, loading: false, error: '' })

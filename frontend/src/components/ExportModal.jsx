@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, Modal, Radio, Typography } from 'antd'
-import request from '../api/request'
+import { usePageRequest } from '../auth/PageSessionContext'
 import { confirmDocumentExportAccess, parseDocumentExportReply } from '../api/documentExport'
 import { downloadTextFile } from '../editor/downloadTextFile'
 
 export default function ExportModal({ docId, onClose, canExport }) {
+  const request = usePageRequest()
   const [format, setFormat] = useState('copage')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')

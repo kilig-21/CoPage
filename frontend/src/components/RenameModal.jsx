@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal } from 'antd'
-import request from '../api/request'
+import { usePageRequest } from '../auth/PageSessionContext'
 
 export default function RenameModal({ doc, onClose, onSaved }) {
+  const request = usePageRequest()
   const [title, setTitle] = useState(doc.title)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')

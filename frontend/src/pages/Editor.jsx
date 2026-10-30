@@ -20,10 +20,11 @@ import DocumentFindPanel from '../components/DocumentFindPanel'
 import DocumentImagesModal from '../components/DocumentImagesModal'
 import UserGuide from '../components/UserGuide'
 import PendingCopyHint from '../components/PendingCopyHint'
-import request from '../api/request'
+import { usePageRequest } from '../auth/PageSessionContext'
 import '../styles/editor-workspace.css'
 
 export default function Editor() {
+  const request = usePageRequest()
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
-import request from '../api/request'
+import { usePageRequest } from '../auth/PageSessionContext'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import UserGuide from '../components/UserGuide'
 import ProjectDocumentsModal from '../components/ProjectDocumentsModal'
@@ -46,6 +46,7 @@ function Fields({ value, context, ready, busy, uncertain, error, notice, onSave,
 }
 
 export default function Projects() {
+  const request = usePageRequest()
   const goTo = useNavigate()
   const [showGuide, setShowGuide] = useState(false)
   const [params, setParams] = useSearchParams()

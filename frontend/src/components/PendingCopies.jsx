@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, List, Space, Typography } from 'antd'
 import { confirmCopy } from '../api/copyDocuments'
-import usePendingCopies, { copyIdentity, sameCopyIdentity } from '../api/usePendingCopies'
+import usePendingCopies, { sameCopyIdentity } from '../api/usePendingCopies'
+import { usePageSession } from '../auth/PageSessionContext'
 
 export default function PendingCopies({ onCreated }) {
+  const pageSession = usePageSession()
   const pending = usePendingCopies()
   const [error, setError] = useState(''), [busy, setBusy] = useState(false)
   const alive = useRef(false), attempt = useRef(null)
@@ -16,12 +18,12 @@ export default function PendingCopies({ onCreated }) {
     return () => { alive.current = false; cancel(); window.removeEventListener('storage', storageChanged); window.removeEventListener('copage-auth-changed', cancel) }
   }, [])
   async function confirm(summary) {
-    if (attempt.current || !sameCopyIdentity(pending.identity)) return
-    const next = { controller: new AbortController(), identity: copyIdentity(), accepted: false }
+    if (attempt.current || !pageSession.current() || !sameCopyIdentity(pending.identity)) return
+    const next = { controller: new AbortController(), identity: pageSession.identity, accepted: false }
     attempt.current = next; setBusy(true); setError('')
     const current = () => alive.current && attempt.current === next && !next.controller.signal.aborted && sameCopyIdentity(next.identity)
     try {
-      let response = await confirmCopy(summary, { signal: next.controller.signal, deferCleanup: true })
+      let response = await confirmCopy(summary, pageSession.options({ signal: next.controller.signal, deferCleanup: true }))
       if (!current()) return
       response = await response.confirmTracking()
       if (!current()) return

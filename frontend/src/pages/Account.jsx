@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Form, Input, Layout, Space, Spin, Typography } from 'antd'
 import { useNavigate } from 'react-router-dom'
-import request from '../api/request'
+import { usePageRequest } from '../auth/PageSessionContext'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import { expireSession } from '../auth/session'
 import { createAccountSettings, isAccountSessionFailure } from '../api/accountSettings'
 import '../styles/account.css'
 
 export default function Account() {
+  const request = usePageRequest()
   const navigate = useNavigate()
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)

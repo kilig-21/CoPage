@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import request from './request'
 import { listPendingGroupCreations } from './createGroup'
+import { usePageSession } from '../auth/PageSessionContext'
 
 export function groupCreationIdentity() {
   try { return { account: localStorage.getItem('collab-user'), token: localStorage.getItem('collab-token'), service: request.defaults.baseURL } }
@@ -11,6 +12,7 @@ export function sameGroupCreationIdentity(before) {
   return Boolean(before?.account && before.token && next && next.account === before.account && next.token === before.token && next.service === before.service)
 }
 export default function usePendingGroupCreations({ expectedIdentity, assertSession } = {}) {
+  const pageSession = usePageSession()
   const [refresh, setRefresh] = useState(0)
   const [state, setState] = useState({ records: [], loading: true, error: '', identity: null })
   const generation = useRef(0)
@@ -23,12 +25,12 @@ export default function usePendingGroupCreations({ expectedIdentity, assertSessi
     }
   }, [])
   useEffect(() => {
-    const controller = new AbortController(), ticket = ++generation.current, identity = expectedIdentity || groupCreationIdentity()
+    const controller = new AbortController(), ticket = ++generation.current, identity = expectedIdentity === undefined ? pageSession.identity : expectedIdentity
     setState({ records: [], loading: true, error: '', identity })
     const current = () => !controller.signal.aborted && ticket === generation.current
     Promise.resolve().then(() => {
       assertSession?.(controller.signal)
-      return listPendingGroupCreations({ signal: controller.signal, expectedIdentity: identity })
+      return listPendingGroupCreations(pageSession.options({ signal: controller.signal, expectedIdentity: identity }))
     }).then(records => {
       if (!current()) return
       assertSession?.(controller.signal)

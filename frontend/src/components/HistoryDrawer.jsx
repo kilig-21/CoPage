@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Drawer, Input, List, Modal, Space, Spin, Tag, Typography } from 'antd'
-import request from '../api/request'
+import { usePageRequest } from '../auth/PageSessionContext'
 import DocumentPreview from './DocumentPreview'
 import useHistoryRestore from '../api/useHistoryRestore'
 
@@ -9,6 +9,7 @@ const mutationError = (error, uncertain) => rejectedCodes.has(error?.code)
   ? error.message || '请求被拒绝，请核对后重试' : uncertain
 
 export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
+  const request = usePageRequest()
   const [modal, contextHolder] = Modal.useModal()
   const [storedHistory, setHistory] = useState(null)
   const historyContext = useRef(null)

@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Pagination, Popconfirm, Space, Typography } from 'antd'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import request from '../api/request'
+import { usePageRequest } from '../auth/PageSessionContext'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import useDocumentLifecycle from '../api/useDocumentLifecycle'
 import { documentHref } from '../navigation/documents'
 
 const PAGE_SIZE=20
 export default function Trash() {
+  const request = usePageRequest()
   const navigate = useNavigate()
   const location = useLocation()
   const sourcePath=location.pathname+location.search+location.hash

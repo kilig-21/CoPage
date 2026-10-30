@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import request from './request'
+import { usePageSession } from '../auth/PageSessionContext'
 
 // 列表刷新不能证明某篇文档的写结果；显式核对只读取原目标的当前状态。
 export default function useDocumentLifecycle({ operation, ready, onConfirmed }) {
+  const pageSession = usePageSession()
+  const request = pageSession.request
   const lock = useRef(null), unknown = useRef(null), confirmed = useRef(onConfirmed), available = useRef(ready)
   confirmed.current = onConfirmed
   available.current = ready
@@ -15,7 +17,7 @@ export default function useDocumentLifecycle({ operation, ready, onConfirmed }) 
   useEffect(() => () => { lock.current?.controller.abort(); lock.current = null }, [])
   function begin(target) {
     let token, account
-    try { token = localStorage.getItem('collab-token'); account = localStorage.getItem('collab-user') }
+    try { const identity = pageSession.assertCurrent(); token = identity.token; account = identity.account }
     catch { setError('浏览器无法读取当前账号，请允许本站保存数据后重试。'); return null }
     const attempt = { target, controller: new AbortController(), token, account }
     lock.current = attempt

@@ -3,8 +3,8 @@ import { CloseCircleOutlined, FileTextOutlined, PlusOutlined, MoreOutlined } fro
 import { Alert, Button, Card, Dropdown, Empty, Input, Layout, List, Pagination, Popconfirm, Radio, Space, Tag, Typography, message } from 'antd'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
-import request from '../api/request'
-import createDocumentRequest, { documentCreationIdentity } from '../api/createDocument'
+import { usePageSession } from '../auth/PageSessionContext'
+import createDocumentRequest from '../api/createDocument'
 import useDocumentLifecycle from '../api/useDocumentLifecycle'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import SavePersonalTemplateModal from '../components/SavePersonalTemplateModal'
@@ -19,13 +19,15 @@ import PendingDocumentCreations from '../components/PendingDocumentCreations'
 const PAGE_SIZE = 20
 
 export default function DocList() {
+  const pageSession = usePageSession()
+  const request = pageSession.request
   const [managing, setManaging] = useState(null)
   const [copying, setCopying] = useState(null)
   const [showGuide, setShowGuide] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const sourcePath = location.pathname + location.search + location.hash
-  const creationIdentity = useRef(documentCreationIdentity())
+  const creationIdentity = useRef(pageSession.identity)
   const [docs, setDocs] = useState([])
   const [total, setTotal] = useState(0)
   const [searchParams, setSearchParams] = useSearchParams()

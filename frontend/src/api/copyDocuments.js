@@ -1,6 +1,7 @@
 import { message } from 'antd'
 import request from './request'
 import { createCopyCreator } from './copyCreation'
+import { bindRequestIdentity, readPageIdentity, samePageIdentity } from '../auth/pageSession.js'
 
 const creator = createCopyCreator({ getStorage: () => localStorage, getLegacyStorage: () => sessionStorage, crypto: globalThis.crypto,
   withLock: (name, action, signal) => {
@@ -11,14 +12,10 @@ const creator = createCopyCreator({ getStorage: () => localStorage, getLegacySto
   post: (path, body, config) => request.post(path, body, config) })
 
 function options(config) {
-  let account, token
-  try { account = localStorage.getItem('collab-user'); token = localStorage.getItem('collab-token') }
-  catch { throw Object.assign(new Error('浏览器无法读取当前账号，请恢复本站存储后再确认副本。'), { code: 400 }) }
-  if (!account || !token) throw Object.assign(new Error('请重新登录原账号后确认副本；原记录保留。'), { code: 401 })
-  const service = request.defaults.baseURL
-  return { ...config, account, service,
-    copageExpectedSessionToken: token,
-    isCurrent: () => localStorage.getItem('collab-user') === account && localStorage.getItem('collab-token') === token && request.defaults.baseURL === service }
+  const read = () => readPageIdentity(localStorage, request.defaults.baseURL)
+  const bound = bindRequestIdentity(config, read), identity = bound.identity
+  return { ...bound.config, account: identity.account, service: identity.service,
+    isCurrent: () => samePageIdentity(identity, read()) }
 }
 export function notifyCopyChanges() {
   try { window.dispatchEvent(new Event('copage-copy-creations-changed')) }
@@ -53,7 +50,7 @@ export async function createCopy(sourceId, body, config = {}) {
   try { return accepted(await creator.create(sourceId, body, prepared(config))) }
   finally { notifyCopyChanges() }
 }
-export function listPendingCopies(config = {}) { return creator.listPending(options(config)) }
+export async function listPendingCopies(config = {}) { return creator.listPending(options(config)) }
 export async function confirmCopy(summary, config = {}) {
   try { return accepted(await creator.retry(summary, options(config))) }
   finally { notifyCopyChanges() }

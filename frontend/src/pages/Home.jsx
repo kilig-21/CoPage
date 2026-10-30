@@ -3,7 +3,7 @@ import { Alert, Button, Card, Empty, Layout, List, Space, Tag, Typography } from
 import { ArrowRightOutlined, FileTextOutlined } from '@ant-design/icons'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
-import request from '../api/request'
+import { usePageRequest } from '../auth/PageSessionContext'
 import { parseAccountProfile } from '../auth/accountProfile'
 import UserGuide from '../components/UserGuide'
 import WorkspaceOverview from '../components/WorkspaceOverview'
@@ -12,6 +12,7 @@ import AccountDraftsDrawer from '../components/AccountDraftsDrawer'
 import '../styles/workbench.css'
 
 export default function Home() {
+  const request = usePageRequest()
   const location = useLocation()
   const navigate = useNavigate()
   const sourcePath = location.pathname + location.search + location.hash
