@@ -3,8 +3,8 @@ import { Alert, Button, Card, List, Space, Typography } from 'antd'
 import { confirmGroupCreation } from '../api/createGroup'
 import usePendingGroupCreations, { groupCreationIdentity, sameGroupCreationIdentity } from '../api/usePendingGroupCreations'
 
-export default function PendingGroupCreations({ onCreated, onBusyChange, contextKey, disabled }) {
-  const pending = usePendingGroupCreations()
+export default function PendingGroupCreations({ onCreated, onBusyChange, contextKey, disabled, expectedIdentity, assertSession }) {
+  const pending = usePendingGroupCreations({ expectedIdentity, assertSession })
   const [error, setError] = useState(''), [busy, setBusy] = useState(false)
   const alive = useRef(false), attempt = useRef(null)
   useEffect(() => {
@@ -19,12 +19,14 @@ export default function PendingGroupCreations({ onCreated, onBusyChange, context
   }, [contextKey, onBusyChange])
   async function confirm(record) {
     if (attempt.current || disabled || !sameGroupCreationIdentity(pending.identity)) return
-    const next = { controller: new AbortController(), identity: groupCreationIdentity(), accepted: false }
+    try { assertSession?.() } catch (failure) { setError(failure.message); return }
+    const next = { controller: new AbortController(), identity: expectedIdentity || groupCreationIdentity(), accepted: false }
     attempt.current = next; setBusy(true); onBusyChange(true); setError('')
     const current = () => alive.current && attempt.current === next && !next.controller.signal.aborted && sameGroupCreationIdentity(next.identity)
     try {
-      let response = await confirmGroupCreation(record, { signal: next.controller.signal, deferCleanup: true })
+      let response = await confirmGroupCreation(record, { signal: next.controller.signal, expectedIdentity: next.identity, deferCleanup: true })
       if (!current()) return
+      assertSession?.(next.controller.signal)
       response = response.confirmTracking(); next.accepted = true
       onCreated(response.data)
     } catch (failure) {
