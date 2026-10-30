@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal, Typography } from 'antd'
-import createDocument from '../api/createDocument'
+import createDocument, { documentCreationIdentity, sameDocumentCreationIdentity } from '../api/createDocument'
 import request from '../api/request'
 import { createDocumentImporter } from '../api/documentImport'
 
-export default function ImportModal({ onClose, onCreated, onReview, scopeKey }) {
+export default function ImportModal({ onClose, onCreated, onReview, scopeKey, expectedIdentity }) {
   const [file, setFile] = useState(null)
   const [title, setTitle] = useState('')
   const [busy, setBusy] = useState(false)
@@ -16,11 +16,12 @@ export default function ImportModal({ onClose, onCreated, onReview, scopeKey }) 
   const scope = useRef(scopeKey)
   scope.current = scopeKey
   const importer = useRef(null)
+  const identity = useRef(expectedIdentity === undefined ? documentCreationIdentity() : expectedIdentity)
   const noticeRef = useRef(null)
   if (!importer.current) {
-    importer.current = createDocumentImporter({ create: createDocument,
+    importer.current = createDocumentImporter({ create: (path, body, config) => createDocument(path, body, { ...config, expectedIdentity: identity.current }),
       readIdentity: () => ({ account: localStorage.getItem('collab-user'), token: localStorage.getItem('collab-token'), service: request.defaults.baseURL }),
-      isCurrent: () => alive.current && scope.current === originalScope.current })
+      isCurrent: () => alive.current && scope.current === originalScope.current && sameDocumentCreationIdentity(identity.current) })
   }
   useEffect(() => {
     alive.current = true
@@ -76,14 +77,14 @@ export default function ImportModal({ onClose, onCreated, onReview, scopeKey }) 
     footer={[
       <Button key="close" disabled={busy} onClick={onClose}>{uncertain ? '稍后核对' : '关闭'}</Button>,
       (uncertain || confirmed) && <Button key="review" disabled={busy} onClick={review}>{confirmed ? '查看我的文档' : '核对我的文档'}</Button>,
-      !confirmed && <Button key="import" type="primary" loading={busy} disabled={!file && !uncertain} onClick={importFile}>{uncertain ? '确认原导入' : '导入文档'}</Button>,
+      !confirmed && <Button key="import" type="primary" loading={busy} disabled={!file && !uncertain} onClick={importFile}>{uncertain ? '重试原导入' : '导入文档'}</Button>,
     ]}
     cancelButtonProps={{ disabled: busy }} closable={!busy} maskClosable={!busy} keyboard={!busy}>
     {(uncertain || confirmed) && <div ref={noticeRef} style={{ marginBottom: 16 }}><Alert type={confirmed ? 'success' : 'warning'} showIcon
       message={confirmed ? '原导入已确认成功' : '原导入待确认'}
       description={<><div>原文件：{attempt.filename}</div><div>提交标题：{attempt.title || '留空，由文件决定'}</div>
         {error && uncertain && <p>{error}</p>}
-        {uncertain && <p>确认始终使用这份原文件与提交标题。核对列表不会自动确认成功；关闭窗口或刷新后，需重新选择同名、同内容文件并填写相同标题，才能继续原请求。</p>}</>} /></div>}
+        {uncertain && <p>本窗口重试仍上传原文件和原标题。关闭或刷新后，可在“我的文档”的“待确认的创建”只读核对原请求，无需重新上传。另开标签再次导入是另一项请求，可能生成重复文档。</p>}</>} /></div>}
     <Typography.Paragraph>支持 UTF-8 文本（.txt）和 CoPage 导出的富文本副本（.json）。文件最多 3 MiB，正文最多 2 MiB；格式和换行也占正文容量。导入创建独立文档，不覆盖已有内容或复制协作者权限。</Typography.Paragraph>
     <Typography.Paragraph type="secondary">图片保留原地址，地址可访问时才会显示；副本不包含图片文件、历史版本或本地草稿。</Typography.Paragraph>
     <label>选择文件<input type="file" accept=".txt,.json" disabled={frozen} onChange={choose} /></label>

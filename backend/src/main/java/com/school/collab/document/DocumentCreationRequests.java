@@ -41,6 +41,38 @@ public class DocumentCreationRequests {
 
     @PostConstruct public void ensureTable() { jdbc.execute(CREATE_TABLE); }
 
+    /** 只核对当前账号已经提交的收据；不重发正文，也不创建、恢复或改写文档。 */
+    @Transactional(readOnly = true, isolation = Isolation.READ_COMMITTED)
+    public Confirmation confirm(String requestId) {
+        Long user = UserContext.getUserId();
+        if (user == null || user <= 0) throw new BizException(ErrorCode.UNAUTHORIZED);
+        String key = canonicalId(requestId);
+        var rows = jdbc.query("""
+                SELECT r.kind,r.doc_id,r.response_json,d.id,d.title,d.is_deleted
+                FROM doc_creation_receipt r
+                LEFT JOIN document d ON d.id=r.doc_id AND d.owner_id=r.user_id
+                WHERE r.user_id=? AND r.request_id=?
+                """, (rs,n) -> new ConfirmationRow(rs.getString(1),rs.getLong(2),rs.getString(3),
+                        rs.getObject(4)!=null,rs.getString(5),rs.getBoolean(6)),user,key);
+        if (rows.isEmpty()) throw new BizException(ErrorCode.NOT_FOUND, "尚未找到原创建结果，请稍后核对；没有重新创建文档");
+        var row=rows.getFirst();
+        try {
+            if (row.id()<=0 || row.kind()==null || row.kind().isBlank() || row.response()==null ||
+                    row.response().isEmpty() || row.response().getBytes(StandardCharsets.UTF_8).length>4096)
+                throw new IllegalStateException("创建收据结果不完整");
+            com.fasterxml.jackson.databind.JsonNode response=mapper.reader().with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                    .readTree(row.response());
+            var id=response==null?null:response.get("id");
+            if (id==null || !id.isIntegralNumber() || !id.canConvertToLong() || id.longValue()!=row.id())
+                throw new IllegalStateException("创建收据编号不一致");
+        } catch (java.io.IOException failure) { throw new IllegalStateException("创建收据无法读取",failure); }
+        return new Confirmation(key,row.kind(),row.id(),row.available(),row.available()?row.title():null,
+                row.available()&&row.deleted());
+    }
+
+    public record Confirmation(String requestId,String kind,long id,boolean available,String title,boolean deleted) { }
+    private record ConfirmationRow(String kind,long id,String response,boolean available,String title,boolean deleted) { }
+
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public <T extends CreatedDocument> T execute(String requestId, String kind, Object input,
                                                Class<T> responseType, Supplier<T> create) {
@@ -98,6 +130,7 @@ public class DocumentCreationRequests {
         catch (java.security.NoSuchAlgorithmException failure) { throw new IllegalStateException(failure); }
     }
     private static String canonicalId(String raw) {
+        if (raw==null) throw new BizException(ErrorCode.PARAM_ERROR, "创建标识必须是有效的UUID");
         try {
             String id = UUID.fromString(raw).toString();
             if (raw.length() == 36 && id.equalsIgnoreCase(raw)) return id;

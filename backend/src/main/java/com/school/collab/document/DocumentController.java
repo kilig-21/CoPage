@@ -40,6 +40,11 @@ public class DocumentController {
         return Result.ok(documents.workbench());
     }
 
+    @GetMapping("/creation-requests/{requestId}")
+    public Result<DocumentCreationRequests.Confirmation> confirmCreation(@PathVariable String requestId) {
+        return Result.ok(creations.confirm(requestId));
+    }
+
     @PostMapping
     public Result<DocumentService.SummaryView> create(@RequestBody(required = false) CreateRequest request,
             @RequestHeader(value="Idempotency-Key", required=false) String key) {

@@ -4,7 +4,7 @@ import { Alert, Button, Card, Dropdown, Empty, Input, Layout, List, Pagination, 
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import request from '../api/request'
-import createDocumentRequest from '../api/createDocument'
+import createDocumentRequest, { documentCreationIdentity } from '../api/createDocument'
 import useDocumentLifecycle from '../api/useDocumentLifecycle'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import SavePersonalTemplateModal from '../components/SavePersonalTemplateModal'
@@ -14,6 +14,7 @@ import CopyModal from '../components/CopyModal'
 import RenameModal from '../components/RenameModal'
 import UserGuide from '../components/UserGuide'
 import PendingCopies from '../components/PendingCopies'
+import PendingDocumentCreations from '../components/PendingDocumentCreations'
 
 const PAGE_SIZE = 20
 
@@ -24,6 +25,7 @@ export default function DocList() {
   const navigate = useNavigate()
   const location = useLocation()
   const sourcePath = location.pathname + location.search + location.hash
+  const creationIdentity = useRef(documentCreationIdentity())
   const [docs, setDocs] = useState([])
   const [total, setTotal] = useState(0)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -87,7 +89,7 @@ export default function DocList() {
     createController.current = controller
     setCreating(true)
     try {
-      const response = await createDocumentRequest('/doc', { title: '未命名文档' }, { signal: controller.signal })
+      const response = await createDocumentRequest('/doc', { title: '未命名文档' }, { signal: controller.signal, expectedIdentity: creationIdentity.current })
       if (controller.signal.aborted) return
       navigate(documentHref(response.data.id, sourcePath))
     } catch (error) {
@@ -112,6 +114,8 @@ export default function DocList() {
           </Space>
         </div>
         <PendingCopies onCreated={data => navigate(documentHref(data.id, sourcePath))} />
+        <PendingDocumentCreations expectedIdentity={creationIdentity.current} disabled={creating}
+          onCreated={data => navigate(documentHref(data.id, sourcePath))} />
         <Space wrap style={{ marginBottom: 16 }}>
           <Radio.Group aria-label="文档分类" value={scope} disabled={deletion.busy} onChange={event => applyScope(event.target.value)}
             options={[{ label: '全部', value: 'all' }, { label: '我创建', value: 'owned' }, { label: '与我协作', value: 'shared' }]} />
@@ -171,7 +175,7 @@ export default function DocList() {
       {copying && <CopyModal doc={copying} onClose={() => setCopying(null)}
         onCreated={data => { message.success('已创建服务端版本 ' + data.sourceRevision + ' 的副本'); navigate(documentHref(data.id, sourcePath)) }} />}
       {managing && <CollaboratorModal doc={managing} onClose={() => setManaging(null)} />}
-      {importing && <ImportModal scopeKey={location.key} onClose={() => setImporting(false)} onCreated={id => navigate(documentHref(id, sourcePath))}
+      {importing && <ImportModal scopeKey={location.key} expectedIdentity={creationIdentity.current} onClose={() => setImporting(false)} onCreated={id => navigate(documentHref(id, sourcePath))}
         onReview={title => { setImporting(false); setSearchParams({ scope: 'owned', ...(title ? { keyword: title } : {}) }); setRefresh(value => value + 1) }} />}
       {editing && <RenameModal doc={editing} onClose={() => setEditing(null)}
         onSaved={() => setRefresh(value => value + 1)} />}

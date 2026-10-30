@@ -14,7 +14,7 @@ async function digest(crypto, bytes) {
   const hash = await crypto.subtle.digest('SHA-256', bytes)
   return Array.from(new Uint8Array(hash), byte => byte.toString(16).padStart(2, '0')).join('')
 }
-async function bodyFingerprint(crypto, body) {
+export async function documentCreationFingerprint(crypto, body) {
   if (body instanceof FormData) {
     const entries = []
     for (const [name, value] of body.entries()) entries.push([name, typeof value === 'string' ? value : {
@@ -27,7 +27,11 @@ async function bodyFingerprint(crypto, body) {
 
 /** 与既有文档创建槽完全相同的账号、服务、路径和内容指纹。 */
 export async function documentCreationTrackingKey(crypto, { service, account, path, body }) {
-  const fingerprint = await bodyFingerprint(crypto, body)
+  const fingerprint = await documentCreationFingerprint(crypto, body)
+  return documentCreationFingerprintKey(crypto, { service, account, path, fingerprint })
+}
+
+export async function documentCreationFingerprintKey(crypto, { service, account, path, fingerprint }) {
   return 'copage-create:' + await digest(crypto, new TextEncoder().encode(JSON.stringify([service, account, path, fingerprint])))
 }
 
@@ -42,7 +46,7 @@ export function createDocumentCreator({ getStorage, crypto, post }) {
     const trackedBody = freezeTemplateVersion ? { ...body } : body
     if (freezeTemplateVersion) delete trackedBody.expectedVersion
     let fingerprint
-    try { fingerprint = await bodyFingerprint(crypto, trackedBody) }
+    try { fingerprint = await documentCreationFingerprint(crypto, trackedBody) }
     catch { throw localFailure('无法读取本次创建内容，请重新选择文件或重试；尚未发送创建请求。') }
     const key = 'copage-create:' + await digest(crypto, new TextEncoder().encode(JSON.stringify([service, account, path, fingerprint])))
     if (config.signal?.aborted || !current()) throw new DOMException('创建已取消', 'AbortError')

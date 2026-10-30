@@ -107,6 +107,10 @@ body { background: var(--cp-paper); }
   .auth-page { gap: 40px; padding: 48px 32px; grid-template-columns: minmax(0, 1fr) minmax(320px, 390px); }
   .auth-brand { margin-bottom: 36px; }
 }
+.document-import-modal .ant-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - 132px); }
+.document-import-modal .ant-modal-header, .document-import-modal .ant-modal-footer { flex-shrink: 0; }
+.document-import-modal .ant-modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+
 @media (max-width: 640px) {
   .content-wrap { width: calc(100% - 32px); padding: 28px 0 44px; }
   .workspace-header { padding-inline: 16px; gap: 8px 12px; }

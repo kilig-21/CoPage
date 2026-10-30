@@ -3,7 +3,7 @@ import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Radio, Space, S
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import request from '../api/request'
-import createDocument from '../api/createDocument'
+import createDocument, { documentCreationIdentity } from '../api/createDocument'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import DocumentPreview from '../components/DocumentPreview'
 import UserGuide from '../components/UserGuide'
@@ -13,6 +13,7 @@ export default function Templates() {
   const navigate = useNavigate()
   const location = useLocation()
   const sourcePath = location.pathname + location.search + location.hash
+  const creationIdentity = useRef(documentCreationIdentity())
   const [params, setParams] = useSearchParams()
   const category = Object.hasOwn(categories, params.get('category')) ? params.get('category') : 'all'
   const keyword = (params.get('keyword') || '').slice(0, 200).trim()
@@ -65,7 +66,8 @@ export default function Templates() {
     attempted.current = target
     setCreating(true); setCreateError(''); setSubmittedTitle(target.title)
     try {
-      const response = await createDocument('/doc', { title: target.title, templateId: target.templateId }, { signal: controller.signal })
+      const response = await createDocument('/doc', { title: target.title, templateId: target.templateId },
+        { signal: controller.signal, expectedIdentity: creationIdentity.current })
       if (!controller.signal.aborted) { attempted.current = null; navigate(documentHref(response.data.id, sourcePath)) }
     } catch (ex) {
       if (!controller.signal.aborted) {

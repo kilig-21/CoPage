@@ -3,7 +3,7 @@ import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Pop
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import request from '../api/request'
-import createDocument from '../api/createDocument'
+import createDocument, { documentCreationIdentity } from '../api/createDocument'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import UserGuide from '../components/UserGuide'
 import DocumentPreview from '../components/DocumentPreview'
@@ -15,6 +15,7 @@ export default function PersonalTemplates() {
   const [params, setParams] = useSearchParams()
   const location = useLocation()
   const sourcePath = location.pathname + location.search + location.hash
+  const creationIdentity = useRef(documentCreationIdentity())
   const navigate = useNavigate()
   const category = Object.hasOwn(categories, params.get('category')) ? params.get('category') : 'all'
   const keyword = (params.get('keyword') || '').slice(0, 200).trim()
@@ -137,7 +138,7 @@ export default function PersonalTemplates() {
     const target = instance.current
     if (!target) return
     mutate('instance', signal => createDocument('/personal-templates/' + target.templateId + '/documents',
-      { title: target.title, expectedVersion: target.expectedVersion }, { signal }),
+      { title: target.title, expectedVersion: target.expectedVersion }, { signal, expectedIdentity: creationIdentity.current }),
       result => navigate(documentHref(result.id, sourcePath)), target)
   }
   const open = template => {
@@ -200,7 +201,7 @@ export default function PersonalTemplates() {
             if (!detailReady || selection.current !== selected.session) return
             const target = instance.current || { templateId: currentDetail.id, title: title.trim(), expectedVersion: currentDetail.version }
             mutate('instance', signal => createDocument('/personal-templates/' + target.templateId + '/documents',
-              { title: target.title, expectedVersion: target.expectedVersion }, { signal }), data => navigate(documentHref(data.id, sourcePath)), target)
+              { title: target.title, expectedVersion: target.expectedVersion }, { signal, expectedIdentity: creationIdentity.current }), data => navigate(documentHref(data.id, sourcePath)), target)
           }}>{uncertain?.kind === 'instance' ? '重试本次创建' : '创建文档'}</Button>,
         currentEditing && <Button key="save" type="primary" loading={busy} disabled={!ready || !detailReady || changedVersion || !currentEditing.name.trim()}
           onClick={() => {

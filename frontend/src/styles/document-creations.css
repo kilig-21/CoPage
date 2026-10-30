@@ -1,0 +1,15 @@
+.document-creation-review { margin-bottom: 24px; }
+.document-creation-review .ant-card-head-wrapper { flex-wrap: wrap; gap: 12px; }
+.document-creation-review .ant-card-head-title { white-space: normal; }
+.document-creation-review .ant-btn { min-height: 44px; white-space: normal; }
+.document-creation-review .ant-alert { margin-bottom: 12px; overflow-wrap: anywhere; }
+.document-creation-review .ant-list-item-meta,
+.document-creation-review .ant-list-item-meta-content { min-width: 0; overflow-wrap: anywhere; }
+.document-creation-review .ant-list-item-action { flex-shrink: 0; }
+.document-creation-review .ant-list-item-action > li { padding-inline: 4px; }
+@media (max-width: 640px) {
+  .document-creation-review .ant-list-item { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+  .document-creation-review .ant-list-item-meta { flex: 0 0 auto; }
+  .document-creation-review .ant-list-item-action { margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .document-creation-review .ant-list-item-action > li { padding: 0; }
+}
