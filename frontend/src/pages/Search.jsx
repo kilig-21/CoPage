@@ -90,7 +90,7 @@ export default function Search() {
     <Layout className="app-shell"><WorkspaceHeader title="搜索" />
     <main id="workspace-main" tabIndex={-1} className="content-wrap">
       <div className="page-heading"><div><Typography.Title level={2}>搜索文档</Typography.Title>
-        <Typography.Paragraph type="secondary">从有权限访问的标题和正文中，找到需要的资料。</Typography.Paragraph></div>
+        <Typography.Paragraph type="secondary">从有权限访问的标题和正文中查找。增加关键词可缩小范围，没有结果时可试着减少关键词。</Typography.Paragraph></div>
         <Button type="text" aria-label="返回文档列表" icon={<ArrowLeftOutlined />} onClick={() => navigate('/docs')}>返回文档列表</Button></div>
       <Input.Search aria-label="搜索标题和正文" placeholder="搜索标题和正文" value={input} maxLength={100} onChange={(event) => setInput(event.target.value)} onSearch={search} size="large" enterButton="搜索" className="search-box" />
       {error && <Alert type="error" showIcon message={error} action={validQuery && <Button size="small" disabled={loading} onClick={retrySearch}>重试</Button>} />}

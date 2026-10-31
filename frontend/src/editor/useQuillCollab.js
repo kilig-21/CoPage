@@ -96,7 +96,7 @@ export default function useQuillCollab(docId) {
       bounds: host,
       formats: DOCUMENT_FORMATS,
       theme: 'snow',
-      placeholder: '开始协同编辑…',
+      placeholder: '正在加载文档…',
       modules: {
         history: { userOnly: true },
         uploader: {
@@ -137,6 +137,12 @@ export default function useQuillCollab(docId) {
     quill.root.setAttribute('role', 'textbox')
     quill.root.setAttribute('aria-label', '文档正文')
     quill.root.setAttribute('aria-multiline', 'true')
+    quill.root.setAttribute('aria-readonly', 'true')
+    const setPlaceholder = value => {
+      quill.root.dataset.placeholder = value
+      quill.root.setAttribute('aria-placeholder', value)
+    }
+    setPlaceholder('正在加载文档…')
     quillRef.current = quill
     const cursorLayer = new RemoteCursorLayer(quill)
     const Delta = Quill.import('delta')
@@ -181,6 +187,7 @@ export default function useQuillCollab(docId) {
       documentFind?.refreshStatus()
       imageDescriptions?.refreshStatus()
       setSaveStatus(recoveryActionsRef.current ? '等待恢复本地草稿'
+        : client.state === 'blocked' ? (pending ? '有修改尚未确认' : '当前内容已保留')
         : !connected || !synced ? (pending ? '有修改尚未同步' : '等待同步')
         : uploading ? '正在上传图片'
         : composing ? '正在输入'
@@ -188,7 +195,10 @@ export default function useQuillCollab(docId) {
         : canEdit ? '所有修改已保存' : '只读 · 内容已同步')
     }
     const updateEditable = () => {
-      quill.enable(canEdit && connected && synced)
+      const editable = canEdit && connected && synced
+      quill.enable(editable)
+      quill.root.setAttribute('aria-readonly', String(!editable))
+      setPlaceholder(editable ? '开始协同编辑…' : '正文当前只读')
       documentFind?.refreshStatus()
       imageDescriptions?.refreshStatus()
       updateToolbar()
@@ -681,9 +691,15 @@ export default function useQuillCollab(docId) {
       })
       .catch((loadError) => {
         if (!active) return
+        const failureMessage = loadError?.code === 403
+          ? '当前账号无法打开这篇文档。请核对登录账号，或请分享者确认逐篇授权后重试。'
+          : loadError?.code === 404
+            ? '这篇文档暂时无法打开，可能已被删除。请返回核对，文档所有者可到回收站查看。'
+            : loadError?.message || '文档加载失败'
         setConnection('加载失败')
         setSaveStatus('未能加载文档')
-        setError(loadError?.message || '文档加载失败')
+        setPlaceholder('正文尚未加载')
+        setError(failureMessage)
         // 无权限、文档已删除或读取失败时，只提供当前账号的本地副本。
         // 不恢复操作、不取得服务端正文，也不启动协作连接。
         try {
@@ -693,7 +709,7 @@ export default function useQuillCollab(docId) {
             .map(({ key, draft }) => ({ key, backup: { ...createDraftBackup({ docId, username, content: draft.content }),
               savedAt: draft.savedAt } })))
         } catch {
-          setError(`${loadError?.message || '文档加载失败'}；本地草稿暂时无法读取，请不要清除浏览器存储`)
+          setError(`${failureMessage}；本地草稿暂时无法读取，请不要清除浏览器存储`)
         }
       })
 

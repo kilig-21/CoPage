@@ -72,7 +72,7 @@ export default class CollabClient {
     }
     switch (message.type) {
       case 'permission':
-        if (message.permission === 0) this.block('访问权限已被移除；未确认的本地修改仍保留在此浏览器中')
+        if (message.permission === 0) this.block('文档暂时不可访问，可能已被删除或调整权限。当前内容与未确认修改保留在此页；请返回核对，文档所有者可到回收站查看。')
         else if (message.permission === 1 && this.hasUnconfirmedChanges()) {
           this.block('已改为只读；未确认的本地修改已保留，请复制备份后重新打开文档')
         }

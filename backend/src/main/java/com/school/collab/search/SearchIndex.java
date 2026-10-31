@@ -72,8 +72,10 @@ public class SearchIndex {
         ObjectNode body = mapper.createObjectNode();
         body.put("from", (page - 1) * size).put("size", size).put("track_total_hits", true);
         ObjectNode bool = body.putObject("query").putObject("bool");
+        // 增加关键词应缩小范围；各词项可分别出现在标题或正文中。
         bool.putObject("must").putObject("multi_match")
-                .put("query", query).putArray("fields").add("title^3").add("body");
+                .put("query", query).put("type", "cross_fields").put("operator", "and")
+                .putArray("fields").add("title^3").add("body");
         ArrayNode ids = bool.putObject("filter").putObject("ids").putArray("values");
         visibleIds.forEach(id -> ids.add(String.valueOf(id)));
         Response response = send("POST", "/" + INDEX + "/_search", body);

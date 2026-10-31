@@ -1,6 +1,8 @@
 :root {
   --cp-ink: #232c39;
   --cp-muted: #5c6572;
+  --cp-status-success: #237804;
+  --cp-status-warning: #874d00;
   --cp-accent: #274de5;
   --cp-line: #dedfdc;
   --cp-paper: #f7f6f2;
@@ -32,6 +34,9 @@ body { background: var(--cp-paper); }
 .workspace-detail-title:focus { outline: 2px solid var(--cp-accent); outline-offset: 4px; border-radius: 2px; }
 .content-wrap .ant-list-item-meta-title { font-size: 16px; }
 .content-wrap .ant-list-item-meta-description { line-height: 1.7; }
+body .ant-list .ant-list-empty-text { color: var(--cp-muted); }
+.editor-status-row .ant-tag.ant-tag-green { color: var(--cp-status-success); }
+.editor-status-row .ant-tag.ant-tag-gold { color: var(--cp-status-warning); }
 .doc-icon { color: var(--cp-accent); }
 .doc-list-card .ant-list-item { padding-block: 22px; }
 .doc-list-card .ant-list-item-meta-title a { color: var(--cp-ink); font-weight: 600; }
