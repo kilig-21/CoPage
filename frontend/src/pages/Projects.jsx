@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { documentHref } from '../navigation/documents'
 import { usePageRequest } from '../auth/PageSessionContext'
 import WorkspaceHeader from '../components/WorkspaceHeader'
+import WorkspacePageHeading from '../components/WorkspacePageHeading'
 import UserGuide from '../components/UserGuide'
 import ProjectDocumentsModal from '../components/ProjectDocumentsModal'
 import useProjectOperation from '../api/useProjectOperation'
@@ -216,15 +217,16 @@ export default function Projects() {
     } else await operation.review()
   }
   return <Layout className="app-shell">
-    <WorkspaceHeader title="我的项目" onGuide={() => setShowGuide(true)}><Space wrap>
-      <Button disabled={loading || busy} onClick={() => { setRefresh(n => n + 1); setContextRefresh(n => n + 1) }}>刷新</Button>
-      {chooseGroup ? <Button type="primary" onClick={() => goTo('/groups')}>选择小组创建项目</Button>
-        : <Button type="primary" disabled={!createReady} onClick={() => setFields({ groupId: canCreateGroup ? context.id : 0 })}>
-          {groupId && !hasGroupContext ? '创建项目' : canCreateGroup ? '创建小组项目' : '创建个人项目'}</Button>}
-    </Space></WorkspaceHeader>
+    <WorkspaceHeader title="我的项目" onGuide={() => setShowGuide(true)} />
     <main id="workspace-main" tabIndex={-1} className="content-wrap project-page">
-      <Typography.Title level={2}>{context ? context.name + '的项目' : '把资料整理成项目'}</Typography.Title>
-      <Typography.Paragraph type="secondary">整理个人或小组工作，关联保留同一份原文档。项目内只显示你有权限访问的资料。</Typography.Paragraph>
+      <WorkspacePageHeading title={context ? context.name + '的项目' : '把资料整理成项目'} description="整理个人或小组工作，关联保留同一份原文档。项目内只显示你有权限访问的资料。">
+        <Space wrap>
+          <Button disabled={loading || busy} onClick={() => { setRefresh(n => n + 1); setContextRefresh(n => n + 1) }}>刷新</Button>
+          {chooseGroup ? <Button type="primary" onClick={() => goTo('/groups')}>选择小组创建项目</Button>
+            : <Button type="primary" disabled={!createReady} onClick={() => setFields({ groupId: canCreateGroup ? context.id : 0 })}>
+              {groupId && !hasGroupContext ? '创建项目' : canCreateGroup ? '创建小组项目' : '创建个人项目'}</Button>}
+        </Space>
+      </WorkspacePageHeading>
       <PendingProjectDocuments contextKey={location.key} onBusyChange={setDocumentBusy} onCreated={openProjectDocument}
         disabled={operation.busy || uncertain || Boolean(fields) || adding || Boolean(newDocument)} />
       {chooseGroup && <Typography.Paragraph>先选择需要整理资料的小组，再由创建者或管理员创建小组项目。</Typography.Paragraph>}

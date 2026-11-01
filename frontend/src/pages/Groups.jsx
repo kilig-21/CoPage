@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import request from '../api/request'
 import { usePageSession } from '../auth/PageSessionContext'
 import WorkspaceHeader from '../components/WorkspaceHeader'
+import WorkspacePageHeading from '../components/WorkspacePageHeading'
 import UserGuide from '../components/UserGuide'
 import CreateGroupModal from '../components/CreateGroupModal'
 import PendingGroupCreations from '../components/PendingGroupCreations'
@@ -295,14 +296,14 @@ export default function Groups() {
     }
   }
   return <Layout className="app-shell">
-    <WorkspaceHeader title="我的小组" onGuide={() => setShowGuide(true)}>
-      <Space wrap>
-        <Button disabled={busy || Boolean(sessionError)} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
-        <Button type="primary" disabled={!groupsReady} onClick={() => { feedbackAction.current = document.activeElement; try { assertSession(); setError(''); setCreating(true) } catch { /* 保留原页面和输入。 */ } }}>创建小组</Button></Space>
-    </WorkspaceHeader>
+    <WorkspaceHeader title="我的小组" onGuide={() => setShowGuide(true)} />
     <main id="workspace-main" tabIndex={-1} className="content-wrap group-page" onFocusCapture={event => { feedbackAction.current = event.target }}>
-      <Typography.Title level={2}>和同伴组织工作</Typography.Title>
-      <Typography.Paragraph type="secondary">在小组管理成员与角色。加入小组不会自动获得文档权限，资料仍逐篇共享。</Typography.Paragraph>
+      <WorkspacePageHeading title="和同伴组织工作" description="在小组管理成员与角色。加入小组不会自动获得文档权限，资料仍逐篇共享。">
+        <Space wrap>
+          <Button disabled={busy || Boolean(sessionError)} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
+          <Button type="primary" disabled={!groupsReady} onClick={() => { feedbackAction.current = document.activeElement; try { assertSession(); setError(''); setCreating(true) } catch { /* 保留原页面和输入。 */ } }}>创建小组</Button>
+        </Space>
+      </WorkspacePageHeading>
       {sessionError && <div ref={sessionFeedback}><Alert className="group-session-feedback" type="error" showIcon message={sessionError}
         description="已发送的操作可能已完成，请回到原账号重新读取核对；此页不会自动重试。"
         action={<Button onClick={relogin}>重新登录</Button>} /></div>}

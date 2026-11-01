@@ -1,3 +1,5 @@
+.account-settings.ant-space { width: min(100%, 720px); }
+.account-settings .ant-typography { overflow-wrap: anywhere; }
 .account-feedback { margin-top: 16px; scroll-margin-bottom: 16px; }
 .account-feedback .ant-alert-content { min-width: 0; overflow-wrap: anywhere; }
 @media (max-width: 640px) {

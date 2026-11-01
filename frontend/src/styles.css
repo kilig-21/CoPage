@@ -57,6 +57,12 @@ body { margin: 0; min-width: 0; }
 .search-results-card .ant-list-item-meta-description { overflow-wrap: anywhere; }
 .search-results-card .ant-list-item-meta { min-width: 0; }
 .search-result-description { display: grid; gap: 8px; }
+.search-excerpt { display: grid; gap: 4px; min-width: 0; }
+.search-result-snippet { line-height: 1.7; }
+.search-result-snippet.is-collapsed { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; max-height: 5.1em; overflow: hidden; }
+.search-excerpt-toggle.ant-btn { justify-self: start; min-height: 32px; height: auto; padding: 0; color: var(--cp-accent, #274de5); }
+.search-excerpt-toggle.ant-btn:focus-visible { outline: 2px solid var(--cp-accent, #274de5); outline-offset: 3px; }
+@media (max-width: 640px) { .search-excerpt-toggle.ant-btn { min-height: 44px; } }
 .search-result-metadata { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
 .search-result-metadata .ant-tag { margin-inline-end: 0; }
 .search-result-metadata .ant-typography { font-size: 13px; }

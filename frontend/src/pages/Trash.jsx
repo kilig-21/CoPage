@@ -3,6 +3,7 @@ import { Alert, Button, Card, Empty, Input, Layout, List, Pagination, Popconfirm
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { usePageRequest } from '../auth/PageSessionContext'
 import WorkspaceHeader from '../components/WorkspaceHeader'
+import WorkspacePageHeading from '../components/WorkspacePageHeading'
 import useDocumentLifecycle from '../api/useDocumentLifecycle'
 import { documentHref } from '../navigation/documents'
 
@@ -57,12 +58,11 @@ export default function Trash() {
     return ()=>controller.abort()
   },[page,keyword,refresh])
   return <Layout className="app-shell">
-    <WorkspaceHeader title="回收站">
-      <Button disabled={loading||restoration.busy} onClick={()=>setRefresh(n=>n+1)}>刷新回收站</Button>
-    </WorkspaceHeader>
+    <WorkspaceHeader title="回收站" />
     <main id="workspace-main" tabIndex={-1} className="content-wrap">
-      <Typography.Title level={2}>找回删除的文档</Typography.Title>
-      <Typography.Paragraph type="secondary">这里只显示你拥有的已删除文档。恢复保留正文、版本与原协作者权限；已清理的普通历史不会重建。</Typography.Paragraph>
+      <WorkspacePageHeading title="找回删除的文档" description="这里只显示你拥有的已删除文档。恢复保留正文、版本与原协作者权限；已清理的普通历史不会重建。">
+        <Button disabled={loading||restoration.busy} onClick={()=>setRefresh(n=>n+1)}>刷新回收站</Button>
+      </WorkspacePageHeading>
       <Input.Search aria-label="按标题查找已删除文档" placeholder="按文档标题查找" maxLength={200} value={input}
         disabled={restoration.busy} onChange={event=>setInput(event.target.value)} onSearch={applyFilter} enterButton="查找文档"
         size="large" style={{width:'100%',maxWidth:480,marginBottom:12}} />

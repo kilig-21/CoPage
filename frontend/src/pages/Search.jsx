@@ -5,7 +5,8 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { documentHref } from '../navigation/documents'
 import { usePageRequest } from '../auth/PageSessionContext'
 import WorkspaceHeader from '../components/WorkspaceHeader'
-import { snippetParts } from '../search/snippet'
+import SearchExcerpt from '../components/SearchExcerpt'
+import WorkspacePageHeading from '../components/WorkspacePageHeading'
 
 const PAGE_SIZE = 10
 
@@ -89,9 +90,8 @@ export default function Search() {
   return (
     <Layout className="app-shell"><WorkspaceHeader title="搜索" />
     <main id="workspace-main" tabIndex={-1} className="content-wrap">
-      <div className="page-heading"><div><Typography.Title level={2}>搜索文档</Typography.Title>
-        <Typography.Paragraph type="secondary">从有权限访问的标题和正文中查找。增加关键词可缩小范围，没有结果时可试着减少关键词。</Typography.Paragraph></div>
-        <Button type="text" aria-label="返回文档列表" icon={<ArrowLeftOutlined />} onClick={() => navigate('/docs')}>返回文档列表</Button></div>
+      <WorkspacePageHeading title="搜索文档" description="从有权限访问的标题和正文中查找。增加关键词可缩小范围，没有结果时可试着减少关键词。">
+        <Button type="text" aria-label="返回文档列表" icon={<ArrowLeftOutlined />} onClick={() => navigate('/docs')}>返回文档列表</Button></WorkspacePageHeading>
       <Input.Search aria-label="搜索标题和正文" placeholder="搜索标题和正文" value={input} maxLength={100} onChange={(event) => setInput(event.target.value)} onSearch={search} size="large" enterButton="搜索" className="search-box" />
       {error && <Alert type="error" showIcon message={error} action={validQuery && <Button size="small" disabled={loading} onClick={retrySearch}>重试</Button>} />}
       <Card role="region" aria-label="搜索结果" aria-busy={loading} className="search-results-card">
@@ -107,7 +107,7 @@ export default function Search() {
               <Typography.Text type="secondary" className="search-result-owner">所有者：{typeof item.ownerName === 'string' && item.ownerName.trim()
                 ? item.ownerName : Number.isSafeInteger(item.ownerId) && item.ownerId > 0 ? `用户 #${item.ownerId}` : '暂不可用'}</Typography.Text>
             </div>
-            <div className="search-result-snippet">{snippetParts(item.snippet).map((part, index) => part.highlighted ? <strong key={index}>{part.text}</strong> : part.text)}</div>
+            <SearchExcerpt snippet={item.snippet} title={item.title} />
             {typeof item.updateTime === 'string' && item.updateTime && <Typography.Text type="secondary" className="search-result-updated">更新于 {item.updateTime}</Typography.Text>}
           </div>} /></List.Item>} />
       </Card>

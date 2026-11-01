@@ -5,6 +5,7 @@ import { documentHref } from '../navigation/documents'
 import { usePageSession } from '../auth/PageSessionContext'
 import createDocument from '../api/createDocument'
 import WorkspaceHeader from '../components/WorkspaceHeader'
+import WorkspacePageHeading from '../components/WorkspacePageHeading'
 import UserGuide from '../components/UserGuide'
 import DocumentPreview from '../components/DocumentPreview'
 import { templateCategories as categories } from '../templates/categories'
@@ -155,13 +156,14 @@ export default function PersonalTemplates() {
     setDetail(null); setDetailError(''); setDetailLoading(true); setDetailRefresh(n => n + 1)
   }
   return <Layout className="app-shell">
-    <WorkspaceHeader title="我的模板" onGuide={() => setShowGuide(true)}><Space wrap>
-      <Button onClick={() => navigate('/templates')}>内置模板</Button>
-      <Button disabled={busy || loading} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
-    </Space></WorkspaceHeader>
+    <WorkspaceHeader title="我的模板" onGuide={() => setShowGuide(true)} />
     <main id="workspace-main" tabIndex={-1} className="content-wrap template-center personal-template-page">
-      <Typography.Title level={2}>复用自己的工作框架</Typography.Title>
-      <Typography.Paragraph>在编辑器“更多”选择“保存为个人模板”，也可从“我的文档”保存。模板只供本人使用，使用时新建独立文档；修改资料不替换模板正文。</Typography.Paragraph>
+      <WorkspacePageHeading title="复用自己的工作框架" description="在编辑器“更多”选择“保存为个人模板”，也可从“我的文档”保存。模板只供本人使用，使用时新建独立文档；修改资料不替换模板正文。">
+        <Space wrap>
+          <Button onClick={() => navigate('/templates')}>内置模板</Button>
+          <Button disabled={busy || loading} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
+        </Space>
+      </WorkspacePageHeading>
       {loadError && <Alert type="error" showIcon message={loadError} action={<Button disabled={busy || loading} onClick={() => setRefresh(n => n + 1)}>重试读取</Button>} />}
       {error && <Alert className="creation-review-alert" type={uncertain ? 'warning' : 'error'} showIcon message={error}
         description={uncertain?.kind === 'instance' ? '待确认文档：' + uncertain.title : undefined}

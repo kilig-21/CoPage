@@ -10,7 +10,7 @@ const destinations = [
   ['/projects', '我的项目'], ['/templates', '模板中心'], ['/search', '搜索'], ['/trash', '回收站'],
 ]
 
-export default function WorkspaceHeader({ title, onGuide, children }) {
+export default function WorkspaceHeader({ title, onGuide }) {
   const location = useLocation()
   const header = useRef(null)
   const navigation = useRef(null)
@@ -82,7 +82,6 @@ export default function WorkspaceHeader({ title, onGuide, children }) {
         <Link className={'workspace-account' + (location.pathname === '/account' ? ' is-active' : '')} to="/account" aria-label="账号设置"><UserOutlined /><span className="workspace-utility-label">账号</span></Link>
         <LogoutButton compact />
       </Space>
-      {children && <div className="workspace-page-actions">{children}</div>}
     </header>
     {showGuide && <UserGuide onClose={() => setShowGuide(false)} />}
   </>

@@ -3,6 +3,7 @@ import { Alert, Button, Card, Form, Input, Layout, Space, Spin, Typography } fro
 import { useNavigate } from 'react-router-dom'
 import { usePageRequest } from '../auth/PageSessionContext'
 import WorkspaceHeader from '../components/WorkspaceHeader'
+import WorkspacePageHeading from '../components/WorkspacePageHeading'
 import PasswordInput from '../components/PasswordInput'
 import { expireSession } from '../auth/session'
 import { createAccountSettings, isAccountSessionFailure } from '../api/accountSettings'
@@ -119,12 +120,12 @@ export default function Account() {
   }
   return <Layout className="app-shell">
     <WorkspaceHeader title="账号设置" />
-    <main id="workspace-main" tabIndex={-1} className="content-wrap">
-      <Typography.Title level={2}>我的账号</Typography.Title>
+    <main id="workspace-main" tabIndex={-1} className="content-wrap account-page">
+      <WorkspacePageHeading title="我的账号" />
       {loadError && <Alert type="error" showIcon message={loadError} action={sessionBlocked
         ? <Button onClick={relogin}>重新登录</Button> : <Button onClick={() => setRefresh(value => value + 1)}>重试</Button>} />}
       <Spin spinning={loading}>
-        {profile && <Space direction="vertical" style={{ width: '100%' }} size="large">
+        {profile && <Space direction="vertical" className="account-settings" size="large">
           <Card title="个人信息">
             <Typography.Paragraph>用户名：{profile.username}（用于登录和添加协作者，不能修改）</Typography.Paragraph>
             <Form form={nicknameForm} layout="vertical" disabled={busy || sessionBlocked} onFinish={saveNickname}>

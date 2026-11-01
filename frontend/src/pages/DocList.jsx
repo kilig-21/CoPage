@@ -7,6 +7,7 @@ import { usePageSession } from '../auth/PageSessionContext'
 import createDocumentRequest from '../api/createDocument'
 import useDocumentLifecycle from '../api/useDocumentLifecycle'
 import WorkspaceHeader from '../components/WorkspaceHeader'
+import WorkspacePageHeading from '../components/WorkspacePageHeading'
 import SavePersonalTemplateModal from '../components/SavePersonalTemplateModal'
 import CollaboratorModal from '../components/CollaboratorModal'
 import ImportModal from '../components/ImportModal'
@@ -106,15 +107,14 @@ export default function DocList() {
     <Layout className="app-shell">
       <WorkspaceHeader title="我的文档" onGuide={() => setShowGuide(true)} />
       <main id="workspace-main" tabIndex={-1} className="content-wrap">
-        <div className="page-heading">
-          <div><Typography.Title level={2}>我的文档</Typography.Title><Typography.Text type="secondary">编辑时可查看连接与保存状态，删除的文档可从回收站找回</Typography.Text></div>
+        <WorkspacePageHeading title="我的文档" description="编辑时可查看连接与保存状态，删除的文档可从回收站找回">
           <Space wrap>
             <Button disabled={loading || deletion.busy} onClick={() => setRefresh(value => value + 1)}>刷新文档列表</Button>
             <Button onClick={() => setImporting(true)}>导入文档</Button>
             <Button onClick={() => navigate('/templates')}>从模板新建</Button>
             <Button type="primary" icon={<PlusOutlined />} loading={creating} onClick={createDocument}>新建文档</Button>
           </Space>
-        </div>
+        </WorkspacePageHeading>
         <PendingCopies onCreated={data => navigate(documentHref(data.id, sourcePath))} />
         <PendingDocumentCreations expectedIdentity={creationIdentity.current} disabled={creating}
           onCreated={data => navigate(documentHref(data.id, sourcePath))} />
