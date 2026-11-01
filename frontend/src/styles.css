@@ -42,6 +42,10 @@ body { margin: 0; min-width: 0; }
 .editor-link-error { flex-basis: 100%; min-width: 0; white-space: normal; color: #b42318; font-size: 12px; overflow-wrap: anywhere; }
 .editor-host.ql-container.ql-snow { min-height: 500px; border: 0; font-family: inherit; font-size: 16px; line-height: 1.8; }
 .editor-host .ql-editor { min-height: 500px; padding: 28px 0 0; }
+/* Quill sets a line height on its child, so inherit each document surface's reading scale explicitly. */
+.editor-host .ql-editor, .document-preview .ql-editor { line-height: inherit; }
+.editor-host .ql-editor :is(h1, h2, h3, h4, h5, h6),
+.document-preview .ql-editor :is(h1, h2, h3, h4, h5, h6) { line-height: 1.4; }
 .editor-host.ql-container { position: relative; }
 .remote-cursor-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 .remote-cursor { position: absolute; top: 0; left: 0; border-left: 2px solid var(--remote-cursor-color); pointer-events: none; }
@@ -104,7 +108,7 @@ body { margin: 0; min-width: 0; }
   .editor-topbar { align-items: flex-start; }
 }
 
-.document-preview.ql-container { height: auto; }
+.document-preview.ql-container { height: auto; font-family: inherit; font-size: 14px; line-height: 1.7; }
 .document-preview .ql-editor { min-height: 120px; max-height: 45vh; overflow-y: auto; }
 .history-version-list { max-height: 40vh; overflow-y: auto; margin: 16px 0; }
 .history-preview { margin-top: 20px; scroll-margin-top: 16px; }
