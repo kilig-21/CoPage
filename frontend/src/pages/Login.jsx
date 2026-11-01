@@ -3,6 +3,7 @@ import { Alert, Button, Card, Form, Input, Typography } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
 import request from '../api/request'
 import UserGuide from '../components/UserGuide'
+import PasswordInput from '../components/PasswordInput'
 import { captureLoginIdentity, safeReturnPath, saveSession } from '../auth/session'
 
 export default function Login() {
@@ -97,12 +98,12 @@ export default function Login() {
           <Form.Item label="密码" name="password" rules={[{ required: true, message: '请输入密码' },
             ...(registering ? [{ min: 6, max: 64, message: '密码需要 6～64 个字符' }, { validator: (_, value) =>
               !value || new TextEncoder().encode(value).length <= 72 ? Promise.resolve() : Promise.reject(new Error('密码的 UTF-8 长度不能超过 72 字节')) }] : [])]}>
-            <Input.Password autoComplete={registering ? 'new-password' : 'current-password'} />
+            <PasswordInput autoComplete={registering ? 'new-password' : 'current-password'} />
           </Form.Item>
           {registering && <Form.Item label="确认密码" name="confirmPassword" dependencies={['password']} rules={[
             { required: true, message: '请再次输入密码' }, ({ getFieldValue }) => ({ validator: (_, value) =>
               !value || value === getFieldValue('password') ? Promise.resolve() : Promise.reject(new Error('两次密码不一致')) }),
-          ]}><Input.Password autoComplete="new-password" /></Form.Item>}
+          ]}><PasswordInput visibilityLabel="确认密码" autoComplete="new-password" /></Form.Item>}
           <Button type="primary" htmlType="submit" loading={submitting} block>
             {registering ? '注册账号' : '登录'}
           </Button>

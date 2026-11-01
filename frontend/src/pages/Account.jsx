@@ -3,6 +3,7 @@ import { Alert, Button, Card, Form, Input, Layout, Space, Spin, Typography } fro
 import { useNavigate } from 'react-router-dom'
 import { usePageRequest } from '../auth/PageSessionContext'
 import WorkspaceHeader from '../components/WorkspaceHeader'
+import PasswordInput from '../components/PasswordInput'
 import { expireSession } from '../auth/session'
 import { createAccountSettings, isAccountSessionFailure } from '../api/accountSettings'
 import '../styles/account.css'
@@ -140,11 +141,11 @@ export default function Account() {
           <Card title="修改密码">
             <Typography.Paragraph>修改后所有旧登录将失效，请用新密码重新登录。文档、成员权限和本地未确认草稿会保留。</Typography.Paragraph>
             <Form form={passwordForm} layout="vertical" disabled={busy || sessionBlocked} onFinish={changePassword}>
-              <Form.Item label="原密码" name="currentPassword" rules={[{ required: true, message: '请输入原密码' }]}><Input.Password autoComplete="current-password" /></Form.Item>
+              <Form.Item label="原密码" name="currentPassword" rules={[{ required: true, message: '请输入原密码' }]}><PasswordInput visibilityLabel="原密码" autoComplete="current-password" /></Form.Item>
               <Form.Item label="新密码" name="newPassword" rules={[{ required: true, whitespace: true, message: '请输入新密码' }, { min: 6, max: 64, message: '新密码需要6～64个字符' }, { validator: (_, value) =>
-                !value || new TextEncoder().encode(value).length <= 72 ? Promise.resolve() : Promise.reject(new Error('新密码的UTF-8长度不能超过72字节')) }]}><Input.Password autoComplete="new-password" /></Form.Item>
+                !value || new TextEncoder().encode(value).length <= 72 ? Promise.resolve() : Promise.reject(new Error('新密码的UTF-8长度不能超过72字节')) }]}><PasswordInput visibilityLabel="新密码" autoComplete="new-password" /></Form.Item>
               <Form.Item label="确认新密码" name="confirmPassword" dependencies={['newPassword']} rules={[{ required: true, message: '请再次输入新密码' }, ({ getFieldValue }) => ({ validator: (_, value) =>
-                !value || value === getFieldValue('newPassword') ? Promise.resolve() : Promise.reject(new Error('两次新密码不一致')) })]}><Input.Password autoComplete="new-password" /></Form.Item>
+                !value || value === getFieldValue('newPassword') ? Promise.resolve() : Promise.reject(new Error('两次新密码不一致')) })]}><PasswordInput visibilityLabel="确认新密码" autoComplete="new-password" /></Form.Item>
               <div ref={passwordAction}><Button type="primary" htmlType="submit" loading={busy}>更新密码并重新登录</Button></div>
             </Form>
             {feedbackFor === 'password' && error && <div ref={feedback} className="account-feedback">
