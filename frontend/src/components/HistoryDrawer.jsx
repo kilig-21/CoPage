@@ -3,6 +3,7 @@ import { Alert, Button, Drawer, Input, List, Modal, Space, Spin, Tag, Typography
 import { usePageRequest } from '../auth/PageSessionContext'
 import DocumentPreview from './DocumentPreview'
 import useHistoryRestore from '../api/useHistoryRestore'
+import { previewScrollBehavior } from '../navigation/motion'
 
 const rejectedCodes = new Set([400, 401, 403, 404, 40901, 40902, 40903, 40904])
 const mutationError = (error, uncertain) => rejectedCodes.has(error?.code)
@@ -153,7 +154,7 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
         requestAnimationFrame(() => {
           if (!isLive(controller) || ticket !== selectionRequest.current) return
           previewRegion.current?.focus({ preventScroll: true })
-          previewRegion.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+          previewRegion.current?.scrollIntoView({ block: 'start', behavior: previewScrollBehavior() })
         })
       }
     }
