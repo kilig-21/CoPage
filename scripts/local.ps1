@@ -17,6 +17,7 @@ $taskPorts = @{ backend = 8080; frontend = 5173 }
 $taskLock = $null
 $taskStarted = @()
 $taskPreviousLocation = Get-Location
+$taskPreviousConsoleOutputEncoding = $null
 
 function Assert-RuntimePath {
     foreach ($taskPath in @($taskRuntime, $taskStatePath, (Join-Path $taskRuntime 'control.lock'))) {
@@ -238,6 +239,10 @@ function Stop-OwnedRole([string]$Role) {
 }
 
 try {
+    # Docker 输出 UTF-8；新建的 Windows PowerShell 5.1 窗口可能默认使用本地代码页。
+    # 只在本次调用期间统一原生命令的读取编码，结束时恢复调用方设置。
+    $taskPreviousConsoleOutputEncoding = [Console]::OutputEncoding
+    [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
     Add-Type -AssemblyName System.Net.Http
     if ($Json -and $Action -ne 'status') { throw '-Json 仅用于 status。' }
     Set-Location -LiteralPath $taskRoot
@@ -276,7 +281,8 @@ try {
     $taskConfigCode = $LASTEXITCODE
     $ErrorActionPreference = 'Stop'
     if ($taskConfigCode -ne 0) { throw 'Compose 配置无法解析，请核对 .env；错误记录在 .copage-local，未打印凭据。' }
-    $taskConfig = ($taskConfigText -join "`n") | ConvertFrom-Json
+    try { $taskConfig = ($taskConfigText -join "`n") | ConvertFrom-Json }
+    catch { throw 'Compose 配置输出无法解析，尚未启动应用；请检查 Docker Compose 和本次日志。未输出配置内容或凭据。' }
     $taskBackendEnvironment = @{}
     foreach ($taskProperty in $taskConfig.services.backend.environment.PSObject.Properties) { $taskBackendEnvironment[$taskProperty.Name] = [string]$taskProperty.Value }
     if ($taskBackendEnvironment.SPRING_PROFILES_ACTIVE -ne 'default' -or $taskBackendEnvironment.FRONTEND_ORIGIN -ne 'http://localhost:5173') {
@@ -335,4 +341,7 @@ try {
 } finally {
     if ($taskLock) { $taskLock.Dispose() }
     Set-Location -LiteralPath $taskPreviousLocation.Path
+    if ($taskPreviousConsoleOutputEncoding) {
+        try { [Console]::OutputEncoding = $taskPreviousConsoleOutputEncoding } catch { }
+    }
 }
