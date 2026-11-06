@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal } from 'antd'
 import { usePageRequest } from '../auth/PageSessionContext'
+import { parseDocumentRenameReply } from '../api/documentRename'
 
 export default function RenameModal({ doc, onClose, onSaved }) {
   const request = usePageRequest()
@@ -19,8 +20,10 @@ export default function RenameModal({ doc, onClose, onSaved }) {
     mutation.current = controller
     setBusy(true); setError(''); setNotice('')
     try {
-      await request.put('/doc/' + doc.id, { title: title.trim() }, { signal: controller.signal })
+      const submittedTitle = title.trim()
+      const reply = await request.put('/doc/' + doc.id, { title: submittedTitle }, { signal: controller.signal })
       if (controller.signal.aborted) return
+      parseDocumentRenameReply(reply, doc.id, submittedTitle)
       onSaved()
       onClose()
     } catch (failure) {
@@ -41,8 +44,9 @@ export default function RenameModal({ doc, onClose, onSaved }) {
     mutation.current = controller
     setBusy(true); setNotice('')
     try {
-      const { data } = await request.get('/doc/' + doc.id + '/metadata', { signal: controller.signal })
+      const reply = await request.get('/doc/' + doc.id + '/metadata', { signal: controller.signal })
       if (controller.signal.aborted) return
+      const data = parseDocumentRenameReply(reply, doc.id)
       setUnconfirmed(false); setError('')
       setNotice('服务器当前标题：“' + data.title + '”。你的输入仍保留；核对后可关闭，或明确保存输入的标题。')
     } catch (failure) {
@@ -54,7 +58,7 @@ export default function RenameModal({ doc, onClose, onSaved }) {
     }
   }
 
-  return <Modal open title="重命名文档" onOk={save} onCancel={onClose} confirmLoading={busy}
+  return <Modal open className="document-rename-modal" title="重命名文档" onOk={save} onCancel={onClose} confirmLoading={busy}
     okButtonProps={{ disabled: unconfirmed }} closable={!busy} maskClosable={!busy} keyboard={!busy}
     cancelButtonProps={{ disabled: busy }}>
     {error && <Alert type="error" showIcon message={error}
