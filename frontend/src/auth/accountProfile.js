@@ -1,6 +1,11 @@
 const invalidProfile = () => Object.assign(new Error('账号资料回复无法确认，请重试读取。'),
   { reason: 'ACCOUNT_PROFILE_RESPONSE' })
 
+export function parseAccountProfileReply(reply, options) {
+  if (!reply || typeof reply !== 'object' || Array.isArray(reply) || reply.code !== 0) throw invalidProfile()
+  return parseAccountProfile(reply.data, options)
+}
+
 // 读取已有账号资料，不套用新注册的名称规则，也不带出非公开字段。
 export function parseAccountProfile(value, { expectedProfile, expectedNickname } = {}) {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||

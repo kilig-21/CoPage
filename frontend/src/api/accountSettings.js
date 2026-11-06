@@ -1,5 +1,6 @@
 import { captureLoginIdentity } from '../auth/session.js'
-import { parseAccountProfile } from '../auth/accountProfile.js'
+import { parseAccountProfileReply } from '../auth/accountProfile.js'
+import { confirmPasswordChangeReply } from '../auth/replies.js'
 
 const changed = () => Object.assign(new Error('登录状态已更改，请重新登录后核对账号资料；本地草稿仍保留。'),
   { reason: 'ACCOUNT_SESSION_CHANGED' })
@@ -36,10 +37,10 @@ export function createAccountSettings({ storage, get, put, post }) {
   }
   return {
     token: identity.token,
-    read: signal => run(signal, config => get('/account/me', config), response => parseAccountProfile(response?.data)),
+    read: signal => run(signal, config => get('/account/me', config), parseAccountProfileReply),
     saveNickname: (profile, nickname, signal) => run(signal,
       config => put('/account/me', { nickname }, config),
-      response => parseAccountProfile(response?.data, { expectedProfile: profile, expectedNickname: nickname })),
-    changePassword: (values, signal) => run(signal, config => post('/account/password', values, config)),
+      response => parseAccountProfileReply(response, { expectedProfile: profile, expectedNickname: nickname })),
+    changePassword: (values, signal) => run(signal, config => post('/account/password', values, config), confirmPasswordChangeReply),
   }
 }

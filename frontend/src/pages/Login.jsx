@@ -5,6 +5,7 @@ import request from '../api/request'
 import UserGuide from '../components/UserGuide'
 import PasswordInput from '../components/PasswordInput'
 import { captureLoginIdentity, safeReturnPath, saveSession } from '../auth/session'
+import { confirmRegistrationReply, parseLoginReply } from '../auth/replies'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -35,8 +36,9 @@ export default function Login() {
       ...(registering ? { nickname: values.nickname?.trim() } : {}) }
     try {
       if (registering) {
-        await request.post('/auth/register', payload, { signal: controller.signal })
+        const response = await request.post('/auth/register', payload, { signal: controller.signal })
         if (controller.signal.aborted) return
+        confirmRegistrationReply(response)
         setNotice('注册成功，请用新账号登录')
         setRegistering(false)
         form.setFieldsValue({ password: '', confirmPassword: '' })
@@ -44,7 +46,8 @@ export default function Login() {
       }
       const response = await request.post('/auth/login', payload, { signal: controller.signal })
       if (controller.signal.aborted) return
-      saveSession(localStorage, { token: response.data.token, username: response.data.user.username }, { expectedIdentity })
+      const verified = parseLoginReply(response)
+      saveSession(localStorage, { token: verified.token, username: verified.user.username }, { expectedIdentity })
       navigate(safeReturnPath(location.state?.from || '/home'), { replace: true })
     } catch (error) {
       if (!controller.signal.aborted) {

@@ -7,7 +7,7 @@ const password = { currentPassword: 'fake-old', newPassword: 'fake-new' }
 function fixture() {
   const values = new Map([['collab-token', 'token-A'], ['collab-user', 'synthetic-A'], ['draft:64', 'keep-draft']])
   const calls = [], storage = { getItem: key => values.get(key) ?? null }
-  let reply = async (method, body) => ({ data: method === 'put' ? { ...profile, nickname: body.nickname } : profile })
+  let reply = async (method, body) => ({ code: 0, data: method === 'post' ? null : method === 'put' ? { ...profile, nickname: body.nickname } : profile })
   const send = method => (url, body, config) => {
     if (method === 'get') { config = body; body = undefined }
     calls.push({ method, url, body, config })
@@ -62,7 +62,7 @@ for (const operation of ['read', 'saveNickname', 'changePassword']) test(operati
   assert.equal(f.calls.length, 1)
   f.values.set('collab-token', 'token-B'); f.values.set('collab-user', 'synthetic-B')
   const current = new Map(f.values)
-  finish({ data: { ...profile, nickname: '新昵称' } })
+  finish({ code: 0, data: { ...profile, nickname: '新昵称' } })
   await assert.rejects(pending, changed)
   assert.deepEqual(f.values, current)
   assert.equal(f.calls[0].config.copageExpectedSessionToken, 'token-A')
@@ -85,15 +85,15 @@ test('同一身份的明确业务错误仍保留原对象', async () => {
 
 test('回复到达时存储不可读，不确认昵称成功', async () => {
   const f = fixture()
-  f.setReply(async () => { f.storage.getItem = () => { throw Error('unavailable') }; return { data: { ...profile, nickname: '新昵称' } } })
+  f.setReply(async () => { f.storage.getItem = () => { throw Error('unavailable') }; return { code: 0, data: { ...profile, nickname: '新昵称' } } })
   await assert.rejects(f.settings.saveNickname(profile, '新昵称'), { reason: 'ACCOUNT_SESSION_UNAVAILABLE' })
 })
 
 test('资料解析继续拒绝错账号及非提交昵称的回复', async () => {
   const f = fixture()
-  f.setReply(async () => ({ data: { ...profile, id: 63, nickname: '新昵称' } }))
+  f.setReply(async () => ({ code: 0, data: { ...profile, id: 63, nickname: '新昵称' } }))
   await assert.rejects(f.settings.saveNickname(profile, '新昵称'), { reason: 'ACCOUNT_PROFILE_RESPONSE' })
-  f.setReply(async () => ({ data: { ...profile, nickname: '不是提交值' } }))
+  f.setReply(async () => ({ code: 0, data: { ...profile, nickname: '不是提交值' } }))
   await assert.rejects(f.settings.saveNickname(profile, '新昵称'), { reason: 'ACCOUNT_PROFILE_RESPONSE' })
 })
 
@@ -102,12 +102,21 @@ test('页面取消前不发请求，取消后不交付迟到回复', async () =>
   await assert.rejects(f.settings.read(controller.signal), { name: 'AbortError' }); assert.equal(f.calls.length, 0)
   const next = new AbortController(); let finish
   f.setReply(() => new Promise(resolve => { finish = resolve }))
-  const pending = f.settings.read(next.signal); next.abort(); finish({ data: profile })
+  const pending = f.settings.read(next.signal); next.abort(); finish({ code: 0, data: profile })
   await assert.rejects(pending, { name: 'AbortError' })
 })
 
 test('无法取得完整初始身份时不建立账号操作会话', () => {
   for (const storage of [{ getItem: () => null }, { getItem: () => { throw Error('unavailable') } }]) {
     assert.throws(() => createAccountSettings({ storage }), isAccountSessionFailure)
+  }
+})
+
+test('坏改密确认不交付成功，也不清除原登录和草稿', async () => {
+  const f = fixture(), before = new Map(f.values)
+  for (const reply of [{code:500,data:null},{code:0},{code:0,data:{}}]) {
+    f.setReply(async () => reply)
+    await assert.rejects(f.settings.changePassword(password), {reason:'ACCOUNT_PASSWORD_RESPONSE'})
+    assert.deepEqual(f.values,before)
   }
 })
