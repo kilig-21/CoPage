@@ -138,6 +138,10 @@ body { margin: 0; min-width: 0; }
   .document-collaborators-modal .ant-modal-footer .ant-btn { max-width: 100%; height: auto; white-space: normal; }
 }
 @media (max-width: 640px) {
+  .document-collaborators-modal .ant-alert { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; align-items: start; }
+  .document-collaborators-modal .ant-alert-icon { margin: 0; }
+  .document-collaborators-modal .ant-alert-content { min-width: 0; }
+  .document-collaborators-modal .ant-alert-action { grid-column: 2; margin-inline-start: 0; }
   .user-guide-drawer .ant-drawer-body { padding: 16px; }
   .user-guide-drawer .ant-drawer-close { width: 44px; min-height: 44px; margin-inline-end: 8px; }
   .user-guide-drawer .ant-drawer-footer .ant-btn { min-height: 44px; }

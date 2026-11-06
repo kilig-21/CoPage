@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Empty, Form, Input, List, Modal, Popconfirm, Select, Space, Typography } from 'antd'
 import { usePageRequest } from '../auth/PageSessionContext'
+import { confirmCollaboratorUpdate, parseCollaboratorsReply } from '../api/collaborators'
 
 const options = [{ value: 1, label: '只读' }, { value: 2, label: '可编辑' }]
 
@@ -34,7 +35,7 @@ export default function CollaboratorModal({ doc, onClose, returnToShare = false 
     setLoading(true)
     setListReady(false)
     request.get(base, { signal: controller.signal })
-      .then((response) => { if (active) { setMembers(response.data); setListReady(true) } })
+      .then((response) => { if (active) { const verified = parseCollaboratorsReply(response); setMembers(verified); setListReady(true) } })
       .catch((failure) => { if (active) { setMembers([]); setError(failure?.message || '成员列表加载失败') } })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false; controller.abort() }
@@ -47,8 +48,9 @@ export default function CollaboratorModal({ doc, onClose, returnToShare = false 
     setBusy(true)
     setError('')
     try {
-      await action(controller.signal)
+      const reply = await action(controller.signal)
       if (controller.signal.aborted) return
+      confirmCollaboratorUpdate(reply)
       setListReady(false)
       onSuccess?.()
       setRefresh((value) => value + 1)
