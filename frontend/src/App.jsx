@@ -1,10 +1,11 @@
-import { Component, lazy, Suspense, useEffect, useState } from 'react'
+import { Component, lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { safeReturnPath, subscribeSessionChanges } from './auth/session'
 import LocalDraftBackup from './components/LocalDraftBackup'
 import StorageUnavailable from './components/StorageUnavailable'
 import { canReadBrowserStorage } from './auth/browserStorage'
 import { PageSessionProvider } from './auth/PageSessionContext'
+import WorkspaceRouteFocus from './components/WorkspaceRouteFocus'
 
 const Projects = lazy(() => import('./pages/Projects'))
 const Groups = lazy(() => import('./pages/Groups'))
@@ -47,6 +48,7 @@ function SessionApp() {
   const navigate = useNavigate()
   const [sessionEpoch, setSessionEpoch] = useState(0)
   const [localBackup, setLocalBackup] = useState(null)
+  const previousWorkspaceSurface = useRef(null)
   useEffect(() => {
     const preserve = event => setLocalBackup(current => current || event.detail)
     window.addEventListener('copage-draft-backup', preserve)
@@ -100,6 +102,7 @@ function SessionApp() {
       <Route path="/trash" element={<RequireAuth><Trash /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
+    <WorkspaceRouteFocus previousSurface={previousWorkspaceSurface} />
     </Suspense>
     </PageSessionProvider>
     </PageBoundary>

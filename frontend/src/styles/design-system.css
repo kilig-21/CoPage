@@ -26,6 +26,7 @@ button[data-password-toggle]:disabled { cursor: not-allowed; }
   transform: translateY(calc(-100% - 16px)); }
 .workspace-skip-link:focus { transform: translateY(0); color: #fff; outline: 3px solid var(--cp-accent); outline-offset: 3px; }
 #workspace-main:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 4px; }
+#workspace-main h1[tabindex="-1"]:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 6px; border-radius: 2px; }
 .app-shell { background: var(--cp-paper); }
 .content-wrap { width: min(1120px, calc(100% - 64px)); padding: 44px 0 64px; }
 .content-wrap > h2.ant-typography, .page-heading h1.ant-typography, .page-heading h2.ant-typography {

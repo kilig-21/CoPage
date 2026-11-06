@@ -83,6 +83,7 @@ export default function Projects() {
   const [listRefresh, setListRefresh] = useState(0)
   const [detailRefresh, setDetailRefresh] = useState(0)
   const [fields, setFields] = useState(null)
+  const fieldsTrigger = useRef(null)
   const [adding, setAdding] = useState(false)
   const [newDocument, setNewDocument] = useState(null)
   const [documentBusy, setDocumentBusy] = useState(false)
@@ -216,6 +217,17 @@ export default function Projects() {
       else creations.reportMissing()
     } else await operation.review()
   }
+  function closeFields() {
+    if (busy) return
+    const trigger = fieldsTrigger.current
+    fieldsTrigger.current = null
+    setFields(null)
+    queueMicrotask(() => {
+      if (trigger?.isConnected && !trigger.disabled && document.activeElement === document.body) {
+        trigger.focus({ preventScroll: true })
+      }
+    })
+  }
   return <Layout className="app-shell">
     <WorkspaceHeader title="我的项目" onGuide={() => setShowGuide(true)} />
     <main id="workspace-main" tabIndex={-1} className="content-wrap project-page">
@@ -223,7 +235,7 @@ export default function Projects() {
         <Space wrap>
           <Button disabled={loading || busy} onClick={() => { setRefresh(n => n + 1); setContextRefresh(n => n + 1) }}>刷新</Button>
           {chooseGroup ? <Button type="primary" onClick={() => goTo('/groups')}>选择小组创建项目</Button>
-            : <Button type="primary" disabled={!createReady} onClick={() => setFields({ groupId: canCreateGroup ? context.id : 0 })}>
+            : <Button type="primary" disabled={!createReady} onClick={event => { fieldsTrigger.current = event.currentTarget; setFields({ groupId: canCreateGroup ? context.id : 0 }) }}>
               {groupId && !hasGroupContext ? '创建项目' : canCreateGroup ? '创建小组项目' : '创建个人项目'}</Button>}
         </Space>
       </WorkspacePageHeading>
@@ -312,7 +324,7 @@ export default function Projects() {
           <Space wrap className="project-section">
             <Button type="primary" disabled={!detailReady} onClick={() => setNewDocument({ id: current.id, name: current.name, groupId: current.groupId })}>新建文档</Button>
             <Button disabled={!detailReady} onClick={() => setAdding(true)}>加入已有文档</Button>
-            {manage && <Button disabled={!detailReady} onClick={() => setFields(current)}>修改项目资料</Button>}
+            {manage && <Button disabled={!detailReady} onClick={event => { fieldsTrigger.current = event.currentTarget; setFields(current) }}>修改项目资料</Button>}
             {manage && <Popconfirm overlayClassName="document-action-confirm" title={'归档“' + current.name + '”？'}
               description="保留原文档、单独权限及项目关联，可在已归档列表恢复。" disabled={!detailReady}
               onConfirm={() => mutate({ kind: 'archive', projectId: current.id, name: current.name }, config => request.post('/projects/' + current.id + '/archive', {}, config), () => navigate({ project: null }))}>
@@ -344,7 +356,7 @@ export default function Projects() {
       ready={fields.id ? detailReady && manage : createReady} busy={busy} uncertain={uncertain}
       error={operationError || (fields.id ? detailError : contextError || error)} notice={operation.notice?.target?.projectId === fields.id ? operation.notice : null}
       onRetry={() => { if (fields.id) setDetailRefresh(n => n + 1); else { setListRefresh(n => n + 1); setContextRefresh(n => n + 1) } }}
-      onClose={() => { if (!busy) setFields(null) }} onReview={review}
+      onClose={closeFields} onReview={review}
       onSave={values => {
         const target = { kind: fields.id ? 'rename' : 'create', projectId: fields.id, name: values.name, description: values.description, groupId: values.groupId }
         if (fields.id) mutate(target, config => request.put('/projects/' + fields.id, { name: values.name, description: values.description }, config), () => setFields(null), detailReady && manage)
