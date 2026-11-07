@@ -272,7 +272,10 @@ export default function Editor() {
         onManage={() => openManagement(true)} />}
       {managing && currentManagement(managing) && <CollaboratorModal doc={{ id: docId, title }} returnToShare={managing.fromShare} onClose={() => closeManagement(managing)} />}
       {showHistory && permission > 0 && <HistoryDrawer docId={docId} isOwner={isOwner && permission === 2}
-        canRestore={canRestoreHistory} onClose={() => setShowHistory(false)} />}
+        canRestore={canRestoreHistory} onClose={() => {
+          setShowHistory(false)
+          queueMicrotask(() => toolsButtonRef.current?.focus({ preventScroll: true }))
+        }} />}
       {showExport && <ExportModal docId={docId} canExport={() => permission > 0 && !recoveryDraft && canExportDocument()}
         onClose={() => setShowExport(false)} />}
       {showCopy && permission > 0 && <CopyModal doc={{ id: docId, title }}
