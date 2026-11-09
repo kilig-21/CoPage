@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePageSession } from '../auth/PageSessionContext'
+import { confirmDocumentDeletion, parseDocumentRestoration, parseDocumentState } from './documentLifecycle.js'
 
 // 列表刷新不能证明某篇文档的写结果；显式核对只读取原目标的当前状态。
 export default function useDocumentLifecycle({ operation, ready, onConfirmed }) {
@@ -49,7 +50,8 @@ export default function useDocumentLifecycle({ operation, ready, onConfirmed }) 
         ? await request.delete('/doc/' + doc.id, config(attempt))
         : await request.post('/doc/' + doc.id + '/restore', undefined, config(attempt))
       if (!current(attempt)) return
-      if (operation === 'restore' && (result.data?.id !== doc.id || typeof result.data.title !== 'string')) throw new Error('恢复响应无效')
+      if (operation === 'delete') confirmDocumentDeletion(result)
+      else parseDocumentRestoration(result, doc.id)
       const title = result.data?.title ?? attempt.target.title
       setNotice({ type: 'success', message: `“${title}”已${operation === 'delete' ? '移入回收站' : '恢复'}`, openId: operation === 'restore' ? result.data.id : null })
       confirmed.current()
@@ -69,9 +71,9 @@ export default function useDocumentLifecycle({ operation, ready, onConfirmed }) 
     if (!attempt) return
     setChecking(true); setError('')
     try {
-      const { data } = await request.get('/doc/' + target.id + '/state', config(attempt))
+      const result = await request.get('/doc/' + target.id + '/state', config(attempt))
       if (!current(attempt) || unknown.current !== target) return
-      if (data?.id !== target.id || typeof data.deleted !== 'boolean' || typeof data.title !== 'string') throw new Error('核对响应无效')
+      const data = parseDocumentState(result, target.id)
       unknown.current = null; setUncertain(null)
       const matches = data.deleted === (operation === 'delete')
       setNotice({ type: 'info', message: `已核对：“${data.title}”当前${data.deleted ? '在回收站' : '可正常打开'}。${matches ? '' : '请按当前状态决定是否重新操作。'}`,
