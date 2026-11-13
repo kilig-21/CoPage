@@ -9,6 +9,8 @@ import UserGuide from '../components/UserGuide'
 import WorkspaceOverview from '../components/WorkspaceOverview'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import AccountDraftsDrawer from '../components/AccountDraftsDrawer'
+import DocumentLifecycleFeedback from '../components/DocumentLifecycleFeedback'
+import useDocumentLifecycle from '../api/useDocumentLifecycle'
 import '../styles/workbench.css'
 
 export default function Home() {
@@ -24,6 +26,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
+  const lifecycle = useDocumentLifecycle({ onConfirmed: () => setRefresh(value => value + 1) })
   const [showGuide, setShowGuide] = useState(false)
   const [showDrafts, setShowDrafts] = useState(false)
   const draftsButton = useRef(null)
@@ -69,6 +72,7 @@ export default function Home() {
         action={<Button disabled={profileLoading} onClick={() => setProfileRefresh(value => value + 1)}>重试账号资料</Button>} />}
       {error && <Alert type="error" showIcon message={error}
         action={<Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>重试文档概览</Button>} />}
+      <DocumentLifecycleFeedback lifecycle={lifecycle} returnTo={sourcePath} />
       <Card title={<div className="cp-workbench-section-title"><Typography.Title level={2}>继续工作</Typography.Title>
         <Typography.Text type="secondary">最近更新的资料，继续查看或编辑。</Typography.Text></div>}
         className="workbench-recent workbench-documents cp-recent-documents" loading={loading}

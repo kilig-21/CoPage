@@ -5,7 +5,7 @@ import { createDocumentLifecycleStore, documentLifecycleKey, lockDocumentLifecyc
 
 const storageError = '浏览器暂时无法读取待核对记录。请恢复本站存储后重试。'
 
-export default function useDocumentLifecycle({ operation, ready, onConfirmed }) {
+export default function useDocumentLifecycle({ operation, ready = false, onConfirmed }) {
   const session = usePageSession()
   const key = session.identity && documentLifecycleKey(session.identity)
   const store = useMemo(() => createDocumentLifecycleStore({ storage: () => localStorage, key, withLock: lockDocumentLifecycleRecord }), [key])
@@ -80,7 +80,7 @@ export default function useDocumentLifecycle({ operation, ready, onConfirmed }) 
   }
 
   function run(doc) {
-    if (!callbacks.current.ready) return
+    if (!operation || !callbacks.current.ready) return
     return execute(async ({ current, config }) => {
       if (!callbacks.current.ready) return
       const raw = store.prepare({ id: doc.id, operation })

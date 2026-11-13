@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import { Alert, Button, Popconfirm, Space } from 'antd'
 import { Link } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
@@ -6,16 +6,28 @@ import { documentHref } from '../navigation/documents'
 export default function DocumentLifecycleFeedback({ lifecycle, returnTo }) {
   const { record, error, storageFailed, busy, checking, review, reviewFailed, endWaiting, notice, retryStorage } = lifecycle
   const confirmedRecord = useRef(null)
+  const result = useRef(null)
+  const restoreFocus = useRef(false)
+  useLayoutEffect(() => {
+    if (!notice || !restoreFocus.current) return
+    restoreFocus.current = false
+    if (document.activeElement === document.body) result.current?.focus({ preventScroll: true })
+  }, [notice])
   const target = record?.target
   const verb = target?.operation === 'delete' ? '删除' : '恢复'
   const canEnd = Boolean(record && (!target || reviewFailed))
+  const alreadyInTrash = returnTo.split(/[?#]/, 1)[0] === '/trash'
 
   return <>
     {record && <Alert className="lifecycle-review-alert" type="warning" showIcon
       message={error || (target ? `${verb}结果未确认，请核对文档 #${target.id} 的当前状态。` : '有一条待核对记录无法读取。')}
       description={target ? '核对会读取这篇文档的当前状态。' : '可结束等待以清除这条记录。'}
       action={<Space wrap>
-        {target && <Button loading={checking} disabled={busy} onClick={review}>核对{verb}结果</Button>}
+        {target && <Button loading={checking} disabled={busy && !checking} onClick={event => {
+          if (busy) return
+          restoreFocus.current = document.activeElement === event.currentTarget
+          review()
+        }}>核对{verb}结果</Button>}
         {canEnd && <Popconfirm title="结束等待？" description="这只会移除浏览器中的待核对记录。请先查看原资料，再决定是否重新操作。"
           overlayClassName="document-action-confirm" okText="结束等待" cancelText="继续保留"
           onOpenChange={open => { if (open) confirmedRecord.current = record.raw }}
@@ -25,8 +37,10 @@ export default function DocumentLifecycleFeedback({ lifecycle, returnTo }) {
       </Space>} />}
     {error && !record && <Alert type="error" showIcon message={error}
       action={storageFailed && <Button disabled={busy} onClick={retryStorage}>重读记录</Button>} />}
-    {notice && <Alert className="lifecycle-review-alert" type={notice.type} showIcon message={notice.message}
-      action={notice.id && (notice.deleted ? <Link to="/trash">查看回收站</Link>
-        : <Link to={documentHref(notice.id, returnTo)}>打开文档</Link>)} />}
+    {notice && <Alert className="lifecycle-review-alert" type={notice.type} showIcon message={notice.id && notice.deleted && alreadyInTrash
+      ? <span ref={result} tabIndex={-1}>{notice.message}</span> : notice.message}
+      action={notice.id && (notice.deleted
+        ? !alreadyInTrash && <Link ref={result} to="/trash">查看回收站</Link>
+        : <Link ref={result} to={documentHref(notice.id, returnTo)}>打开文档</Link>)} />}
   </>
 }
