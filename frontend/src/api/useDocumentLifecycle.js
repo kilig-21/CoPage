@@ -1,88 +1,165 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { usePageSession } from '../auth/PageSessionContext'
 import { confirmDocumentDeletion, parseDocumentRestoration, parseDocumentState } from './documentLifecycle.js'
+import { createDocumentLifecycleStore, documentLifecycleKey, lockDocumentLifecycleRecord } from './documentLifecycleStore.js'
 
-// 列表刷新不能证明某篇文档的写结果；显式核对只读取原目标的当前状态。
+const storageError = '浏览器暂时无法读取待核对记录。请恢复本站存储后重试。'
+
 export default function useDocumentLifecycle({ operation, ready, onConfirmed }) {
-  const pageSession = usePageSession()
-  const request = pageSession.request
-  const lock = useRef(null), unknown = useRef(null), confirmed = useRef(onConfirmed), available = useRef(ready)
-  confirmed.current = onConfirmed
-  available.current = ready
+  const session = usePageSession()
+  const key = session.identity && documentLifecycleKey(session.identity)
+  const store = useMemo(() => createDocumentLifecycleStore({ storage: () => localStorage, key, withLock: lockDocumentLifecycleRecord }), [key])
+  const attempt = useRef(null)
+  const callbacks = useRef({ ready, onConfirmed })
+  callbacks.current = { ready, onConfirmed }
+
+  const [record, setRecord] = useState(null)
+  const [storageFailed, setStorageFailed] = useState(false)
   const [pendingId, setPendingId] = useState(null)
   const [checking, setChecking] = useState(false)
-  const [uncertain, setUncertain] = useState(null)
+  const [failedRecord, setFailedRecord] = useState(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState(null)
-  const verb = operation === 'delete' ? '删除' : '恢复'
-  useEffect(() => () => { lock.current?.controller.abort(); lock.current = null }, [])
-  function begin(target) {
-    let token, account
-    try { const identity = pageSession.assertCurrent(); token = identity.token; account = identity.account }
-    catch { setError('浏览器无法读取当前账号，请允许本站保存数据后重试。'); return null }
-    const attempt = { target, controller: new AbortController(), token, account }
-    lock.current = attempt
-    return attempt
-  }
-  function current(attempt) {
-    if (lock.current !== attempt || attempt.controller.signal.aborted) return false
-    try { return localStorage.getItem('collab-token') === attempt.token && localStorage.getItem('collab-user') === attempt.account }
-    catch { attempt.identityUnavailable = true; return null }
-  }
-  function config(attempt) { return { signal: attempt.controller.signal, copageExpectedSessionToken: attempt.token } }
-  function finish(attempt) {
-    if (lock.current !== attempt) return
-    const visible = current(attempt)
-    lock.current = null
-    setPendingId(null); setChecking(false)
-    if (visible !== false && attempt.identityUnavailable) {
-      unknown.current = attempt.target; setUncertain(attempt.target); setNotice(null)
-      setError('浏览器暂时无法核对当前账号，操作结果仍未确认；允许本站保存数据后，再核对这篇文档。')
+
+  function sync() {
+    if (!session.current()) {
+      setRecord(null)
+      return
+    }
+    try {
+      setRecord(store.read())
+      setStorageFailed(false)
+    } catch {
+      setStorageFailed(true)
     }
   }
-  async function run(doc) {
-    if (lock.current || unknown.current || !available.current) return
-    const attempt = begin({ id: doc.id, title: doc.title })
-    if (!attempt) return
-    setPendingId(doc.id); setError(''); setNotice(null)
+
+  useEffect(() => {
+    const changed = event => {
+      if (event.type === 'storage' && event.key !== null && ![key, 'collab-user', 'collab-token'].includes(event.key)) return
+      if (!session.current()) attempt.current?.abort()
+      sync()
+    }
+    sync()
+    window.addEventListener('storage', changed)
+    window.addEventListener('copage-auth-changed', changed)
+    window.addEventListener('copage-auth-expired', changed)
+    return () => {
+      attempt.current?.abort()
+      attempt.current = null
+      window.removeEventListener('storage', changed)
+      window.removeEventListener('copage-auth-changed', changed)
+      window.removeEventListener('copage-auth-expired', changed)
+    }
+  }, [session, store])
+
+  async function execute(work, { id = null, checking = false } = {}) {
+    if (attempt.current || !session.current()) return
+    const controller = new AbortController()
+    attempt.current = controller
+    const current = () => attempt.current === controller && !controller.signal.aborted && session.current()
+    const config = { signal: controller.signal }
+    setPendingId(id)
+    setChecking(checking)
+    setError('')
+    setNotice(null)
     try {
-      const result = operation === 'delete'
-        ? await request.delete('/doc/' + doc.id, config(attempt))
-        : await request.post('/doc/' + doc.id + '/restore', undefined, config(attempt))
-      if (!current(attempt)) return
-      if (operation === 'delete') confirmDocumentDeletion(result)
-      else parseDocumentRestoration(result, doc.id)
-      const title = result.data?.title ?? attempt.target.title
-      setNotice({ type: 'success', message: `“${title}”已${operation === 'delete' ? '移入回收站' : '恢复'}`, openId: operation === 'restore' ? result.data.id : null })
-      confirmed.current()
+      await store.exclusive(async () => {
+        if (current()) await work({ current, config })
+      })
     } catch (failure) {
-      if (!current(attempt)) return
-      if ([400, 401, 403, 404].includes(failure?.code)) setError(failure.message || `${verb}请求未获准，请刷新后核对当前资料。`)
-      else {
-        unknown.current = attempt.target; setUncertain(attempt.target)
-        setError(`${verb}结果未确认，请核对这篇文档的当前状态，再决定是否重新操作。`)
+      if (current()) setError(failure.message || storageError)
+    } finally {
+      if (attempt.current === controller) {
+        attempt.current = null
+        setPendingId(null)
+        setChecking(false)
+        sync()
       }
-    } finally { finish(attempt) }
+    }
   }
-  async function review() {
-    const target = unknown.current
-    if (lock.current || !target) return
-    const attempt = begin(target)
-    if (!attempt) return
-    setChecking(true); setError('')
-    try {
-      const result = await request.get('/doc/' + target.id + '/state', config(attempt))
-      if (!current(attempt) || unknown.current !== target) return
-      const data = parseDocumentState(result, target.id)
-      unknown.current = null; setUncertain(null)
-      const matches = data.deleted === (operation === 'delete')
-      setNotice({ type: 'info', message: `已核对：“${data.title}”当前${data.deleted ? '在回收站' : '可正常打开'}。${matches ? '' : '请按当前状态决定是否重新操作。'}`,
-        openId: !data.deleted && operation === 'restore' ? data.id : null })
-      confirmed.current()
-    } catch {
-      if (current(attempt)) setError('暂时无法核对这篇文档，原操作结果仍未确认；请稍后重试核对。')
-    } finally { finish(attempt) }
+
+  function run(doc) {
+    if (!callbacks.current.ready) return
+    return execute(async ({ current, config }) => {
+      if (!callbacks.current.ready) return
+      const raw = store.prepare({ id: doc.id, operation })
+      if (raw === null || !current()) return
+
+      let data
+      try {
+        const reply = operation === 'delete'
+          ? await session.request.delete('/doc/' + doc.id, config)
+          : await session.request.post('/doc/' + doc.id + '/restore', undefined, config)
+        if (!current()) return
+        if (operation === 'delete') confirmDocumentDeletion(reply)
+        else data = parseDocumentRestoration(reply, doc.id)
+      } catch (failure) {
+        if (!current()) return
+        if ([400, 401, 403, 404].includes(failure?.code)) {
+          store.clear(raw)
+          setError(failure.message || '请求未获准，请刷新后核对当前资料。')
+        }
+        return
+      }
+
+      store.clear(raw)
+      const title = data?.title ?? doc.title
+      const message = operation === 'delete' ? `“${title}”已移入回收站` : `“${title}”已恢复`
+      setNotice({ type: 'success', message, id: doc.id, deleted: operation === 'delete' })
+      callbacks.current.onConfirmed()
+    }, { id: doc.id })
   }
-  return { pendingId, checking, uncertain, error, notice, run, review, busy: pendingId !== null || checking,
-    blocked: !ready || pendingId !== null || checking || Boolean(uncertain) }
+
+  function review() {
+    if (!record?.target) return
+    return execute(async ({ current, config }) => {
+      if (store.read()?.raw !== record.raw) return
+      const target = record.target
+      let data
+      try {
+        const reply = await session.request.get('/doc/' + target.id + '/state', config)
+        if (!current()) return
+        data = parseDocumentState(reply, target.id)
+      } catch {
+        if (current()) {
+          setFailedRecord(record.raw)
+          setError('暂时无法核对这篇文档。请稍后重试。')
+        }
+        return
+      }
+
+      store.clear(record.raw)
+      setFailedRecord(null)
+      const status = data.deleted ? '在回收站' : '可正常打开'
+      setNotice({ type: 'info', message: `已核对：“${data.title}”当前${status}。`, id: data.id, deleted: data.deleted })
+      callbacks.current.onConfirmed()
+    }, { checking: true })
+  }
+
+  const reviewFailed = Boolean(record && failedRecord === record.raw)
+
+  function endWaiting(expected) {
+    if (!record || expected !== record.raw || (record.target && !reviewFailed)) return
+    return execute(async () => {
+      if (!store.clear(record.raw)) return
+      setFailedRecord(null)
+      setNotice({ type: 'warning', message: record.target
+        ? `已结束等待。文档 #${record.target.id} 的操作结果仍未知，请先查看原资料。`
+        : '已移除无法读取的待核对记录。请先查看原资料。' })
+      callbacks.current.onConfirmed()
+    }, { checking: true })
+  }
+
+  const busy = pendingId !== null || checking
+  const visible = session.current()
+  return {
+    pendingId, checking, busy, run, review, endWaiting,
+    record: visible ? record : null,
+    storageFailed, retryStorage: sync,
+    reviewFailed,
+    error: visible ? error || (storageFailed ? storageError : '') : '',
+    notice: visible ? notice : null,
+    blocked: !visible || !ready || busy || storageFailed || Boolean(record),
+  }
 }

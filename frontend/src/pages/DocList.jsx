@@ -6,6 +6,7 @@ import { documentHref } from '../navigation/documents'
 import { usePageSession } from '../auth/PageSessionContext'
 import createDocumentRequest from '../api/createDocument'
 import useDocumentLifecycle from '../api/useDocumentLifecycle'
+import DocumentLifecycleFeedback from '../components/DocumentLifecycleFeedback'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import WorkspacePageHeading from '../components/WorkspacePageHeading'
 import SavePersonalTemplateModal from '../components/SavePersonalTemplateModal'
@@ -129,12 +130,7 @@ export default function DocList() {
           <Button type="link" onClick={() => applyFilter('')}>清除筛选</Button></div>}
         {templatePendingName && <Alert type="warning" showIcon message="模板保存结果未确认，请先核对我的模板，再决定是否重试。"
           action={<Button onClick={() => navigate('/templates?' + new URLSearchParams({ source: 'personal', keyword: templatePendingName }).toString())}>核对我的模板</Button>} />}
-        {deletion.uncertain && <Alert className="lifecycle-review-alert" type="warning" showIcon
-          message={deletion.error || '删除结果未确认，请先核对当前状态。'} description={'待核对文档：' + deletion.uncertain.title}
-          action={<Button loading={deletion.checking} disabled={deletion.busy} onClick={deletion.review}>核对删除结果</Button>} />}
-        {deletion.error && !deletion.uncertain && <Alert type="error" showIcon message={deletion.error} />}
-        {deletion.notice && <Alert className="lifecycle-review-alert" type={deletion.notice.type} showIcon message={deletion.notice.message}
-          action={<Button onClick={() => navigate('/trash')}>查看回收站</Button>} />}
+        <DocumentLifecycleFeedback lifecycle={deletion} returnTo={sourcePath} />
         <Card className="doc-list-card">
           {loadError && <Alert type="error" showIcon message={loadError}
             action={<Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>重试</Button>} />}

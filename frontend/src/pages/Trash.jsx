@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Empty, Input, Layout, List, Pagination, Popconfirm, Space, Typography } from 'antd'
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { usePageRequest } from '../auth/PageSessionContext'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import WorkspacePageHeading from '../components/WorkspacePageHeading'
 import useDocumentLifecycle from '../api/useDocumentLifecycle'
-import { documentHref } from '../navigation/documents'
+import DocumentLifecycleFeedback from '../components/DocumentLifecycleFeedback'
 
 const PAGE_SIZE=20
 export default function Trash() {
   const request = usePageRequest()
-  const navigate = useNavigate()
   const location = useLocation()
   const sourcePath=location.pathname+location.search+location.hash
   const [params,setParams]=useSearchParams()
@@ -71,12 +70,7 @@ export default function Trash() {
         {keyword&&<Button disabled={restoration.busy} onClick={()=>applyFilter('')}>清除查找</Button>}
       </Space>
       {error&&<Alert type="error" showIcon message={error} action={<Button disabled={loading} onClick={()=>setRefresh(n=>n+1)}>重试</Button>} />}
-      {restoration.uncertain&&<Alert className="lifecycle-review-alert" type="warning" showIcon
-        message={restoration.error||'恢复结果未确认，请先核对当前状态。'} description={'待核对文档：'+restoration.uncertain.title+'（文档 #'+restoration.uncertain.id+'）'}
-        action={<Button disabled={restoration.busy} loading={restoration.checking} onClick={restoration.review}>核对恢复结果</Button>} />}
-      {restoration.error&&!restoration.uncertain&&<Alert type="error" showIcon message={restoration.error} />}
-      {restoration.notice&&<Alert className="lifecycle-review-alert" type={restoration.notice.type} showIcon message={restoration.notice.message}
-        action={restoration.notice.openId&&<Button onClick={()=>navigate(documentHref(restoration.notice.openId,sourcePath))}>打开恢复的文档</Button>} />}
+      <DocumentLifecycleFeedback lifecycle={restoration} returnTo={sourcePath} />
       <Card className="trash-list-card"><List rowKey="id" loading={reading} dataSource={listReady?docs:[]}
         locale={{emptyText:reading?'正在加载…':error?'列表暂不可用':<Empty description={keyword?'没有匹配标题的已删除文档，试试其他关键词或清除查找':'回收站是空的'} />}}
         renderItem={doc=><List.Item actions={[<Popconfirm key="restore" overlayClassName="document-action-confirm trash-restore-confirm" title={`恢复“${doc.title}”（文档 #${doc.id}）？`}
