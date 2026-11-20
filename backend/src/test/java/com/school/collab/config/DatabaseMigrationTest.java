@@ -10,14 +10,13 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 
 import javax.sql.DataSource;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.util.UUID;
 
+import static com.school.collab.testsupport.MySqlTestDatabase.create;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @EnabledIfEnvironmentVariable(named = "COPAGE_MIGRATION_TEST_MYSQL", matches = ".+")
@@ -26,8 +25,8 @@ class DatabaseMigrationTest {
 
     @Test
     void emptyDatabaseMatchesTheLegacyBootstrapAndRecordsVersions() throws IOException {
-        var clean = database();
-        var bootstrap = database();
+        var clean = create();
+        var bootstrap = create();
         String legacySchema = new ClassPathResource("db/schema.sql").getContentAsString(StandardCharsets.UTF_8)
                 .replace("\r\n", "\n");
         execute(bootstrap, legacySchema.replaceFirst("(?m)^CREATE DATABASE[^\n]+\nUSE[^\n]+\n", ""));
@@ -52,7 +51,7 @@ class DatabaseMigrationTest {
 
     @Test
     void baselinesLegacyCopyWithoutOverwritingDocumentsAccountsOrReceipts() throws IOException {
-        var legacy = database();
+        var legacy = create();
         var jdbc = new JdbcTemplate(legacy);
         String oldDdl = baseline()
                 .replace("  `credential_version` BIGINT NOT NULL DEFAULT 0,\n", "")
@@ -86,14 +85,14 @@ class DatabaseMigrationTest {
 
     @Test
     void refusesWrongDatabaseAndLegacyTableCopyBeforeWritingMigrationHistory() throws IOException {
-        var unrelated = database();
+        var unrelated = create();
         var unrelatedDb = new JdbcTemplate(unrelated);
         unrelatedDb.execute("CREATE TABLE unrelated (id BIGINT PRIMARY KEY)");
         context(unrelated).run(app -> assertThat(app.getStartupFailure())
                 .hasStackTraceContaining("非空数据库缺少旧版核心表结构"));
         assertThat(unrelatedDb.queryForList("SHOW TABLES", String.class)).containsExactly("unrelated");
 
-        var legacy = database();
+        var legacy = create();
         execute(legacy, baseline().replace("`op` LONGTEXT NOT NULL", "`op` TEXT NOT NULL"));
         context(legacy).run(app -> assertThat(app.getStartupFailure())
                 .hasStackTraceContaining("doc_operation.op 需要离线扩容"));
@@ -106,16 +105,6 @@ class DatabaseMigrationTest {
                 .withConfiguration(AutoConfigurations.of(FlywayAutoConfiguration.class))
                 .withUserConfiguration(DatabaseMigrationConfig.class)
                 .withBean(DataSource.class, () -> dataSource);
-    }
-
-    private static DataSource database() {
-        var server = System.getenv("COPAGE_MIGRATION_TEST_MYSQL");
-        var password = System.getenv("COPAGE_MIGRATION_TEST_PASSWORD");
-        var name = "codi109_" + UUID.randomUUID().toString().replace("-", "");
-        var properties = "?allowPublicKeyRetrieval=true&sslMode=DISABLED&characterEncoding=UTF-8";
-        var admin = new JdbcTemplate(new DriverManagerDataSource("jdbc:mysql://" + server + "/" + properties, "root", password));
-        admin.execute("CREATE DATABASE " + name + " CHARACTER SET utf8mb4");
-        return new DriverManagerDataSource("jdbc:mysql://" + server + "/" + name + properties, "root", password);
     }
 
     private static String baseline() throws IOException {

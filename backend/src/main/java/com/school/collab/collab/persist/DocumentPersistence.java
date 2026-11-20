@@ -10,11 +10,14 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /** MySQL 是文档内容、版本和操作日志的持久化事实来源。 */
 @Service
 public class DocumentPersistence {
+    private static final int HISTORY_PAGE_BYTES = 1024 * 1024;
+    private static final int MAX_OPERATION_BYTES = 4 * 1024 * 1024;
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
 
@@ -43,14 +46,6 @@ public class DocumentPersistence {
         return rows.getFirst();
     }
 
-    public List<VersionedOperation> operationsAfter(long docId, long baseRevision) {
-        return jdbc.query("""
-                SELECT revision, op FROM doc_operation
-                WHERE doc_id = ? AND revision > ? ORDER BY revision ASC
-                """, (rs, index) -> new VersionedOperation(
-                rs.getLong("revision"), read(rs.getString("op"))), docId, baseRevision);
-    }
-
     public List<VersionedOperation> operationsBetween(long docId, long afterRevision, long throughRevision) {
         return jdbc.query("""
                 SELECT revision, op FROM doc_operation
@@ -76,15 +71,34 @@ public class DocumentPersistence {
     }
 
     public List<VersionedOperation> operationsPage(long docId, long after, long through, int limit) {
+        return operationsBatch(docId, after, through, limit).operations();
+    }
+
+    public OperationBatch operationsBatch(long docId, long after, long through, int limit) {
+        // Keep only revision and length in MySQL's bounded window result. Fetch the
+        // actual LONGTEXT values only for the selected page.
         return jdbc.query("""
-                SELECT revision, op FROM (
-                    SELECT revision, op, SUM(OCTET_LENGTH(op)) OVER(ORDER BY revision) AS bytes FROM (
-                        SELECT revision, op FROM doc_operation WHERE doc_id = ? AND revision > ? AND revision <= ?
+                SELECT history.revision, history.op, page.op_bytes FROM (
+                    SELECT revision, op_bytes, SUM(op_bytes) OVER(ORDER BY revision) AS cumulative_bytes FROM (
+                        SELECT revision, OCTET_LENGTH(op) AS op_bytes FROM doc_operation
+                        WHERE doc_id = ? AND revision > ? AND revision <= ?
                         ORDER BY revision LIMIT ?
                     ) candidates
-                ) sized WHERE bytes <= 1048576 OR revision = ? ORDER BY revision
-                """, (rs, n) -> new VersionedOperation(rs.getLong(1), read(rs.getString(2))), docId, after, through, limit, after + 1);
+                ) page JOIN doc_operation history ON history.doc_id = ? AND history.revision = page.revision
+                WHERE page.cumulative_bytes <= ? OR (page.revision = ? AND page.op_bytes <= ?)
+                ORDER BY history.revision
+                """, rs -> {
+            List<VersionedOperation> operations = new ArrayList<>();
+            long bytes = 0;
+            while (rs.next()) {
+                operations.add(new VersionedOperation(rs.getLong(1), read(rs.getString(2))));
+                bytes += rs.getLong(3);
+            }
+            return new OperationBatch(operations, bytes);
+        }, docId, after, through, limit, docId, HISTORY_PAGE_BYTES, after + 1, MAX_OPERATION_BYTES);
     }
+
+    public record OperationBatch(List<VersionedOperation> operations, long bytes) { }
 
     public boolean operationExists(long docId, long revision) {
         Integer count = jdbc.queryForObject(
@@ -169,7 +183,7 @@ public class DocumentPersistence {
 
     private void validateSerializedSize(String contentJson, String operationJson) {
         if (contentJson.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 2 * 1024 * 1024
-                || operationJson.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 4 * 1024 * 1024) {
+                || operationJson.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_OPERATION_BYTES) {
             throw new CollabException(400, "文档正文最多 2 MiB，单次修改最多 4 MiB；图片使用上传地址保存");
         }
     }

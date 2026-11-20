@@ -68,7 +68,8 @@ const expirySmoke = process.argv.includes('--session-expiry-smoke')
 const renamePermissionSmoke = process.argv.includes('--rename-permission-smoke')
 const editPermissionSmoke = process.argv.includes('--edit-permission-smoke')
 const historyRestoreSmoke = process.argv.includes('--history-restore-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke
+const historyRecoverySmoke = process.argv.includes('--history-recovery-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke
 const runtimeImages = process.argv.filter(value => value.startsWith('--runtime-image='))
 assert.ok(runtimeImages.length <= 1, '预构建运行时镜像只能指定一次')
 const runtimeImage = runtimeImages[0]?.slice('--runtime-image='.length)
@@ -172,6 +173,16 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       if (historyRestoreSmoke) {
         const { runHistoryRestoreCollaborationCheck } = await import('./history-restore-collaboration-check.mjs')
         await runHistoryRestoreCollaborationCheck({ docker, source: qaDocker, sql, ports, username, password })
+      }
+      if (historyRecoverySmoke) {
+        const history = spawnSync(process.execPath, ['scripts/history-recovery-smoke.mjs'], {
+          cwd, encoding: 'utf8', timeout: 240_000,
+          env: { ...process.env, COPAGE_HISTORY_ORIGIN: `http://127.0.0.1:${ports[0]}`,
+            COPAGE_HISTORY_USER: username, COPAGE_HISTORY_PASSWORD: password },
+        })
+        if (history.error) throw history.error
+        assert.equal(history.status, 0, history.stderr)
+        console.log(history.stdout.trim())
       }
       if (expirySmoke) {
         const expiry = spawnSync(process.execPath, ['scripts/session-expiry-smoke.mjs'], {

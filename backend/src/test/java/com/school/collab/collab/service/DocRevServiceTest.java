@@ -277,8 +277,8 @@ class DocRevServiceTest {
         DocumentPersistence persistence = mock(DocumentPersistence.class);
         when(persistence.snapshot(7)).thenReturn(
                 new CollabDocumentSnapshot(1, new Delta().insert("X\n")));
-        when(persistence.operationsAfter(7, 0)).thenReturn(
-                List.of(new VersionedOperation(1, new Delta().insert("X"))));
+        when(persistence.operationsBatch(7, 0, 1, 32)).thenReturn(
+                new DocumentPersistence.OperationBatch(List.of(new VersionedOperation(1, new Delta().insert("X"))), 24));
         DocRevService service = new DocRevService(new InMemoryDocumentStateStore(), persistence);
 
         DocRevService.CommitResult result = service.commit(7, 0, new Delta().insert("Y"));

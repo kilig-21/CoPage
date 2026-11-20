@@ -47,7 +47,7 @@ class DocJoinStateTest {
     void incompleteHistoryIsExplicitAndDoesNotExposePartialReplay() {
         DocumentPersistence persistence = mock(DocumentPersistence.class);
         when(persistence.snapshot(1)).thenReturn(new CollabDocumentSnapshot(3, new Delta().insert("ABC\n")));
-        when(persistence.operationsBetween(1, 0, 3)).thenReturn(List.of(
+        when(persistence.operationsPage(1, 0, 3, 256)).thenReturn(List.of(
                 new VersionedOperation(1, new Delta().insert("A")),
                 new VersionedOperation(3, new Delta().insert("C"))));
         var state = join(new DocRevService(new InMemoryDocumentStateStore(), persistence), 0, null);
@@ -64,7 +64,21 @@ class DocJoinStateTest {
         var state = join(new DocRevService(new InMemoryDocumentStateStore(), persistence), 0, null);
 
         assertFalse(state.historyComplete());
-        verify(persistence, never()).operationsBetween(anyLong(), anyLong(), anyLong());
+        assertTrue(state.historyPaged());
+        verify(persistence, never()).operationsPage(anyLong(), anyLong(), anyLong(), anyInt());
+    }
+
+    @Test
+    void joinUsesPagedCatchupWhenFirstPageContainsOnlyAPrefix() {
+        DocumentPersistence persistence = mock(DocumentPersistence.class);
+        when(persistence.snapshot(1)).thenReturn(new CollabDocumentSnapshot(3, new Delta().insert("ABC\n")));
+        when(persistence.operationsPage(1, 0, 3, 256)).thenReturn(List.of(
+                new VersionedOperation(1, new Delta().insert("A"))));
+        var state = join(new DocRevService(new InMemoryDocumentStateStore(), persistence), 0, null);
+
+        assertFalse(state.historyComplete());
+        assertTrue(state.historyPaged());
+        assertTrue(state.history().isEmpty());
     }
 
     @Test

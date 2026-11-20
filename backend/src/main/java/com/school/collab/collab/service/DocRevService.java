@@ -34,6 +34,10 @@ public class DocRevService {
 
     private static final Logger log = LoggerFactory.getLogger(DocRevService.class);
     private static final int HISTORY_LIMIT = 2_000;
+    private static final int REBASE_MAX_OPERATIONS = 10_000;
+    private static final long REBASE_MAX_BYTES = 16 * 1024 * 1024;
+    private static final int REBASE_PAGE_SIZE = 32;
+    private static final int HISTORY_PAGE_SIZE = 256;
 
     private final DocumentStateStore store;
     private final DocumentPersistence persistence;
@@ -105,11 +109,11 @@ public class DocRevService {
             boolean paged = persistence != null && lastRevision >= minimum && lastRevision <= snapshot.revision()
                     && snapshot.revision() - lastRevision > HISTORY_LIMIT;
             List<VersionedOperation> history = List.of();
-            if (complete) {
+            if (complete && lastRevision < snapshot.revision()) {
                 history = persistence == null
                         ? store.operationsAfter(docId, lastRevision).stream()
                             .filter(entry -> entry.revision() <= snapshot.revision()).toList()
-                        : persistence.operationsBetween(docId, lastRevision, snapshot.revision());
+                        : persistence.operationsPage(docId, lastRevision, snapshot.revision(), HISTORY_PAGE_SIZE);
                 long expected = lastRevision;
                 for (VersionedOperation entry : history) {
                     if (entry.revision() != ++expected) {
@@ -117,6 +121,8 @@ public class DocRevService {
                         break;
                     }
                 }
+                paged = persistence != null && complete && expected > lastRevision
+                        && expected < snapshot.revision();
                 complete = complete && expected == snapshot.revision();
             }
             if (!complete) {
@@ -136,8 +142,8 @@ public class DocRevService {
             long minimum = persistence == null ? store.minimumAvailableBaseRevision(docId) : persistence.minimumRevision(docId);
             if (after < minimum) throw new CollabException(40903, "历史已超出保留范围，本地内容仍应保留");
             List<VersionedOperation> history = persistence == null
-                    ? store.operationsAfter(docId, after).stream().filter(op -> op.revision() <= through).limit(256).toList()
-                    : persistence.operationsPage(docId, after, through, 256);
+                    ? store.operationsAfter(docId, after).stream().filter(op -> op.revision() <= through).limit(HISTORY_PAGE_SIZE).toList()
+                    : persistence.operationsPage(docId, after, through, HISTORY_PAGE_SIZE);
             long expected = after;
             for (var op : history) if (op.revision() != ++expected) throw new CollabException(40903, "追赶历史有缺口");
             if (after < through && history.isEmpty()) throw new CollabException(40903, "追赶历史缺失");
@@ -258,25 +264,10 @@ public class DocRevService {
             if (persistence != null && baseRevision < persistence.minimumRevision(docId)) {
                 throw new CollabException(40903, "操作基线超出保留范围，拒绝重放过期操作");
             }
-            Delta transformed = operationFactory.apply(current).copy();
-            var history = persistence == null
-                    ? store.operationsAfter(docId, baseRevision)
-                    : persistence.operationsAfter(docId, baseRevision);
-            if (baseRevision < current.revision()
-                    && (history.isEmpty() || history.getFirst().revision() != baseRevision + 1)) {
-                throw new CollabException(40903, "版本历史不完整，请重新同步文档");
+            if (current.revision() - baseRevision > REBASE_MAX_OPERATIONS) {
+                throw rebaseLimit();
             }
-            long expectedRevision = baseRevision + 1;
-            for (VersionedOperation entry : history) {
-                if (entry.revision() != expectedRevision++) {
-                    throw new CollabException(40903, "版本历史不完整，请重新同步文档");
-                }
-                // 已提交历史优先；新到的操作转换到历史已执行后的坐标系。
-                transformed = DeltaTransform.transform(entry.operation(), transformed, true);
-            }
-            if (expectedRevision - 1 != current.revision()) {
-                throw new CollabException(40903, "版本历史不完整，请重新同步文档");
-            }
+            Delta transformed = rebase(docId, baseRevision, current.revision(), operationFactory.apply(current).copy());
 
             long revision = current.revision() + 1;
             Delta nextContent = DeltaApply.apply(current.content(), transformed);
@@ -323,6 +314,37 @@ public class DocRevService {
                 }
             }
             return result;
+    }
+
+    private Delta rebase(long docId, long after, long through, Delta transformed) {
+        long totalBytes = 0;
+        while (after < through) {
+            List<VersionedOperation> page;
+            if (persistence == null) {
+                page = store.operationsAfter(docId, after);
+            } else {
+                var batch = persistence.operationsBatch(docId, after, through, REBASE_PAGE_SIZE);
+                totalBytes += batch.bytes();
+                if (totalBytes > REBASE_MAX_BYTES) throw rebaseLimit();
+                page = batch.operations();
+            }
+            if (page.isEmpty()) throw historyGap();
+            for (VersionedOperation entry : page) {
+                if (entry.revision() != after + 1 || entry.revision() > through) throw historyGap();
+                // 已提交历史优先；新到的操作转换到历史已执行后的坐标系。
+                transformed = DeltaTransform.transform(entry.operation(), transformed, true);
+                after = entry.revision();
+            }
+        }
+        return transformed;
+    }
+
+    private static CollabException historyGap() {
+        return new CollabException(40903, "版本历史不完整，请重新同步文档");
+    }
+
+    private static CollabException rebaseLimit() {
+        return new CollabException(40903, "待变换的历史超出安全范围，请重新同步文档，未确认内容仍可保留");
     }
 
     /** 升级前仅写 Redis 的文档逐条补进 MySQL；缺失历史时绝不静默覆盖。 */

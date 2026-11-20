@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto'
 import Delta from '../frontend/node_modules/quill-delta/dist/Delta.js'
 import CollabClient from '../frontend/src/ws/CollabClient.js'
 const origin = process.env.COPAGE_HISTORY_ORIGIN || 'http://localhost:8081'
+const username = process.env.COPAGE_HISTORY_USER
+const password = process.env.COPAGE_HISTORY_PASSWORD
+assert.equal(Boolean(username), Boolean(password), '需要同时提供验收账号和密码')
 let token
 const sockets=[]; const docs=[]
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms))
@@ -71,8 +74,8 @@ async function scenario(committed) {
   console.log(JSON.stringify({docId,committedPending:committed,pages,converged:true,revision:2008,baselineReadable:true,namedVersionSurvives:true,expiredRetryRejected:true}))
 }
 try {
-  token=(await api('/auth/login','POST',{username:'testA',password:'123456'})).token
-  await api('/doc/26/history/compact','POST',{expectedRevision:7,beforeRevision:1},403)
+  token=(await api('/auth/login','POST',{username:username || 'testA',password:password || '123456'})).token
+  if (!username) await api('/doc/26/history/compact','POST',{expectedRevision:7,beforeRevision:1},403)
   await scenario(false);await scenario(true)
 } finally {
   for(const ws of sockets)ws.close()
