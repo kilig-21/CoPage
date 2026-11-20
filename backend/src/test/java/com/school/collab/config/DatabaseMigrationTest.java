@@ -31,7 +31,7 @@ class DatabaseMigrationTest {
                 .replace("\r\n", "\n");
         execute(bootstrap, legacySchema.replaceFirst("(?m)^CREATE DATABASE[^\n]+\nUSE[^\n]+\n", ""));
 
-        context(clean).run(app -> {
+        context(clean).withPropertyValues("spring.flyway.target=4").run(app -> {
             assertThat(app).hasNotFailed();
             assertThat(app.getBean(Flyway.class).getConfiguration().isCleanDisabled()).isTrue();
         });
@@ -45,8 +45,11 @@ class DatabaseMigrationTest {
         tables.forEach(table -> assertThat(createTable(cleanDb, table)).isEqualTo(createTable(bootstrapDb, table)));
         assertThat(versions(cleanDb)).containsExactly("1", "2", "3", "4");
 
+        context(clean).run(app -> assertThat(app).hasNotFailed());
         context(bootstrap).run(app -> assertThat(app).hasNotFailed());
-        assertThat(versions(bootstrapDb)).containsExactly("0", "1", "2", "3", "4");
+        assertThat(versions(cleanDb)).containsExactly("1", "2", "3", "4", "5", "6");
+        assertThat(versions(bootstrapDb)).containsExactly("0", "1", "2", "3", "4", "5", "6");
+        assertThat(createTable(cleanDb, "document")).isEqualTo(createTable(bootstrapDb, "document"));
     }
 
     @Test
@@ -65,13 +68,16 @@ class DatabaseMigrationTest {
         jdbc.update("INSERT INTO doc_operation (doc_id, revision, op, user_id) VALUES (7002, 7, '{}', 7001)");
         jdbc.update("INSERT INTO doc_operation_receipt (doc_id, user_id, client_id, op_id, revision) VALUES (7002, 7001, 'cli', 'op', 7)");
         jdbc.update("INSERT INTO group_invitation (group_id, user_id, inviter_id, status) VALUES (7003, 7001, 7001, 'pending')");
-        var documents = jdbc.queryForList("SELECT * FROM document");
+        var documents = jdbc.queryForList("SELECT id,title,content,revision,owner_id,is_deleted,create_time,update_time FROM document");
         var operations = jdbc.queryForList("SELECT * FROM doc_operation");
         var accounts = jdbc.queryForList("SELECT id, username, password, nickname, create_time FROM `user`");
 
         context(legacy).run(app -> assertThat(app).hasNotFailed());
-        assertThat(versions(jdbc)).containsExactly("0", "1", "2", "3", "4");
-        assertThat(jdbc.queryForList("SELECT * FROM document")).isEqualTo(documents);
+        assertThat(versions(jdbc)).containsExactly("0", "1", "2", "3", "4", "5", "6");
+        assertThat(jdbc.queryForList("SELECT id,title,content,revision,owner_id,is_deleted,create_time,update_time FROM document"))
+                .isEqualTo(documents);
+        assertThat(jdbc.queryForObject("SELECT search_version FROM document WHERE id=7002", Long.class)).isEqualTo(1L);
+        assertThat(jdbc.queryForObject("SELECT search_pending FROM document WHERE id=7002", Boolean.class)).isTrue();
         assertThat(jdbc.queryForList("SELECT * FROM doc_operation")).isEqualTo(operations);
         assertThat(jdbc.queryForList("SELECT id, username, password, nickname, create_time FROM `user`")).isEqualTo(accounts);
         assertThat(jdbc.queryForObject("SELECT credential_version FROM `user` WHERE id=7001", Long.class)).isZero();
@@ -80,7 +86,7 @@ class DatabaseMigrationTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM doc_creation_receipt", Long.class)).isZero();
 
         context(legacy).run(app -> assertThat(app).hasNotFailed());
-        assertThat(versions(jdbc)).containsExactly("0", "1", "2", "3", "4");
+        assertThat(versions(jdbc)).containsExactly("0", "1", "2", "3", "4", "5", "6");
     }
 
     @Test

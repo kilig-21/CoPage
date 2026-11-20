@@ -38,6 +38,10 @@ spring:
         acknowledge-mode: manual
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
+  task:
+    scheduling:
+      pool:
+        size: 4
   jackson:
     default-property-inclusion: always
     time-zone: Asia/Shanghai
@@ -53,6 +57,8 @@ mybatis-plus:
       logic-not-delete-value: 0
 
 collab:
+  search:
+    repair-interval-ms: ${SEARCH_REPAIR_INTERVAL_MS:5000}
   history:
     retention-enabled: ${HISTORY_RETENTION_ENABLED:true}
     retention-days: ${HISTORY_RETENTION_DAYS:30}

@@ -70,7 +70,8 @@ const editPermissionSmoke = process.argv.includes('--edit-permission-smoke')
 const historyRestoreSmoke = process.argv.includes('--history-restore-smoke')
 const historyRecoverySmoke = process.argv.includes('--history-recovery-smoke')
 const retentionMaintenanceSmoke = process.argv.includes('--retention-maintenance-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke
+const searchRepairSmoke = process.argv.includes('--search-repair-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke
 const runtimeImages = process.argv.filter(value => value.startsWith('--runtime-image='))
 assert.ok(runtimeImages.length <= 1, '预构建运行时镜像只能指定一次')
 const runtimeImage = runtimeImages[0]?.slice('--runtime-image='.length)
@@ -145,7 +146,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       }
       assert.deepEqual(
         sql('SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank;').stdout.trim().split(/\r?\n/),
-        ['0', '1', '2', '3', '4'],
+        ['0', '1', '2', '3', '4', '5', '6'],
       )
       const username = 'qa' + randomBytes(6).toString('hex')
       const password = secret()
@@ -188,6 +189,10 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       if (retentionMaintenanceSmoke) {
         const { runRetentionMaintenanceCheck } = await import('./retention-maintenance-check.mjs')
         await runRetentionMaintenanceCheck({ sql, origin: `http://127.0.0.1:${ports[0]}`, username, password })
+      }
+      if (searchRepairSmoke) {
+        const { runSearchRepairCheck } = await import('./search-repair-check.mjs')
+        await runSearchRepairCheck({ source: qaDocker, sql, username })
       }
       if (expirySmoke) {
         const expiry = spawnSync(process.execPath, ['scripts/session-expiry-smoke.mjs'], {

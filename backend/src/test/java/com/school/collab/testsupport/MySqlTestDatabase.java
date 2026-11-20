@@ -1,5 +1,6 @@
 package com.school.collab.testsupport;
 
+import org.flywaydb.core.Flyway;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
@@ -18,5 +19,11 @@ public final class MySqlTestDatabase {
         var admin = new JdbcTemplate(new DriverManagerDataSource("jdbc:mysql://" + server + "/" + properties, "root", password));
         admin.execute("CREATE DATABASE " + name + " CHARACTER SET utf8mb4");
         return new DriverManagerDataSource("jdbc:mysql://" + server + "/" + name + properties, "root", password);
+    }
+
+    public static DataSource createMigrated() {
+        var dataSource = create();
+        Flyway.configure().dataSource(dataSource).cleanDisabled(true).load().migrate();
+        return dataSource;
     }
 }

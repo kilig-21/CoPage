@@ -8,15 +8,13 @@ import com.school.collab.collab.store.VersionedOperation;
 import com.school.collab.ot.Delta;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.stream.LongStream;
 
-import static com.school.collab.testsupport.MySqlTestDatabase.create;
+import static com.school.collab.testsupport.MySqlTestDatabase.createMigrated;
 import static org.junit.jupiter.api.Assertions.*;
 
 @EnabledIfEnvironmentVariable(named = "COPAGE_MIGRATION_TEST_MYSQL", matches = ".+")
@@ -68,10 +66,6 @@ class DocumentPersistenceHistoryTest {
     }
 
     private JdbcTemplate freshDatabase() {
-        var dataSource = create();
-        var schema = new ResourceDatabasePopulator(new ClassPathResource("db/migration/V1__baseline.sql"));
-        schema.setSqlScriptEncoding("UTF-8");
-        schema.execute(dataSource);
-        return new JdbcTemplate(dataSource);
+        return new JdbcTemplate(createMigrated());
     }
 }

@@ -157,21 +157,46 @@ public class DocumentRepository {
                 """, (rs, index) -> rs.getLong(1), userId, userId);
     }
 
-    /** 包括软删除文档，以便周期巡检清除索引里的旧条目。 */
-    public List<Long> allIds() {
-        return jdbc.query("SELECT id FROM document ORDER BY id", (rs, index) -> rs.getLong(1));
+    public Optional<SearchRow> findForIndex(long docId) {
+        return jdbc.query("""
+                SELECT id, title, content, revision, is_deleted, search_version FROM document WHERE id = ?
+                """, (rs, index) -> new SearchRow(rs.getLong("id"), rs.getString("title"),
+                        rs.getString("content"), rs.getLong("revision"), rs.getBoolean("is_deleted"),
+                        rs.getLong("search_version")), docId).stream().findFirst();
     }
 
+    public List<Long> indexIdsAfter(long after, int limit) {
+        return jdbc.queryForList("SELECT id FROM document WHERE id > ? ORDER BY id LIMIT ?", Long.class, after, limit);
+    }
+
+    public List<Long> pendingIndexIdsAfter(long after, int limit) {
+        return jdbc.queryForList("SELECT id FROM document WHERE search_pending = TRUE AND id > ? ORDER BY id LIMIT ?",
+                Long.class, after, limit);
+    }
+
+    public void indexed(long docId, long searchVersion) {
+        jdbc.update("""
+                UPDATE document SET search_pending = FALSE, update_time = update_time
+                WHERE id = ? AND search_version = ? AND search_pending = TRUE
+                """, docId, searchVersion);
+    }
+
+    public record SearchRow(long id, String title, String content, long revision, boolean deleted, long searchVersion) { }
+
     public boolean rename(long docId, String title) {
-        return jdbc.update(
-                "UPDATE document SET title = ?, update_time = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0",
-                title, docId) == 1;
+        return jdbc.update("""
+                UPDATE document SET title = ?, update_time = CURRENT_TIMESTAMP,
+                       search_version = search_version + 1, search_pending = TRUE
+                WHERE id = ? AND is_deleted = 0
+                """, title, docId) == 1;
     }
 
     public boolean softDelete(long docId) {
-        return jdbc.update(
-                "UPDATE document SET is_deleted = 1, update_time = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = 0",
-                docId) == 1;
+        return jdbc.update("""
+                UPDATE document SET is_deleted = 1, update_time = CURRENT_TIMESTAMP,
+                       search_version = search_version + 1, search_pending = TRUE
+                WHERE id = ? AND is_deleted = 0
+                """, docId) == 1;
     }
 
     public long countDeletedOwned(long userId) {
@@ -215,8 +240,11 @@ public class DocumentRepository {
     }
 
     public boolean restoreDeleted(long docId, long ownerId) {
-        return jdbc.update("UPDATE document SET is_deleted=0,update_time=CURRENT_TIMESTAMP WHERE id=? AND owner_id=? AND is_deleted=1",
-            docId,ownerId)==1;
+        return jdbc.update("""
+                UPDATE document SET is_deleted = 0, update_time = CURRENT_TIMESTAMP,
+                       search_version = search_version + 1, search_pending = TRUE
+                WHERE id = ? AND owner_id = ? AND is_deleted = 1
+                """, docId, ownerId) == 1;
     }
 
     public record TrashRow(long id,String title,LocalDateTime deletedAt) { }

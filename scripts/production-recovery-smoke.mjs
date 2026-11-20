@@ -157,9 +157,9 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, p
       'redis:7.4.1-alpine', 'sh', '-ec', 'test -z "$(ls -A /data)"; tar -xzf - -C /data'], { input: readFileSync(imageFile) })
     // 先让基础服务就绪并确认 ES 没有业务索引，再启动应用，排除复用旧索引。
     destination(['up', '-d', '--no-build', '--wait', '--wait-timeout', '150',
-      'mysql', 'redis', 'rabbitmq', 'elasticsearch', 'minio', 'minio-init'])
+      'mysql', 'redis', 'rabbitmq', 'elasticsearch', 'minio'])
     const emptyIndex = destination(['exec', '-T', 'elasticsearch', 'curl', '-sS',
-      '-o', '/dev/null', '-w', '%{http_code}', 'http://localhost:9200/collab_documents']).stdout.trim()
+      '-o', '/dev/null', '-w', '%{http_code}', 'http://localhost:9200/collab_documents_v2']).stdout.trim()
     assert.equal(emptyIndex, '404', '恢复目标的 ES 必须从不存在的业务索引开始')
     destination(['up', '-d', '--no-build', '--wait', '--wait-timeout', '150', 'backend'])
     const getPort = service => {

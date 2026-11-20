@@ -157,7 +157,7 @@ public class DocumentPersistence {
         requireCurrentEditor(docId, userId);
         int updated = jdbc.update("""
                 UPDATE document SET content = ?, revision = revision + 1,
-                       update_time = CURRENT_TIMESTAMP
+                       update_time = CURRENT_TIMESTAMP, search_version = search_version + 1, search_pending = TRUE
                 WHERE id = ? AND revision = ? AND is_deleted = 0
                 """, contentJson, docId, expectedRevision);
         if (updated != 1) {

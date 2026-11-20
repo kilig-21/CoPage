@@ -1,5 +1,6 @@
 package com.school.collab.search;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.school.collab.common.BizException;
 import com.school.collab.common.ErrorCode;
 import com.school.collab.common.UserContext;
@@ -17,10 +18,12 @@ public class SearchService {
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final SearchIndex index;
     private final DocumentRepository documents;
+    private final ObjectMapper mapper;
 
-    public SearchService(SearchIndex index, DocumentRepository documents) {
+    public SearchService(SearchIndex index, DocumentRepository documents, ObjectMapper mapper) {
         this.index = index;
         this.documents = documents;
+        this.mapper = mapper;
     }
 
     public SearchView search(String query, int page, int size) {
@@ -46,8 +49,8 @@ public class SearchService {
         return new SearchView(matches.total(), hits);
     }
 
-    private static HitView view(DocumentRow row, Pattern literal, int permission, boolean isOwner) {
-        String body = SearchIndex.plainText(row.content());
+    private HitView view(DocumentRow row, Pattern literal, int permission, boolean isOwner) {
+        String body = SearchIndex.plainText(mapper, row.content());
         String snippet = literal.matcher(body).find() ? highlight(body, literal) : opening(body);
         if (snippet == null) snippet = literal.matcher(row.title()).find()
                 ? "标题匹配，暂无文字摘要" : "暂无文字摘要";

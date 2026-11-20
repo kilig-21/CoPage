@@ -22,7 +22,7 @@ import static org.mockito.Mockito.when;
 class SearchServiceTest {
     private final SearchIndex index = mock(SearchIndex.class);
     private final DocumentRepository documents = mock(DocumentRepository.class);
-    private final SearchService service = new SearchService(index, documents);
+    private final SearchService service = new SearchService(index, documents, new ObjectMapper());
 
     private void candidate(String query, String title, String delta) {
         UserContext.set(1L, "owner");
@@ -195,7 +195,7 @@ class SearchServiceTest {
         String delta = "{\"ops\":[{\"insert\":\"正文\"},"
                 + "{\"insert\":{\"image\":\"https://secret.example/a.png\"}},"
                 + "{\"insert\":\"\\n\"}]}";
-        assertEquals("正文\n", SearchIndex.plainText(delta));
+        assertEquals("正文\n", SearchIndex.plainText(new ObjectMapper(), delta));
     }
 
     @Test

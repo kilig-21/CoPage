@@ -9,13 +9,11 @@ import com.school.collab.ot.Delta;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 
 import java.util.List;
 
-import static com.school.collab.testsupport.MySqlTestDatabase.create;
+import static com.school.collab.testsupport.MySqlTestDatabase.createMigrated;
 import static org.junit.jupiter.api.Assertions.*;
 
 @EnabledIfEnvironmentVariable(named = "COPAGE_MIGRATION_TEST_MYSQL", matches = ".+")
@@ -28,11 +26,7 @@ class HistoryRetentionDatabaseTest {
 
     @BeforeEach
     void prepare() {
-        var dataSource = create();
-        var bootstrap = new ResourceDatabasePopulator(new ClassPathResource("db/migration/V1__baseline.sql"));
-        bootstrap.setSqlScriptEncoding("UTF-8");
-        bootstrap.execute(dataSource);
-        jdbc = new JdbcTemplate(dataSource);
+        jdbc = new JdbcTemplate(createMigrated());
         persistence = new DocumentPersistence(jdbc, mapper);
         history = new HistoryRepository(jdbc, mapper, persistence);
         revisions = new DocRevService(new InMemoryDocumentStateStore(), persistence);
