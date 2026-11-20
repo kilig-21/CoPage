@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Radio, Space, Spin, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Input, Layout, List, Modal, Radio, Space, Tag, Typography } from 'antd'
+import ListEmptyState from '../components/ListEmptyState'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import { usePageSession } from '../auth/PageSessionContext'
@@ -105,12 +106,12 @@ export default function Templates() {
         onChange={e => setInput(e.target.value)} onSearch={value => filter(category, value.trim())} enterButton="筛选" />
       {templates && <Space wrap className="template-filters"><Typography.Text type="secondary">找到 {filtered.length} 个模板</Typography.Text>
         {(category !== 'all' || keyword) && <Button disabled={creating} onClick={() => filter('all', '')}>清除筛选</Button>}</Space>}
-      <Spin spinning={loading}><List rowKey="id" grid={{ gutter: 16, xs: 1, sm: 1, md: 2, lg: 3, xl: 3, xxl: 3 }}
-        dataSource={filtered} locale={{ emptyText: loading ? '正在加载…' : !templates ? '模板列表暂不可用' : <Empty description="没有匹配的模板，试试其他分类或关键词" /> }}
+      <List rowKey="id" loading={{ spinning: loading, tip: '正在加载…' }} grid={{ gutter: 16, xs: 1, sm: 1, md: 2, lg: 3, xl: 3, xxl: 3 }}
+        dataSource={filtered} locale={{ emptyText: !templates ? '模板列表暂不可用' : <ListEmptyState description="没有匹配的模板，试试其他分类或关键词" /> }}
         renderItem={template => <List.Item><Card title={template.title}>
           <Tag>{categories[template.category] || '通用'}</Tag><Typography.Paragraph>{template.description}</Typography.Paragraph>
           <Button disabled={loading || creating || uncertain} onClick={() => { setSelected(template); setTitle(template.title); setCreateError('') }}>预览并使用{template.title}</Button>
-        </Card></List.Item>} /></Spin>
+        </Card></List.Item>} />
       <Link to="/docs">也可以返回我的文档创建空白文档</Link>
     </main>
     {showGuide && <UserGuide onClose={() => setShowGuide(false)} />}

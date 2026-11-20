@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
+import ListEmptyState from '../components/ListEmptyState'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import { usePageRequest } from '../auth/PageSessionContext'
@@ -297,8 +298,8 @@ export default function Projects() {
       <Input.Search aria-label="筛选项目名称" maxLength={200} value={input} disabled={busy} placeholder="按项目名称筛选"
         onChange={e => setInput(e.target.value)} onSearch={value => navigate({ keyword: value.trim() || null, project: null, page: '1' })} enterButton="筛选" />
       <Card title="项目列表" className="project-section">
-        <List rowKey="id" loading={loading} dataSource={listed?.list || []}
-          locale={{ emptyText: loading ? '正在加载…' : !listed ? '列表暂不可用' : <Empty description={emptyDescription} /> }}
+        <List rowKey="id" loading={{ spinning: loading, tip: '正在加载…' }} dataSource={listed?.list || []}
+          locale={{ emptyText: !listed ? '列表暂不可用' : <ListEmptyState description={emptyDescription} /> }}
           renderItem={project => <List.Item actions={archived ? project.canManage ? [
             <Popconfirm key="restore" overlayClassName="document-action-confirm" title={'恢复“' + project.name + '”？'}
               description="恢复项目与原关联，文档继续按当前权限访问。" disabled={!ready} onConfirm={() => mutate({ kind: 'restore', projectId: project.id, name: project.name }, config =>
@@ -332,7 +333,7 @@ export default function Projects() {
           </Space>
           <Input.Search aria-label="筛选项目内文档" value={docInput} maxLength={200} disabled={busy} placeholder="按文档标题筛选"
             onChange={e => setDocInput(e.target.value)} onSearch={value => navigate({ docKeyword: value.trim() || null, docPage: null })} enterButton="筛选" />
-          <List rowKey="id" dataSource={current.list} locale={{ emptyText: <Empty description={docKeyword ? '没有符合条件且可访问的文档' : '还没有你可访问的文档，可以新建一篇或加入已有文档'} /> }}
+          <List rowKey="id" dataSource={current.list} locale={{ emptyText: <ListEmptyState description={docKeyword ? '没有符合条件且可访问的文档' : '还没有你可访问的文档，可以新建一篇或加入已有文档'} /> }}
             renderItem={doc => <List.Item actions={[
               <Link key="open" to={documentHref(doc.id, sourcePath)}>打开</Link>,
               doc.canRemove && <Popconfirm key="remove" overlayClassName="document-action-confirm" title={'将“' + doc.title + '”移出项目？'}

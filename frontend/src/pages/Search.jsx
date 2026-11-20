@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeftOutlined, FileTextOutlined } from '@ant-design/icons'
-import { Alert, Button, Card, Empty, Input, Layout, List, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Input, Layout, List, Tag, Typography } from 'antd'
+import ListEmptyState from '../components/ListEmptyState'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import { usePageRequest } from '../auth/PageSessionContext'
@@ -97,8 +98,8 @@ export default function Search() {
       <Card role="region" aria-label="搜索结果" aria-busy={loading} className="search-results-card">
         {ready && <Typography.Paragraph type="secondary">找到 {total} 篇可访问的文档</Typography.Paragraph>}
         {ready && total > 10000 && <Typography.Paragraph type="secondary">最多显示前 10000 条结果，试试更具体的关键词。</Typography.Paragraph>}
-        <List rowKey="id" loading={loading} dataSource={results}
-          locale={{ emptyText: loading ? '正在搜索…' : <Empty description={error ? '暂时无法显示搜索结果' : ready ? '没有找到相关文档' : '输入关键词，搜索你有权限访问的标题和正文'} /> }}
+        <List rowKey="id" loading={{ spinning: loading, tip: '正在搜索…' }} dataSource={results}
+          locale={{ emptyText: <ListEmptyState description={error ? '暂时无法显示搜索结果' : ready ? '没有找到相关文档' : '输入关键词，搜索你有权限访问的标题和正文'} /> }}
           pagination={ready && total > PAGE_SIZE ? { current: page, pageSize: PAGE_SIZE, total: Math.min(total, 10000), showSizeChanger: false, responsive: true, showLessItems: true, onChange: (next) => changePage(next) } : false}
           renderItem={(item) => <List.Item><List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={<Link to={documentHref(item.id, sourcePath)}>{item.title}</Link>} description={<div className="search-result-description">
             <div className="search-result-metadata">

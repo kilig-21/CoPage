@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { CloseCircleOutlined, FileTextOutlined, PlusOutlined, MoreOutlined } from '@ant-design/icons'
-import { Alert, Button, Card, Dropdown, Empty, Input, Layout, List, Pagination, Popconfirm, Radio, Space, Tag, Typography, message } from 'antd'
+import { Alert, Button, Card, Dropdown, Input, Layout, List, Pagination, Popconfirm, Radio, Space, Tag, Typography, message } from 'antd'
+import ListEmptyState from '../components/ListEmptyState'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import { usePageSession } from '../auth/PageSessionContext'
@@ -136,9 +137,9 @@ export default function DocList() {
             action={<Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>重试</Button>} />}
           <List
             rowKey="id"
-            loading={loading}
+            loading={{ spinning: loading, tip: '正在加载…' }}
             dataSource={docs}
-            locale={{ emptyText: loading ? '正在加载…' : loadError ? '列表暂不可用' : <Empty description={keyword ? '没有匹配的标题，试试其他关键词' : scope === 'shared' ? '还没有共享给你的文档，请文档所有者添加你为协作者' : '还没有文档，先新建一篇吧'} /> }}
+            locale={{ emptyText: loadError ? '列表暂不可用' : <ListEmptyState description={keyword ? '没有匹配的标题，试试其他关键词' : scope === 'shared' ? '还没有共享给你的文档，请文档所有者添加你为协作者' : '还没有文档，先新建一篇吧'} /> }}
             renderItem={(doc) => (
               <List.Item actions={[
                 <Link key="open" className="document-open-link" to={documentHref(doc.id, sourcePath)}>打开</Link>,

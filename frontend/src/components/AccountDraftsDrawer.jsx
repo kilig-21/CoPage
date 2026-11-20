@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Alert, Button, Drawer, Empty, List, Space, Spin, Tag, Typography } from 'antd'
+import { Alert, Button, Drawer, List, Space, Spin, Tag, Typography } from 'antd'
+import ListEmptyState from './ListEmptyState'
 import { useNavigate } from 'react-router-dom'
 import Delta from 'quill-delta'
 import { enumerateAccountDrafts, readAccountDraft } from '../editor/accountDrafts'
@@ -110,7 +111,7 @@ export default function AccountDraftsDrawer({ onClose, sourcePath }) {
     {(error || !current) && <Alert showIcon type="warning" message={error || '账号信息已变化，请关闭后重新登录原账号；本地记录保留。'} />}
     {notice && current && <Alert showIcon type="info" role="status" message={notice} />}
     {visible === null && !error && current && <Spin aria-label="正在读取本地草稿" />}
-    {visible && <List dataSource={visible} rowKey="key" locale={{ emptyText: <Empty description="当前账号未找到本地草稿记录" /> }}
+    {visible && <List dataSource={visible} rowKey="key" locale={{ emptyText: <ListEmptyState description="当前账号未找到本地草稿记录" /> }}
       renderItem={(record, index) => <List.Item className="cp-local-draft-record" aria-label={`${record.docId ? '文档 ' + record.docId : '未知文档'}的本地记录 ${index + 1}`}>
         <div className="cp-local-draft-heading"><Typography.Title level={3}>{record.docId ? `文档 ${record.docId}` : '无法识别文档编号的记录'}</Typography.Title>
           <Tag>记录 {index + 1}</Tag></div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Empty, Form, Input, List, Modal, Popconfirm, Select, Space, Typography } from 'antd'
+import { Alert, Button, Form, Input, List, Modal, Popconfirm, Select, Space, Typography } from 'antd'
+import ListEmptyState from './ListEmptyState'
 import { usePageRequest } from '../auth/PageSessionContext'
 import { confirmCollaboratorUpdate, parseCollaboratorsReply } from '../api/collaborators'
 
@@ -76,7 +77,7 @@ export default function CollaboratorModal({ doc, onClose, returnToShare = false 
         <Form.Item label=" "><Button type="primary" htmlType="submit" loading={busy} disabled={!listReady}>添加协作者</Button></Form.Item>
       </Space>
     </Form>
-    <List rowKey="userId" loading={loading} dataSource={members} locale={{ emptyText: listReady ? <Empty description="尚未添加协作者" /> : loading ? '正在加载…' : '成员列表暂不可用' }} renderItem={(member) => <List.Item actions={[
+    <List rowKey="userId" loading={loading} dataSource={members} locale={{ emptyText: listReady ? <ListEmptyState description="尚未添加协作者" /> : loading ? '正在加载…' : '成员列表暂不可用' }} renderItem={(member) => <List.Item actions={[
       <Select key="permission" aria-label={member.username + ' 的权限'} value={member.permission} options={options} disabled={busy || !listReady} style={{ width: 110 }} onChange={(permission) => mutate(signal => request.put(base + '/' + member.userId, { permission }, { signal }))} />,
       <Popconfirm key="remove" title={'移除 ' + member.username + ' 的访问权限？'} disabled={busy || !listReady} onConfirm={() => mutate(signal => request.delete(base + '/' + member.userId, { signal }))}><Button type="link" danger disabled={busy || !listReady}>移除</Button></Popconfirm>,
     ]}><List.Item.Meta title={member.nickname || member.username} description={member.username} /></List.Item>} />

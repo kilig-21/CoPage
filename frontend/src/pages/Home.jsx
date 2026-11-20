@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Empty, Layout, List, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Layout, List, Space, Tag, Typography } from 'antd'
+import ListEmptyState from '../components/ListEmptyState'
 import { ArrowRightOutlined, FileTextOutlined } from '@ant-design/icons'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
@@ -82,7 +83,7 @@ export default function Home() {
           <Link to="/docs?scope=owned"><span>我创建的文档</span><strong>{data.ownedCount}</strong></Link>
           <Link to="/docs?scope=shared"><span>与我协作的文档</span><strong>{data.sharedCount}</strong></Link>
         </div><List rowKey="id" dataSource={data.recent}
-          locale={{ emptyText: <Empty description="还没有文档，先从模板创建一篇或请同伴添加你为协作者" /> }}
+          locale={{ emptyText: <ListEmptyState description="还没有文档，先从模板创建一篇或请同伴添加你为协作者" /> }}
           renderItem={doc => <List.Item>
             <List.Item.Meta avatar={<FileTextOutlined className="cp-recent-document-icon" />}
               title={<Link to={documentHref(doc.id, sourcePath)}>{doc.title}</Link>}

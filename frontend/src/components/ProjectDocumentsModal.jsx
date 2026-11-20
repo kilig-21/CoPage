@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Alert, Button, Empty, Input, List, Modal, Pagination, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Input, List, Modal, Pagination, Space, Tag, Typography } from 'antd'
+import ListEmptyState from './ListEmptyState'
 import { usePageRequest } from '../auth/PageSessionContext'
 import { documentHref } from '../navigation/documents'
 
@@ -43,7 +44,7 @@ export default function ProjectDocumentsModal({ project, from, busy, uncertain, 
     {readError && <Alert className="project-read-alert" type="error" showIcon message={readError} action={!uncertain &&
       <Button disabled={busy || loading} onClick={() => setRefresh(n => n + 1)}>重试读取</Button>} />}
     <List rowKey="id" loading={loading} dataSource={current?.list || []} className="project-document-picker"
-      locale={{ emptyText: loading ? '正在加载…' : !current ? '文档列表暂不可用' : <Empty description="没有可加入的文档，试试其他标题或先创建一篇" /> }}
+      locale={{ emptyText: loading ? '正在加载…' : !current ? '文档列表暂不可用' : <ListEmptyState description="没有可加入的文档，试试其他标题或先创建一篇" /> }}
       renderItem={doc => <List.Item actions={[
         <a key="view" className="document-open-link" href={documentHref(doc.id, from)} target="_blank" rel="noopener noreferrer"
           aria-label={'查看文档 #' + doc.id + '（新标签页）'}>查看文档（新标签页）</a>,

@@ -1,0 +1,29 @@
+{
+  "focus": {
+    "element": "workspace-skip-link",
+    "outline": "solid",
+    "visible": true
+  },
+  "skipTarget": {
+    "id": "workspace-main"
+  },
+  "empty": {
+    "buttonHeight": 47.5,
+    "description": "输入关键词，搜索你有权限访问的标题和正文",
+    "iconHidden": "true"
+  },
+  "motion": {
+    "navTransition": "1e-05s",
+    "reduced": true
+  },
+  "loading": {
+    "busy": "true",
+    "live": "polite",
+    "showsEmpty": false,
+    "tip": "正在搜索…"
+  },
+  "search": {
+    "busy": "false",
+    "title": "产品协作组周会纪要"
+  }
+}

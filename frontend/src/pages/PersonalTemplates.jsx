@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
+import ListEmptyState from '../components/ListEmptyState'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import { usePageSession } from '../auth/PageSessionContext'
@@ -178,8 +179,8 @@ export default function PersonalTemplates() {
       <Input.Search aria-label="筛选个人模板" value={input} maxLength={200} disabled={busy} placeholder="搜索模板名称或说明"
         onChange={e => setInput(e.target.value)} onSearch={value => filter(category, value.trim())} enterButton="筛选" />
       {(category !== 'all' || keyword) && <Button className="template-filters" disabled={busy} onClick={() => filter('all', '')}>清除筛选</Button>}
-      <Card title="个人模板" className="template-filters"><List rowKey="id" loading={loading} dataSource={data?.list || []}
-        locale={{ emptyText: loading ? '正在加载…' : !data ? '列表暂不可用' : <Empty description={keyword || category !== 'all' ? '没有匹配的个人模板' : '还没有个人模板，先从一篇已保存的文档开始'} /> }}
+      <Card title="个人模板" className="template-filters"><List rowKey="id" loading={{ spinning: loading, tip: '正在加载…' }} dataSource={data?.list || []}
+        locale={{ emptyText: !data ? '列表暂不可用' : <ListEmptyState description={keyword || category !== 'all' ? '没有匹配的个人模板' : '还没有个人模板，先从一篇已保存的文档开始'} /> }}
         renderItem={template => <List.Item actions={[
           <Button key="open" disabled={!ready} onClick={() => open(template)}>预览并使用</Button>,
           <Popconfirm key="delete" overlayClassName="document-action-confirm" title={'删除模板“' + template.name + '”？'}

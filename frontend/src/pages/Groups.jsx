@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Empty, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Select, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Select, Space, Tag, Typography } from 'antd'
+import ListEmptyState from '../components/ListEmptyState'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import request from '../api/request'
 import { usePageSession } from '../auth/PageSessionContext'
@@ -333,8 +334,8 @@ export default function Groups() {
         {!compactInbox && <>
         {currentInboxError && <Alert type="error" showIcon message={currentInboxError}
           action={<Button disabled={inboxReading || busy} onClick={() => setInboxRefresh(n => n + 1)}>重试邀请</Button>} />}
-        <List rowKey="groupId" loading={inboxReading} dataSource={currentInbox?.list || []}
-          locale={{ emptyText: inboxReading ? '正在加载…' : !currentInbox ? '邀请暂不可用' : <Empty description="暂无待处理邀请" /> }}
+        <List rowKey="groupId" loading={{ spinning: inboxReading, tip: '正在加载…' }} dataSource={currentInbox?.list || []}
+          locale={{ emptyText: !currentInbox ? '邀请暂不可用' : <ListEmptyState description="暂无待处理邀请" /> }}
           renderItem={invitation => <List.Item actions={[
             <Button key="accept" type="primary" disabled={!inboxReady} onClick={() => mutate(config =>
               request.post('/groups/' + invitation.groupId + '/invitation', { accept: true, invitationVersion: invitation.invitationVersion }, config), '已加入小组',
@@ -363,8 +364,8 @@ export default function Groups() {
         extra={<Button disabled={loading || busy} onClick={() => setGroupRefresh(n => n + 1)}>刷新小组</Button>}>
         {groupError && <Alert type="error" showIcon message={groupError}
           action={<Button disabled={loading || busy} onClick={() => setGroupRefresh(n => n + 1)}>重试小组列表</Button>} />}
-        <List rowKey="id" loading={loading} dataSource={groups?.list || []}
-          locale={{ emptyText: loading ? '正在加载…' : !groups ? '小组暂不可用' : <Empty description={keyword ? '没有匹配的小组，请调整关键词或清除筛选' : archived ? '暂无归档小组' : '创建小组，或接受同伴的邀请'} /> }}
+        <List rowKey="id" loading={{ spinning: loading, tip: '正在加载…' }} dataSource={groups?.list || []}
+          locale={{ emptyText: !groups ? '小组暂不可用' : <ListEmptyState description={keyword ? '没有匹配的小组，请调整关键词或清除筛选' : archived ? '暂无归档小组' : '创建小组，或接受同伴的邀请'} /> }}
           renderItem={group => <List.Item actions={archived ? group.role === 'owner' ? [
             <Popconfirm overlayClassName="document-action-confirm" key="restore" title={'恢复“' + group.name + '”？'} description="原成员将重新获得小组访问权限；文档仍逐篇授权。"
               disabled={!groupsReady} onConfirm={() => mutate(config => request.post('/groups/' + group.id + '/restore', {}, config), '小组已恢复', undefined, { resource: 'groups', target: group.id, operation: '恢复小组' })}>

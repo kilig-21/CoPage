@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Empty, Input, Layout, List, Pagination, Popconfirm, Space, Typography } from 'antd'
+import { Alert, Button, Card, Input, Layout, List, Pagination, Popconfirm, Space, Typography } from 'antd'
+import ListEmptyState from '../components/ListEmptyState'
 import { useLocation, useSearchParams } from 'react-router-dom'
 import { usePageRequest } from '../auth/PageSessionContext'
 import WorkspaceHeader from '../components/WorkspaceHeader'
@@ -71,8 +72,8 @@ export default function Trash() {
       </Space>
       {error&&<Alert type="error" showIcon message={error} action={<Button disabled={loading} onClick={()=>setRefresh(n=>n+1)}>重试</Button>} />}
       <DocumentLifecycleFeedback lifecycle={restoration} returnTo={sourcePath} />
-      <Card className="trash-list-card"><List rowKey="id" loading={reading} dataSource={listReady?docs:[]}
-        locale={{emptyText:reading?'正在加载…':error?'列表暂不可用':<Empty description={keyword?'没有匹配标题的已删除文档，试试其他关键词或清除查找':'回收站是空的'} />}}
+      <Card className="trash-list-card"><List rowKey="id" loading={{ spinning: reading, tip: '正在加载…' }} dataSource={listReady?docs:[]}
+        locale={{emptyText:error?'列表暂不可用':<ListEmptyState description={keyword?'没有匹配标题的已删除文档，试试其他关键词或清除查找':'回收站是空的'} />}}
         renderItem={doc=><List.Item actions={[<Popconfirm key="restore" overlayClassName="document-action-confirm trash-restore-confirm" title={`恢复“${doc.title}”（文档 #${doc.id}）？`}
           description="恢复后，原协作者将重新获得原来的权限。" okText="确认恢复" cancelText="取消"
           disabled={restoration.blocked} onConfirm={()=>restoration.run(doc)}>
