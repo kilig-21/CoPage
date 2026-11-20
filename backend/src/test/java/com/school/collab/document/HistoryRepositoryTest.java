@@ -29,7 +29,7 @@ class HistoryRepositoryTest {
         doReturn(List.of(2L)).when(jdbc).query(contains("doc_history_boundary"), any(RowMapper.class), eq(1L));
         doReturn(List.of(new CollabDocumentSnapshot(2, new Delta().insert("AB\n"))))
                 .when(jdbc).query(contains("doc_snapshot"), any(RowMapper.class), eq(1L), eq(3L));
-        when(persistence.operationsBetween(1, 2, 3)).thenReturn(List.of(new VersionedOperation(3, new Delta().retain(2).insert("C"))));
+        when(persistence.operationsPage(1, 2, 3, 128)).thenReturn(List.of(new VersionedOperation(3, new Delta().retain(2).insert("C"))));
         var content = repository.contentAt(1, 3, new CollabDocumentSnapshot(4, new Delta().insert("ABCD\n")));
         assertEquals(new Delta().insert("ABC\n").getOps(), content.getOps());
     }
@@ -37,7 +37,7 @@ class HistoryRepositoryTest {
         doReturn(List.of()).when(jdbc).query(contains("doc_named_version"), any(RowMapper.class), eq(1L), eq(3L));
         doReturn(List.of(0L)).when(jdbc).query(contains("doc_history_boundary"), any(RowMapper.class), eq(1L));
         doReturn(List.of()).when(jdbc).query(contains("doc_snapshot"), any(RowMapper.class), eq(1L), eq(3L));
-        when(persistence.operationsBetween(1, 0, 3)).thenReturn(List.of(new VersionedOperation(2, new Delta().insert("B"))));
+        when(persistence.operationsPage(1, 0, 3, 128)).thenReturn(List.of(new VersionedOperation(2, new Delta().insert("B"))));
         assertEquals(40903, assertThrows(CollabException.class, () -> repository.contentAt(1, 3,
                 new CollabDocumentSnapshot(4, new Delta().insert("ABCD\n")))).getCode());
     }

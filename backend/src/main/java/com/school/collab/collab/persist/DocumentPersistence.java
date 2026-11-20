@@ -46,14 +46,6 @@ public class DocumentPersistence {
         return rows.getFirst();
     }
 
-    public List<VersionedOperation> operationsBetween(long docId, long afterRevision, long throughRevision) {
-        return jdbc.query("""
-                SELECT revision, op FROM doc_operation
-                WHERE doc_id = ? AND revision > ? AND revision <= ? ORDER BY revision ASC
-                """, (rs, index) -> new VersionedOperation(
-                rs.getLong("revision"), read(rs.getString("op"))), docId, afterRevision, throughRevision);
-    }
-
     public long currentRevision(long docId) {
         List<Long> revisions = jdbc.query(
                 "SELECT revision FROM document WHERE id = ? AND is_deleted = 0",

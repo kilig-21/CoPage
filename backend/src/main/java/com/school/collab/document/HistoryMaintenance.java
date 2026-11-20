@@ -22,20 +22,23 @@ public class HistoryMaintenance {
     private final ObjectMapper mapper;
     private final boolean enabled;
     private final int days, maxOperations;
+    private final int maxSnapshots;
     private final long maxBytes;
     private final Set<Long> protectedIds;
     private long cursor;
 
     public HistoryMaintenance(HistoryRepository history, DocRevService revisions, ObjectMapper mapper,
-            @Value("${collab.history.retention-enabled:false}") boolean enabled,
+            @Value("${collab.history.retention-enabled:true}") boolean enabled,
             @Value("${collab.history.retention-days:30}") int days,
             @Value("${collab.history.max-operations:10000}") int maxOperations,
+            @Value("${collab.history.max-snapshots:100}") int maxSnapshots,
             @Value("${collab.history.max-bytes:67108864}") long maxBytes,
-            @Value("${collab.history.protected-doc-ids:26}") String protectedIds) {
+            @Value("${collab.history.protected-doc-ids:26,536,548}") String protectedIds) {
         this.history = history; this.revisions = revisions; this.mapper = mapper;
         this.enabled = enabled; this.days = days; this.maxOperations = maxOperations; this.maxBytes = maxBytes;
-        if (days < 1 || maxOperations < 2000 || maxBytes < 4L * 1024 * 1024) {
-            throw new IllegalArgumentException("历史保留参数无效：至少 1 天、2000 操作、4 MiB");
+        this.maxSnapshots = maxSnapshots;
+        if (days < 1 || maxOperations < 2000 || maxSnapshots < 1 || maxBytes < 4L * 1024 * 1024) {
+            throw new IllegalArgumentException("历史保留参数无效：至少 1 天、2000 操作、1 快照、4 MiB");
         }
         this.protectedIds = Arrays.stream(protectedIds.split(",")).map(String::trim).filter(s -> !s.isEmpty())
                 .map(Long::parseLong).collect(Collectors.toUnmodifiableSet());
@@ -56,6 +59,8 @@ public class HistoryMaintenance {
             if (protectedIds.contains(id)) continue;
             try {
                 revisions.inspect(id, current -> {
+                    // 先裁能从连续日志重建的快照，避免只因快照副本占用配额就推进历史起点。
+                    int trimmed = history.trimPeriodicSnapshots(id, maxSnapshots);
                     int size;
                     try { size = mapper.writeValueAsString(current.content()).getBytes(StandardCharsets.UTF_8).length; }
                     catch (JsonProcessingException ex) { throw new IllegalStateException(ex); }
@@ -65,6 +70,7 @@ public class HistoryMaintenance {
                         history.compact(id, floor, baseline);
                         log.info("历史压缩完成, docId={}, minimumRevision={}", id, floor);
                     }
+                    if (trimmed > 0) log.info("周期快照裁剪完成, docId={}, removed={}", id, trimmed);
                     return null;
                 });
             } catch (RuntimeException ex) { log.warn("历史维护暂时失败，下轮重试, docId={}", id, ex); }
@@ -81,9 +87,9 @@ public class HistoryMaintenance {
             long minimum = history.floor(docId);
             long proposed = isProtected(docId) ? minimum
                     : history.retentionFloor(docId,current.revision(),days,maxOperations,maxBytes,bytes);
-            return new RetentionView(enabled,days,maxOperations,maxBytes,isProtected(docId),current.revision(),minimum,proposed);
+            return new RetentionView(enabled,days,maxOperations,maxSnapshots,maxBytes,isProtected(docId),current.revision(),minimum,proposed);
         });
     }
-    public record RetentionView(boolean enabled,int days,int maxOperations,long maxBytes,boolean protectedDocument,
+    public record RetentionView(boolean enabled,int days,int maxOperations,int maxSnapshots,long maxBytes,boolean protectedDocument,
                                 long currentRevision,long minimumRevision,long proposedMinimumRevision) { }
 }

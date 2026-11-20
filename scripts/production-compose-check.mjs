@@ -69,7 +69,8 @@ const renamePermissionSmoke = process.argv.includes('--rename-permission-smoke')
 const editPermissionSmoke = process.argv.includes('--edit-permission-smoke')
 const historyRestoreSmoke = process.argv.includes('--history-restore-smoke')
 const historyRecoverySmoke = process.argv.includes('--history-recovery-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke
+const retentionMaintenanceSmoke = process.argv.includes('--retention-maintenance-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke
 const runtimeImages = process.argv.filter(value => value.startsWith('--runtime-image='))
 assert.ok(runtimeImages.length <= 1, '预构建运行时镜像只能指定一次')
 const runtimeImage = runtimeImages[0]?.slice('--runtime-image='.length)
@@ -183,6 +184,10 @@ if (process.argv.includes('--smoke') || fullSmoke) {
         if (history.error) throw history.error
         assert.equal(history.status, 0, history.stderr)
         console.log(history.stdout.trim())
+      }
+      if (retentionMaintenanceSmoke) {
+        const { runRetentionMaintenanceCheck } = await import('./retention-maintenance-check.mjs')
+        await runRetentionMaintenanceCheck({ sql, origin: `http://127.0.0.1:${ports[0]}`, username, password })
       }
       if (expirySmoke) {
         const expiry = spawnSync(process.execPath, ['scripts/session-expiry-smoke.mjs'], {

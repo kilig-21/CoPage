@@ -50,11 +50,14 @@ public class HistoryRepository {
         if (base.revision() < floor) throw new CollabException(40903, "历史基准快照缺失，拒绝还原不完整内容");
         Delta content = base.content();
         long expected = base.revision();
-        for (var entry : persistence.operationsBetween(docId, base.revision(), revision)) {
-            if (entry.revision() != ++expected) throw new CollabException(40903, "版本历史有缺口，无法还原");
-            content = DeltaApply.apply(content, entry.operation());
+        while (expected < revision) {
+            var page = persistence.operationsPage(docId, expected, revision, 128);
+            if (page.isEmpty()) throw new CollabException(40903, "版本历史不完整，无法还原");
+            for (var entry : page) {
+                if (entry.revision() != ++expected) throw new CollabException(40903, "版本历史有缺口，无法还原");
+                content = DeltaApply.apply(content, entry.operation());
+            }
         }
-        if (expected != revision) throw new CollabException(40903, "版本历史不完整，无法还原");
         return content;
     }
 
@@ -125,9 +128,7 @@ public class HistoryRepository {
     @Transactional
     public void compact(long docId, long revision, Delta baseline) {
         // 文档行锁也与删除/成员管理事务串行；清理绝不改变当前正文或 revision。
-        var rows = jdbc.query("SELECT revision FROM document WHERE id = ? AND is_deleted = 0 FOR UPDATE",
-                (rs, n) -> rs.getLong(1), docId);
-        if (rows.isEmpty()) return;
+        if (!lockActiveDocument(docId)) return;
         jdbc.update("INSERT INTO doc_snapshot(doc_id,revision,content) VALUES(?,?,?)", docId, revision, encode(baseline));
         Long keepId = jdbc.queryForObject("SELECT MAX(id) FROM doc_snapshot WHERE doc_id = ? AND revision = ?", Long.class, docId, revision);
         jdbc.update("DELETE FROM doc_snapshot WHERE doc_id = ? AND (revision < ? OR (revision = ? AND id <> ?))",
@@ -140,6 +141,50 @@ public class HistoryRepository {
                 """, docId, revision);
     }
 
+    /** 仅移除可以从保留起点重建的周期快照，保留日志、收据和重要版本。 */
+    @Transactional
+    public int trimPeriodicSnapshots(long docId, int maxSnapshots) {
+        if (!lockActiveDocument(docId)) return 0;
+        long floor = floor(docId);
+        Long anchor = jdbc.queryForObject("SELECT MAX(id) FROM doc_snapshot WHERE doc_id = ? AND revision = ?",
+                Long.class, docId, floor);
+        if (floor > 0 && anchor == null) {
+            throw new CollabException(40903, "历史起点快照缺失，跳过周期快照裁剪");
+        }
+        // 留一个位置给起点快照，并根据 (revision, id) 处理同 revision 的旧重复行。
+        var excess = jdbc.query("""
+                SELECT revision, id FROM doc_snapshot WHERE doc_id = ? AND revision > ?
+                ORDER BY revision DESC, id DESC LIMIT 1 OFFSET ?
+                """, (rs, n) -> new SnapshotCutoff(rs.getLong(1), rs.getLong(2)), docId, floor, maxSnapshots - 1);
+        int trimmed = 0;
+        if (!excess.isEmpty()) {
+            var cutoff = excess.getFirst();
+            Long operations = jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM doc_operation WHERE doc_id = ? AND revision > ? AND revision <= ?
+                    """, Long.class, docId, floor, cutoff.revision());
+            if (operations == null || operations != cutoff.revision() - floor) {
+                throw new CollabException(40903, "历史有缺口，保留现有周期快照");
+            }
+            trimmed = jdbc.update("""
+                    DELETE FROM doc_snapshot
+                    WHERE doc_id = ? AND revision > ? AND (revision < ? OR (revision = ? AND id <= ?))
+                    """, docId, floor, cutoff.revision(), cutoff.revision(), cutoff.id());
+        }
+        if (anchor != null) {
+            trimmed += jdbc.update("""
+                    DELETE FROM doc_snapshot WHERE doc_id = ? AND (revision < ? OR (revision = ? AND id <> ?))
+                    """, docId, floor, floor, anchor);
+        }
+        return trimmed;
+    }
+
+    private boolean lockActiveDocument(long docId) {
+        return !jdbc.query("SELECT id FROM document WHERE id = ? AND is_deleted = 0 FOR UPDATE",
+                (rs, n) -> rs.getLong(1), docId).isEmpty();
+    }
+
+    private record SnapshotCutoff(long revision, long id) { }
+
     public List<Long> maintenanceCandidates(long after, int limit) {
         return jdbc.query("SELECT id FROM document WHERE is_deleted = 0 AND id > ? ORDER BY id LIMIT ?",
                 (rs, n) -> rs.getLong(1), after, limit);
@@ -148,7 +193,8 @@ public class HistoryRepository {
     public List<Long> expiredDeletedCandidates(int days) {
         return jdbc.query("""
                 SELECT id FROM document WHERE is_deleted=1 AND update_time < DATE_SUB(NOW(),INTERVAL ? DAY)
-                  AND EXISTS(SELECT 1 FROM doc_operation o WHERE o.doc_id=document.id)
+                  AND (EXISTS(SELECT 1 FROM doc_operation o WHERE o.doc_id=document.id)
+                    OR EXISTS(SELECT 1 FROM doc_snapshot s WHERE s.doc_id=document.id LIMIT 1 OFFSET 1))
                 ORDER BY id LIMIT 50
                 """, (rs,n)->rs.getLong(1),days);
     }
