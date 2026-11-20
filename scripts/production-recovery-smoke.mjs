@@ -169,18 +169,10 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, p
     }
     const restoredPort = getPort('backend')
     const minioPort = getPort('minio')
-    const deadline = Date.now() + 60_000
-    let loggedIn = false
-    while (Date.now() < deadline) {
-      try {
-        token = (await api(restoredPort, '/auth/login', 'POST', { username, password })).token
-        loggedIn = true
-        break
-      } catch {
-        await new Promise(resolve => setTimeout(resolve, 500))
-      }
-    }
-    assert.ok(loggedIn, '恢复后的账号必须可登录')
+    const readiness = await fetch(origin(restoredPort) + '/actuator/health/readiness', { signal: AbortSignal.timeout(8000) })
+    assert.equal(readiness.status, 200)
+    assert.deepEqual(await readiness.json(), { status: 'UP' })
+    token = (await api(restoredPort, '/auth/login', 'POST', { username, password })).token
     assert.equal(JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).credentialVersion, 1)
     const oldSession = await fetch(origin(restoredPort) + '/api/account/me', {
       headers: { Authorization: 'Bearer ' + revokedToken }, signal: AbortSignal.timeout(5000),

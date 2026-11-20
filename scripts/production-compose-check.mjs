@@ -72,7 +72,8 @@ const historyRecoverySmoke = process.argv.includes('--history-recovery-smoke')
 const retentionMaintenanceSmoke = process.argv.includes('--retention-maintenance-smoke')
 const searchRepairSmoke = process.argv.includes('--search-repair-smoke')
 const authLimitSmoke = process.argv.includes('--auth-limit-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke || authLimitSmoke
+const healthProbeSmoke = process.argv.includes('--health-probe-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke || authLimitSmoke || healthProbeSmoke
 const runtimeImages = process.argv.filter(value => value.startsWith('--runtime-image='))
 assert.ok(runtimeImages.length <= 1, '预构建运行时镜像只能指定一次')
 const runtimeImage = runtimeImages[0]?.slice('--runtime-image='.length)
@@ -139,8 +140,9 @@ if (process.argv.includes('--smoke') || fullSmoke) {
         let ready = false
         while (Date.now() < deadline) {
           try {
-            const response = await fetch(`http://127.0.0.1:${port}/api/doc/list`, { signal: AbortSignal.timeout(2000) })
-            assert.equal(response.status, 401)
+            const response = await fetch(`http://127.0.0.1:${port}/actuator/health/readiness`, { signal: AbortSignal.timeout(8000) })
+            assert.equal(response.status, 200)
+            assert.deepEqual(await response.json(), { status: 'UP' })
             ready = true
             break
           } catch {
@@ -202,6 +204,10 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       if (authLimitSmoke) {
         const { runAuthLimitCheck } = await import('./auth-limit-check.mjs')
         await runAuthLimitCheck({ ports, username, password })
+      }
+      if (healthProbeSmoke) {
+        const { runHealthProbeCheck } = await import('./health-probe-check.mjs')
+        await runHealthProbeCheck({ docker, source: qaDocker, ports })
       }
       if (expirySmoke) {
         const expiry = spawnSync(process.execPath, ['scripts/session-expiry-smoke.mjs'], {

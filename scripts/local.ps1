@@ -85,9 +85,9 @@ function Test-OwnedProcess($Record, $ProcessInfo, [string]$Role) {
 }
 
 function Get-HttpStatus([string]$Role) {
-    $taskUrl = if ($Role -eq 'backend') { 'http://localhost:8080/api/doc/list' } else { 'http://localhost:5173/login' }
+    $taskUrl = if ($Role -eq 'backend') { 'http://localhost:8080/actuator/health/readiness' } else { 'http://localhost:5173/login' }
     $taskClient = [Net.Http.HttpClient]::new()
-    $taskClient.Timeout = [TimeSpan]::FromSeconds(2)
+    $taskClient.Timeout = [TimeSpan]::FromSeconds($(if ($Role -eq 'backend') { 7 } else { 2 }))
     try {
         $taskResponse = $taskClient.GetAsync($taskUrl).GetAwaiter().GetResult()
         try { return [int]$taskResponse.StatusCode } finally { $taskResponse.Dispose() }
@@ -131,12 +131,11 @@ function Get-RoleSnapshot([string]$Role) {
     elseif ($taskListeners.Count -eq 0 -and $taskRecord -and $taskRecord.owned) { $taskInfo = Get-ProcessInfo $taskRecord.pid }
     $taskProject = $taskListeners.Count -le 1 -and (Test-ProjectProcess $taskInfo $Role)
     $taskCode = if ($taskListeners.Count -eq 1 -and $taskProject) { Get-HttpStatus $Role } else { 0 }
-    $taskExpectedCode = if ($Role -eq 'backend') { 401 } else { 200 }
     return [pscustomobject]@{
         role = $Role; port = $taskPorts[$Role]; pid = if ($taskInfo) { $taskInfo.ProcessId } else { $null }
         occupied = $taskListeners.Count -gt 0; projectProcess = $taskProject
         owned = Test-OwnedProcess $taskRecord $taskInfo $Role
-        httpStatus = $taskCode; ready = $taskCode -eq $taskExpectedCode
+        httpStatus = $taskCode; ready = $taskCode -eq 200
     }
 }
 

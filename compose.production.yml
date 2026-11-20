@@ -6,6 +6,13 @@ services:
     build: ./backend
     image: copage-backend:production
     restart: unless-stopped
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--max-time", "7", "http://127.0.0.1:8080/actuator/health/readiness"]
+      interval: 10s
+      timeout: 8s
+      start_period: 30s
+      retries: 3
     environment:
       SPRING_PROFILES_ACTIVE: prod
       MYSQL_URL: jdbc:mysql://mysql:3306/collab_doc?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
