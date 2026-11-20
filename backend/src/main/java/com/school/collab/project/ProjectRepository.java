@@ -1,8 +1,5 @@
 package com.school.collab.project;
 
-import jakarta.annotation.PostConstruct;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Repository;
@@ -27,9 +24,6 @@ public class ProjectRepository {
         """;
     private final JdbcTemplate jdbc;
     public ProjectRepository(JdbcTemplate jdbc) { this.jdbc=jdbc; }
-    @PostConstruct public void ensureTables() {
-        new ResourceDatabasePopulator(new ClassPathResource("db/projects.sql")).execute(Objects.requireNonNull(jdbc.getDataSource()));
-    }
     public long create(String name,String description,long owner,long group) {
         var keys=new GeneratedKeyHolder();
         jdbc.update(c->{var s=c.prepareStatement("INSERT INTO copage_project(name,description,owner_id,group_id) VALUES(?,?,?,?)",Statement.RETURN_GENERATED_KEYS);

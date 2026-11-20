@@ -1,8 +1,5 @@
 package com.school.collab.template;
 
-import jakarta.annotation.PostConstruct;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Repository;
@@ -18,9 +15,6 @@ public class PersonalTemplateRepository {
     private static final String FILTER=" WHERE owner_id=? AND (?='all' OR category=?) AND (?='' OR LOCATE(?,name)>0 OR LOCATE(?,description)>0)";
     private final JdbcTemplate jdbc;
     public PersonalTemplateRepository(JdbcTemplate jdbc) {this.jdbc=jdbc;}
-    @PostConstruct public void ensureTables() {
-        new ResourceDatabasePopulator(new ClassPathResource("db/personal-templates.sql")).execute(Objects.requireNonNull(jdbc.getDataSource()));
-    }
     public void lockOwner(long user) {
         // Duplicate INSERT IGNORE holds a shared lock: concurrent upgrades can deadlock.
         // The upsert takes the exclusive owner lock before any quota/source reads.

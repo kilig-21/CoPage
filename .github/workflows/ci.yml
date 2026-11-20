@@ -30,6 +30,19 @@ jobs:
     name: Java tests and package
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.4.3
+        env:
+          MYSQL_ROOT_HOST: '%'
+          MYSQL_ROOT_PASSWORD: copage-ci-only-109
+        ports:
+          - 3306/tcp
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,6 +54,9 @@ jobs:
           cache: maven
           cache-dependency-path: backend/pom.xml
       - name: Test and build executable JAR
+        env:
+          COPAGE_MIGRATION_TEST_MYSQL: 127.0.0.1:${{ job.services.mysql.ports[3306] }}
+          COPAGE_MIGRATION_TEST_PASSWORD: copage-ci-only-109
         run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml verify
 
   frontend:

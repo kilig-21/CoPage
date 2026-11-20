@@ -1,8 +1,5 @@
 package com.school.collab.group;
 
-import jakarta.annotation.PostConstruct;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Repository;
@@ -17,19 +14,6 @@ public class GroupRepository {
     private static final java.time.format.DateTimeFormatter TIME=java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final JdbcTemplate jdbc;
     public GroupRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
-    @PostConstruct
-    public void ensureTables() {
-        new ResourceDatabasePopulator(new ClassPathResource("db/groups.sql"))
-                .execute(Objects.requireNonNull(jdbc.getDataSource()));
-        if (!hasInvitationVersion()) {
-            try { jdbc.execute("ALTER TABLE group_invitation ADD COLUMN invitation_version BIGINT NOT NULL DEFAULT 1"); }
-            catch (org.springframework.dao.DataAccessException failure) { if (!hasInvitationVersion()) throw failure; }
-        }
-    }
-    private boolean hasInvitationVersion() {
-        Integer count=jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='group_invitation' AND COLUMN_NAME='invitation_version'",Integer.class);
-        return count!=null&&count>0;
-    }
     public long create(String name, String description, long owner) {
         var keys = new GeneratedKeyHolder();
         jdbc.update(c -> {

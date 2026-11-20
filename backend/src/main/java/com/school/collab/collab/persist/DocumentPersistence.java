@@ -6,8 +6,6 @@ import com.school.collab.collab.CollabException;
 import com.school.collab.collab.store.CollabDocumentSnapshot;
 import com.school.collab.collab.store.VersionedOperation;
 import com.school.collab.ot.Delta;
-import jakarta.annotation.PostConstruct;
-import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,52 +15,12 @@ import java.util.List;
 /** MySQL 是文档内容、版本和操作日志的持久化事实来源。 */
 @Service
 public class DocumentPersistence {
-    private static final String CREATE_RECEIPT_TABLE = """
-            CREATE TABLE IF NOT EXISTS `doc_operation_receipt` (
-              `doc_id` BIGINT NOT NULL,
-              `user_id` BIGINT NOT NULL,
-              `client_id` VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
-              `op_id` VARCHAR(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
-              `revision` BIGINT NOT NULL,
-              `request_hash` CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
-              PRIMARY KEY (`doc_id`, `user_id`, `client_id`, `op_id`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-            """;
-
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
 
     public DocumentPersistence(JdbcTemplate jdbc, ObjectMapper mapper) {
         this.jdbc = jdbc;
         this.mapper = mapper;
-    }
-
-    /** 现有 MySQL 数据卷不会重新执行 schema.sql，因此启动时补齐幂等收据表。 */
-    @PostConstruct
-    public void ensureReceiptTable() {
-        jdbc.execute(CREATE_RECEIPT_TABLE);
-        if (!receiptHashColumnExists()) {
-            try {
-                jdbc.execute("""
-                        ALTER TABLE doc_operation_receipt
-                        ADD COLUMN request_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL
-                        """);
-            } catch (DataAccessException exception) {
-                // 双实例同时升级旧数据卷时，另一个实例可能已经加好列。
-                if (!receiptHashColumnExists()) {
-                    throw exception;
-                }
-            }
-        }
-    }
-
-    private boolean receiptHashColumnExists() {
-        Integer columns = jdbc.queryForObject("""
-                SELECT COUNT(*) FROM information_schema.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'doc_operation_receipt'
-                  AND COLUMN_NAME = 'request_hash'
-                """, Integer.class);
-        return columns != null && columns > 0;
     }
 
     public Receipt receipt(long docId, long userId, String clientId, String opId) {

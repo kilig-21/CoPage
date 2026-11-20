@@ -125,7 +125,7 @@ docker compose ps -a
 
 MySQL、Redis 和 RabbitMQ 的宿主机端口已避开常用默认值，避免与其他项目冲突。更改映射时，需同步修改后端连接配置。
 
-本地 MySQL **空数据卷首次初始化**会依次执行 [schema.sql](backend/src/main/resources/db/schema.sql) 建表及 [demo-users.sql](backend/src/main/resources/db/demo-users.sql) 创建演示账号；演示昵称以 UTF-8 字节常量写入，避免 Windows shell 导入时乱码。服务器配置只挂载建表脚本，不初始化演示账号。已有数据卷不会重复执行 SQL；若旧演示账号昵称已乱码，须先核对具体记录再定点修复，不能为此删除数据卷。操作幂等收据表及其指纹字段另有应用启动补建逻辑。
+本地 MySQL 在空卷首次启动时用 [V1 结构基线](backend/src/main/resources/db/migration/V1__baseline.sql) 建表，再用 [demo-users.sql](backend/src/main/resources/db/demo-users.sql) 创建演示账号。后端通过 Flyway 核对并升级已有库，迁移前后的备份和恢复步骤见[数据库结构迁移](docs/数据库结构迁移.md)。
 
 ### 3. 启动 Java 后端
 

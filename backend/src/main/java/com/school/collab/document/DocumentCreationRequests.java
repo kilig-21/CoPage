@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.school.collab.common.BizException;
 import com.school.collab.common.ErrorCode;
 import com.school.collab.common.UserContext;
-import jakarta.annotation.PostConstruct;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -20,26 +19,12 @@ import java.util.function.Supplier;
 /** 创建正文与首次响应同事务保存；重试不能再次创建或覆盖已经创建的文档。 */
 @Service
 public class DocumentCreationRequests {
-    static final String CREATE_TABLE = """
-            CREATE TABLE IF NOT EXISTS doc_creation_receipt (
-              user_id BIGINT NOT NULL,
-              request_id CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-              kind VARCHAR(80) NOT NULL,
-              request_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-              doc_id BIGINT NOT NULL,
-              response_json TEXT NOT NULL,
-              create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-              PRIMARY KEY (user_id, request_id), KEY idx_doc_creation_document(doc_id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-            """;
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
 
     public DocumentCreationRequests(JdbcTemplate jdbc, ObjectMapper mapper) {
         this.jdbc = jdbc; this.mapper = mapper;
     }
-
-    @PostConstruct public void ensureTable() { jdbc.execute(CREATE_TABLE); }
 
     /** 只核对当前账号已经提交的收据；不重发正文，也不创建、恢复或改写文档。 */
     @Transactional(readOnly = true, isolation = Isolation.READ_COMMITTED)

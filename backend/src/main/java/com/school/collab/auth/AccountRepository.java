@@ -1,7 +1,5 @@
 package com.school.collab.auth;
 
-import jakarta.annotation.PostConstruct;
-import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import java.util.List;
@@ -12,20 +10,6 @@ public class AccountRepository {
     private final JdbcTemplate jdbc;
     public AccountRepository(JdbcTemplate jdbc) { this.jdbc = jdbc; }
 
-    @PostConstruct
-    public void ensureCredentialVersion() {
-        if (!hasVersionColumn()) {
-            try { jdbc.execute("ALTER TABLE `user` ADD COLUMN credential_version BIGINT NOT NULL DEFAULT 0"); }
-            catch (DataAccessException exception) { if (!hasVersionColumn()) throw exception; }
-        }
-    }
-    private boolean hasVersionColumn() {
-        Integer count = jdbc.queryForObject("""
-                SELECT COUNT(*) FROM information_schema.COLUMNS
-                WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='user' AND COLUMN_NAME='credential_version'
-                """, Integer.class);
-        return count != null && count > 0;
-    }
     public Optional<Profile> profile(long id) {
         return profiles("SELECT id,username,nickname,avatar,credential_version FROM `user` WHERE id=?", id)
                 .stream().findFirst();

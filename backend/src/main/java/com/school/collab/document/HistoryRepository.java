@@ -7,7 +7,6 @@ import com.school.collab.collab.persist.DocumentPersistence;
 import com.school.collab.collab.store.CollabDocumentSnapshot;
 import com.school.collab.ot.Delta;
 import com.school.collab.ot.DeltaApply;
-import jakarta.annotation.PostConstruct;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,32 +24,6 @@ public class HistoryRepository {
         this.jdbc = jdbc;
         this.mapper = mapper;
         this.persistence = persistence;
-    }
-
-    @PostConstruct
-    public void ensureTables() {
-        // 恢复操作可能包含整篇富文本，不能继续受 TEXT 的 64 KiB 限制。
-        String operationType = jdbc.queryForObject("""
-                SELECT DATA_TYPE FROM information_schema.COLUMNS
-                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'doc_operation' AND COLUMN_NAME = 'op'
-                """, String.class);
-        if (!"longtext".equalsIgnoreCase(operationType)) {
-            jdbc.execute("ALTER TABLE doc_operation MODIFY COLUMN op LONGTEXT NOT NULL");
-        }
-        jdbc.execute("""
-            CREATE TABLE IF NOT EXISTS doc_history_boundary (
-              doc_id BIGINT PRIMARY KEY, revision BIGINT NOT NULL,
-              update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-            """);
-        jdbc.execute("""
-            CREATE TABLE IF NOT EXISTS doc_named_version (
-              doc_id BIGINT NOT NULL, revision BIGINT NOT NULL, name VARCHAR(100) NOT NULL,
-              content LONGTEXT NOT NULL, user_id BIGINT NOT NULL,
-              create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-              PRIMARY KEY (doc_id, revision)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-            """);
     }
 
     public long floor(long docId) {

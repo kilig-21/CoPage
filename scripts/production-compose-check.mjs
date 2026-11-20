@@ -55,7 +55,7 @@ assert.equal(config.services.backend.ports.length, 1)
 assert.equal(config.services.minio.ports.length, 1)
 const sqlMounts = config.services.mysql.volumes.filter(v => v.target.startsWith('/docker-entrypoint-initdb.d/'))
 assert.equal(sqlMounts.length, 1)
-assert.ok(sqlMounts[0].source.endsWith('schema.sql'))
+assert.ok(sqlMounts[0].source.endsWith('V1__baseline.sql'))
 for (const key of Object.keys(settings).filter(key => !key.endsWith('_PORT'))) {
   const missing = docker([...base, 'config', '--quiet'], { customEnv: { ...env, [key]: '' }, allowFailure: true })
   assert.notEqual(missing.status, 0, `缺少 ${key} 时配置必须拒绝运行`)
@@ -117,7 +117,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
     assert.ok(redisNoAuth.includes('NOAUTH'), 'Redis 无凭据请求必须拒绝')
     const redisAuth = qaDocker(['exec', '-T', 'redis', 'sh', '-ec', 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping']).stdout.trim()
     assert.equal(redisAuth, 'PONG')
-    assert.equal(initial.slice(2).length, 18, '全新数据库业务表契约须为十八张')
+    assert.equal(initial.slice(2).filter(table => table !== 'flyway_schema_history').length, 18, '全新数据库业务表契约须为十八张')
     console.log('PASS: 全新 MySQL 无演示账号、十八张表齐全、数据库权限隔离、Redis 认证')
     if (fullSmoke) {
       const ports = [1, 2].map(index => {
@@ -141,6 +141,10 @@ if (process.argv.includes('--smoke') || fullSmoke) {
         }
         assert.ok(ready, 'prod 后端未在期限内就绪')
       }
+      assert.deepEqual(
+        sql('SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank;').stdout.trim().split(/\r?\n/),
+        ['0', '1', '2', '3', '4'],
+      )
       const username = 'qa' + randomBytes(6).toString('hex')
       const password = secret()
       const registration = await fetch(`http://127.0.0.1:${ports[0]}/api/auth/register`, {
