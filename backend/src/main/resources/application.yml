@@ -1,5 +1,6 @@
 server:
   port: 8080
+  forward-headers-strategy: none
   servlet:
     context-path: /
 
@@ -57,6 +58,19 @@ mybatis-plus:
       logic-not-delete-value: 0
 
 collab:
+  auth-limit:
+    login:
+      ip-limit: ${AUTH_LOGIN_IP_LIMIT:300}
+      account-ip-limit: ${AUTH_LOGIN_ACCOUNT_IP_LIMIT:30}
+      seconds: ${AUTH_LOGIN_WINDOW_SECONDS:60}
+    registration:
+      ip-limit: ${AUTH_REGISTER_IP_LIMIT:60}
+      account-ip-limit: ${AUTH_REGISTER_ACCOUNT_IP_LIMIT:5}
+      seconds: ${AUTH_REGISTER_WINDOW_SECONDS:600}
+    failure-attempts: ${AUTH_FAILURE_ATTEMPTS:5}
+    failure-window-seconds: ${AUTH_FAILURE_WINDOW_SECONDS:120}
+    lock-seconds: ${AUTH_LOCK_SECONDS:60}
+    trusted-proxies: ${AUTH_LIMIT_TRUSTED_PROXIES:}
   search:
     repair-interval-ms: ${SEARCH_REPAIR_INTERVAL_MS:5000}
   history:

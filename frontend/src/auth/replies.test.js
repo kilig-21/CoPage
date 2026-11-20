@@ -1,6 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { parseLoginReply as login, confirmRegistrationReply as register, confirmPasswordChangeReply as password } from './replies.js'
+import { parseLoginReply as login, confirmRegistrationReply as register, confirmPasswordChangeReply as password,
+  isDefinitiveRegistrationRejection } from './replies.js'
+
+test('registration rate limiting is a definite rejection and keeps the server message visible', () => {
+  for (const code of [400, 429]) assert.equal(isDefinitiveRegistrationRejection({ code }), true)
+  for (const code of [500, 503, 'ECONNABORTED']) assert.equal(isDefinitiveRegistrationRejection({ code }), false)
+})
 import { parseAccountProfileReply } from './accountProfile.js'
 import { saveSession } from './session.js'
 

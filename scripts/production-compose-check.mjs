@@ -71,7 +71,8 @@ const historyRestoreSmoke = process.argv.includes('--history-restore-smoke')
 const historyRecoverySmoke = process.argv.includes('--history-recovery-smoke')
 const retentionMaintenanceSmoke = process.argv.includes('--retention-maintenance-smoke')
 const searchRepairSmoke = process.argv.includes('--search-repair-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke
+const authLimitSmoke = process.argv.includes('--auth-limit-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke || authLimitSmoke
 const runtimeImages = process.argv.filter(value => value.startsWith('--runtime-image='))
 assert.ok(runtimeImages.length <= 1, '预构建运行时镜像只能指定一次')
 const runtimeImage = runtimeImages[0]?.slice('--runtime-image='.length)
@@ -94,6 +95,10 @@ if (process.argv.includes('--smoke') || fullSmoke) {
   const qa = [...base, '-p', project]
   // 动态分配回环端口，防止覆盖已有本机服务。
   const qaEnv = { ...env, PROD_BACKEND_PORT: '0', PROD_MINIO_PORT: '0' }
+  if (authLimitSmoke) Object.assign(qaEnv, {
+    AUTH_FAILURE_ATTEMPTS: '3', AUTH_LOCK_SECONDS: '3', AUTH_REGISTER_ACCOUNT_IP_LIMIT: '2',
+    AUTH_REGISTER_IP_LIMIT: '8', AUTH_LIMIT_TRUSTED_PROXIES: '',
+  })
   const qaDocker = (args, options = {}) => docker([...qa, ...args], { ...options, customEnv: qaEnv })
   const sql = (statement, root = false, allowFailure = false) => qaDocker([
     'exec', '-T', 'mysql', 'sh', '-ec',
@@ -193,6 +198,10 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       if (searchRepairSmoke) {
         const { runSearchRepairCheck } = await import('./search-repair-check.mjs')
         await runSearchRepairCheck({ source: qaDocker, sql, username })
+      }
+      if (authLimitSmoke) {
+        const { runAuthLimitCheck } = await import('./auth-limit-check.mjs')
+        await runAuthLimitCheck({ ports, username, password })
       }
       if (expirySmoke) {
         const expiry = spawnSync(process.execPath, ['scripts/session-expiry-smoke.mjs'], {

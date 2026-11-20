@@ -5,7 +5,7 @@ import request from '../api/request'
 import UserGuide from '../components/UserGuide'
 import PasswordInput from '../components/PasswordInput'
 import { captureLoginIdentity, safeReturnPath, saveSession } from '../auth/session'
-import { confirmRegistrationReply, parseLoginReply } from '../auth/replies'
+import { confirmRegistrationReply, isDefinitiveRegistrationRejection, parseLoginReply } from '../auth/replies'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -51,7 +51,7 @@ export default function Login() {
       navigate(safeReturnPath(location.state?.from || '/home'), { replace: true })
     } catch (error) {
       if (!controller.signal.aborted) {
-        if (registering && error?.code !== 400) {
+        if (registering && !isDefinitiveRegistrationRejection(error)) {
           setRegistrationUncertain(true)
           setError('注册结果未确认，账号可能已经创建。请先用填写的账号尝试登录；若无法登录，再检查账号和密码或重新注册。')
         } else setError(error?.message || '请求失败，请稍后重试')

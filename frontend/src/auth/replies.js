@@ -24,3 +24,7 @@ export function confirmPasswordChangeReply(reply) {
     throw invalid('ACCOUNT_PASSWORD_RESPONSE', '密码更新回复无法确认，请重新登录核对；已有本地草稿仍保留。')
   }
 }
+
+export function isDefinitiveRegistrationRejection(error) {
+  return error?.code === 400 || error?.code === 429
+}

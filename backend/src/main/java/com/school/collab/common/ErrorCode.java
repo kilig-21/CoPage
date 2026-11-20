@@ -8,7 +8,8 @@ public enum ErrorCode {
     DOC_BUSY(40901, "文档正在处理，请稍后重试"),
     REVISION_AHEAD(40902, "客户端版本超前"),
     REVISION_TOO_OLD(40903, "版本过旧，请重新同步文档"),
-    INTERNAL_ERROR(500, "服务器内部错误");
+    INTERNAL_ERROR(500, "服务器内部错误"),
+    SERVICE_UNAVAILABLE(503, "服务暂不可用，请稍后重试");
 
     private final int code;
     private final String message;
