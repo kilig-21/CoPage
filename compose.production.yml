@@ -1,8 +1,17 @@
 # 独立配置，不能与 docker-compose.yml 合并使用。
 name: copage-production
 
+x-service-logging: &service-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   backend:
+    mem_limit: ${COPAGE_BACKEND_MEM_LIMIT:-896m}
+    cpus: ${COPAGE_BACKEND_CPUS:-1.0}
+    logging: *service-logging
     build: ./backend
     image: copage-backend:production
     restart: unless-stopped
@@ -14,6 +23,7 @@ services:
       start_period: 30s
       retries: 3
     environment:
+      JAVA_TOOL_OPTIONS: "${COPAGE_JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=60.0}"
       SPRING_PROFILES_ACTIVE: prod
       MYSQL_URL: jdbc:mysql://mysql:3306/collab_doc?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
       MYSQL_USER: copage
@@ -65,6 +75,9 @@ services:
         condition: service_completed_successfully
 
   mysql:
+    mem_limit: ${COPAGE_MYSQL_MEM_LIMIT:-768m}
+    cpus: ${COPAGE_MYSQL_CPUS:-1.0}
+    logging: *service-logging
     image: mysql:8.4.3
     restart: unless-stopped
     environment:
@@ -83,6 +96,9 @@ services:
       retries: 12
 
   redis:
+    mem_limit: ${COPAGE_REDIS_MEM_LIMIT:-256m}
+    cpus: ${COPAGE_REDIS_CPUS:-0.5}
+    logging: *service-logging
     image: redis:7.4.1-alpine
     restart: unless-stopped
     environment:
@@ -97,6 +113,9 @@ services:
       retries: 12
 
   rabbitmq:
+    mem_limit: ${COPAGE_RABBITMQ_MEM_LIMIT:-512m}
+    cpus: ${COPAGE_RABBITMQ_CPUS:-0.75}
+    logging: *service-logging
     image: rabbitmq:3.13.7-management
     restart: unless-stopped
     environment:
@@ -111,13 +130,16 @@ services:
       retries: 12
 
   elasticsearch:
+    mem_limit: ${COPAGE_ES_MEM_LIMIT:-1024m}
+    cpus: ${COPAGE_ES_CPUS:-1.5}
+    logging: *service-logging
     image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
     restart: unless-stopped
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
       xpack.security.http.ssl.enabled: "false"
-      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      ES_JAVA_OPTS: -Xms${COPAGE_ES_HEAP:-512m} -Xmx${COPAGE_ES_HEAP:-512m}
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     healthcheck:
@@ -127,6 +149,9 @@ services:
       retries: 20
 
   minio:
+    mem_limit: ${COPAGE_MINIO_MEM_LIMIT:-512m}
+    cpus: ${COPAGE_MINIO_CPUS:-0.5}
+    logging: *service-logging
     image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     restart: unless-stopped
     environment:
@@ -139,6 +164,9 @@ services:
       - minio-data:/data
 
   minio-init:
+    mem_limit: ${COPAGE_MINIO_INIT_MEM_LIMIT:-128m}
+    cpus: ${COPAGE_MINIO_INIT_CPUS:-0.25}
+    logging: *service-logging
     image: quay.io/minio/mc@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
     restart: "no"
     depends_on:

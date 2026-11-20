@@ -9,6 +9,7 @@ import { runRecoveryCheck } from './production-recovery-smoke.mjs'
 import { runProxyCheck } from './production-proxy-smoke.mjs'
 import { runDocumentRenamePermissionCheck } from './document-rename-permission-check.mjs'
 import { runDocumentEditPermissionCheck } from './document-edit-permission-smoke.mjs'
+import { assertResourceConfig, compactResources, runResourcesCheck } from './resources-check.mjs'
 
 const cwd = fileURLToPath(new URL('../', import.meta.url))
 const secret = () => randomBytes(32).toString('hex')
@@ -40,6 +41,9 @@ function docker(args, { input, customEnv = env, allowFailure = false, binary = f
 }
 
 const config = JSON.parse(docker([...base, 'config', '--format', 'json']).stdout)
+assertResourceConfig(config)
+assertResourceConfig(JSON.parse(docker(['compose', '--env-file', '.env.example', '--profile', 'app',
+  'config', '--format', 'json']).stdout))
 assert.equal(config.name, 'copage-production')
 assert.equal(config.services.backend.environment.SPRING_PROFILES_ACTIVE, 'prod')
 assert.equal(config.services.backend.environment.MYSQL_USER, 'copage')
@@ -73,7 +77,8 @@ const retentionMaintenanceSmoke = process.argv.includes('--retention-maintenance
 const searchRepairSmoke = process.argv.includes('--search-repair-smoke')
 const authLimitSmoke = process.argv.includes('--auth-limit-smoke')
 const healthProbeSmoke = process.argv.includes('--health-probe-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke || authLimitSmoke || healthProbeSmoke
+const resourcesSmoke = process.argv.includes('--resources-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke || authLimitSmoke || healthProbeSmoke || resourcesSmoke
 const runtimeImages = process.argv.filter(value => value.startsWith('--runtime-image='))
 assert.ok(runtimeImages.length <= 1, '预构建运行时镜像只能指定一次')
 const runtimeImage = runtimeImages[0]?.slice('--runtime-image='.length)
@@ -96,6 +101,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
   const qa = [...base, '-p', project]
   // 动态分配回环端口，防止覆盖已有本机服务。
   const qaEnv = { ...env, PROD_BACKEND_PORT: '0', PROD_MINIO_PORT: '0' }
+  if (resourcesSmoke && process.argv.includes('--compact-resources')) Object.assign(qaEnv, compactResources)
   if (authLimitSmoke) Object.assign(qaEnv, {
     AUTH_FAILURE_ATTEMPTS: '3', AUTH_LOCK_SECONDS: '3', AUTH_REGISTER_ACCOUNT_IP_LIMIT: '2',
     AUTH_REGISTER_IP_LIMIT: '8', AUTH_LIMIT_TRUSTED_PROXIES: '',
@@ -209,6 +215,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
         const { runHealthProbeCheck } = await import('./health-probe-check.mjs')
         await runHealthProbeCheck({ docker, source: qaDocker, ports })
       }
+      if (resourcesSmoke) runResourcesCheck({ docker, source: qaDocker })
       if (expirySmoke) {
         const expiry = spawnSync(process.execPath, ['scripts/session-expiry-smoke.mjs'], {
           cwd, encoding: 'utf8', timeout: 120_000,

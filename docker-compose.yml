@@ -1,7 +1,16 @@
 name: collab-docs
 
+x-service-logging: &service-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   backend:
+    mem_limit: ${COPAGE_BACKEND_MEM_LIMIT:-896m}
+    cpus: ${COPAGE_BACKEND_CPUS:-1.0}
+    logging: *service-logging
     profiles: [app]
     build: ./backend
     container_name: collab-backend
@@ -14,6 +23,7 @@ services:
       start_period: 30s
       retries: 3
     environment:
+      JAVA_TOOL_OPTIONS: "${COPAGE_JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=60.0}"
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
       MYSQL_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-collab_doc}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
       MYSQL_USER: root
@@ -65,6 +75,9 @@ services:
         condition: service_completed_successfully
 
   mysql:
+    mem_limit: ${COPAGE_MYSQL_MEM_LIMIT:-768m}
+    cpus: ${COPAGE_MYSQL_CPUS:-1.0}
+    logging: *service-logging
     image: mysql:8.4.3
     container_name: collab-mysql
     restart: unless-stopped
@@ -86,6 +99,9 @@ services:
       retries: 12
 
   redis:
+    mem_limit: ${COPAGE_REDIS_MEM_LIMIT:-256m}
+    cpus: ${COPAGE_REDIS_CPUS:-0.5}
+    logging: *service-logging
     image: redis:7.4.1-alpine
     container_name: collab-redis
     restart: unless-stopped
@@ -102,6 +118,9 @@ services:
       retries: 12
 
   rabbitmq:
+    mem_limit: ${COPAGE_RABBITMQ_MEM_LIMIT:-512m}
+    cpus: ${COPAGE_RABBITMQ_CPUS:-0.75}
+    logging: *service-logging
     image: rabbitmq:3.13.7-management
     container_name: collab-rabbitmq
     restart: unless-stopped
@@ -121,6 +140,9 @@ services:
       retries: 12
 
   elasticsearch:
+    mem_limit: ${COPAGE_ES_MEM_LIMIT:-1024m}
+    cpus: ${COPAGE_ES_CPUS:-1.5}
+    logging: *service-logging
     image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
     container_name: collab-elasticsearch
     restart: unless-stopped
@@ -128,7 +150,7 @@ services:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - xpack.security.http.ssl.enabled=false
-      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - ES_JAVA_OPTS=-Xms${COPAGE_ES_HEAP:-512m} -Xmx${COPAGE_ES_HEAP:-512m}
       - TZ=Asia/Shanghai
     ports:
       - "9200:9200"
@@ -141,6 +163,9 @@ services:
       retries: 20
 
   minio:
+    mem_limit: ${COPAGE_MINIO_MEM_LIMIT:-512m}
+    cpus: ${COPAGE_MINIO_CPUS:-0.5}
+    logging: *service-logging
     # MinIO 已从 Docker Hub 撤下官方镜像（拉取会报 pull access denied），改用官方 registry quay.io。
     # 如 quay.io 拉取慢，可替换为：docker.m.daocloud.io/minio/minio:latest
     image: quay.io/minio/minio:latest
@@ -157,6 +182,9 @@ services:
       - minio-data:/data
 
   minio-init:
+    mem_limit: ${COPAGE_MINIO_INIT_MEM_LIMIT:-128m}
+    cpus: ${COPAGE_MINIO_INIT_CPUS:-0.25}
+    logging: *service-logging
     image: quay.io/minio/mc:latest
     container_name: collab-minio-init
     depends_on:
