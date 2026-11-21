@@ -5,9 +5,11 @@ import { ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import App from './App'
 import { antTheme, applyThemeVariables } from './styles/theme'
+import { installFrontendErrorListeners, reportFrontendError } from './observability/frontendErrors'
 import './styles.css'
 import './styles/design-system.css'
 
+installFrontendErrorListeners(window, reportFrontendError)
 applyThemeVariables(document.documentElement.style)
 
 ReactDOM.createRoot(document.getElementById('root')).render(

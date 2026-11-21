@@ -18,6 +18,8 @@ spring:
 
 collab:
   frontend-origin: ${FRONTEND_ORIGIN}
+  frontend-error-reporting:
+    enabled: ${FRONTEND_ERROR_REPORTING_ENABLED:true}
   jwt:
     secret: ${JWT_SECRET}
   minio:

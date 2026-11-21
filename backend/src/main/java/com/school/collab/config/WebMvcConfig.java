@@ -1,6 +1,7 @@
 package com.school.collab.config;
 
 import com.school.collab.config.interceptor.JwtInterceptor;
+import com.school.collab.observability.FrontendErrorController;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -33,6 +34,6 @@ public class WebMvcConfig implements WebMvcConfigurer {
         // Logout validates and revokes the bearer in the controller.
         registry.addInterceptor(jwtInterceptor)
                 .addPathPatterns("/api/**")
-                .excludePathPatterns("/api/auth/register", "/api/auth/login", "/api/auth/logout");
+                .excludePathPatterns("/api/auth/register", "/api/auth/login", "/api/auth/logout", FrontendErrorController.PATH);
     }
 }

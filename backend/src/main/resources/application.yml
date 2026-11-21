@@ -87,6 +87,9 @@ mybatis-plus:
 
 collab:
   document-cache-ttl-seconds: ${DOCUMENT_CACHE_TTL_SECONDS:3600}
+  frontend-error-reporting:
+    enabled: ${FRONTEND_ERROR_REPORTING_ENABLED:false}
+    limit-per-minute: ${FRONTEND_ERROR_REPORT_LIMIT_PER_MINUTE:60}
   config-mode: ${COPAGE_CONFIG_MODE:strict}
   auth-limit:
     login:

@@ -6,6 +6,7 @@ import StorageUnavailable from './components/StorageUnavailable'
 import { canReadBrowserStorage } from './auth/browserStorage'
 import { PageSessionProvider } from './auth/PageSessionContext'
 import WorkspaceRouteFocus from './components/WorkspaceRouteFocus'
+import { reportFrontendError } from './observability/frontendErrors'
 
 const Projects = lazy(() => import('./pages/Projects'))
 const Groups = lazy(() => import('./pages/Groups'))
@@ -26,6 +27,7 @@ const PAGE_TITLES = {
 class PageBoundary extends Component {
   state = { failed: false }
   static getDerivedStateFromError() { return { failed: true } }
+  componentDidCatch(error) { reportFrontendError('render', error) }
   render() {
     if (this.state.failed) return <main className="page-load-message" role="alert">
       <h1>页面暂时无法打开</h1>
