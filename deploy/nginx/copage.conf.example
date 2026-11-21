@@ -5,7 +5,7 @@ map $http_upgrade $copage_connection_upgrade {
     '' close;
 }
 
-# 不记录 query、Authorization、Referer 或请求体；WS query 中含 JWT。
+# 访问日志只记录路径等必要字段，省略查询字符串、握手头和请求体。
 log_format copage_safe '$time_iso8601 $remote_addr $request_method $uri '
                        '$status $body_bytes_sent $request_time';
 
@@ -25,6 +25,20 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/api.example.invalid/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     client_max_body_size 11m;
+    # 这两个 TLS 主机仅提供 API 与图片。CSP 用于限制直接打开的响应文档。
+    add_header Content-Security-Policy "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    proxy_hide_header Content-Security-Policy;
+    proxy_hide_header Content-Security-Policy-Report-Only;
+    proxy_hide_header Strict-Transport-Security;
+    proxy_hide_header X-Content-Type-Options;
+    proxy_hide_header X-Frame-Options;
+    proxy_hide_header Referrer-Policy;
+    proxy_hide_header Permissions-Policy;
 
     location /api/ {
         proxy_pass http://127.0.0.1:18080;
@@ -62,6 +76,19 @@ server {
     ssl_certificate /etc/letsencrypt/live/images.example.invalid/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/images.example.invalid/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
+    add_header Content-Security-Policy "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    proxy_hide_header Content-Security-Policy;
+    proxy_hide_header Content-Security-Policy-Report-Only;
+    proxy_hide_header Strict-Transport-Security;
+    proxy_hide_header X-Content-Type-Options;
+    proxy_hide_header X-Frame-Options;
+    proxy_hide_header Referrer-Policy;
+    proxy_hide_header Permissions-Policy;
 
     # 拒绝桶根目录、列举与管理路径；只代理 collab 桶中的具体对象。
     location = /collab { return 404; }

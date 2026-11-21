@@ -12,7 +12,7 @@ import https from 'node:https'
 const image = 'nginx@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94'
 const cwd = fileURLToPath(new URL('../', import.meta.url))
 
-export async function runProxyCheck({ docker, source, username, password }) {
+export async function runProxyCheck({ docker, source, username, password, reportOnly = false }) {
   const name = 'copage-proxy-qa-' + randomBytes(6).toString('hex')
   const directory = mkdtempSync(join(tmpdir(), 'copage-proxy-'))
   const files = ['qa.crt', 'qa.key', 'nginx.conf']
@@ -35,6 +35,9 @@ export async function runProxyCheck({ docker, source, username, password }) {
       .replaceAll('http://127.0.0.1:19000', 'http://minio:9000')
       .replaceAll(/\/etc\/letsencrypt\/live\/[^/]+\/fullchain.pem/g, '/etc/nginx/copage/qa.crt')
       .replaceAll(/\/etc\/letsencrypt\/live\/[^/]+\/privkey.pem/g, '/etc/nginx/copage/qa.key')
+    if (reportOnly) {
+      template = template.replaceAll('add_header Content-Security-Policy ', 'add_header Content-Security-Policy-Report-Only ')
+    }
     writeFileSync(join(directory, 'nginx.conf'), 'events {}\nhttp {\n' + template + '\n}\n', { mode: 0o600 })
     const mount = directory + ':/etc/nginx/copage:ro'
     docker(['run', '--rm', '--pull', 'never', '--network', stack.networks.default.name,
@@ -47,7 +50,8 @@ export async function runProxyCheck({ docker, source, username, password }) {
     assert.match(address, /^127\.0\.0\.1:\d+$/)
     const port = address.split(':')[1]
     // NODE_EXTRA_CA_CERTS 仅传给这个子进程；验证测试证书，不关闭 TLS 校验。
-    const client = spawnSync(process.execPath, ['scripts/production-proxy-smoke.mjs', '--client', port], {
+    const client = spawnSync(process.execPath, ['scripts/production-proxy-smoke.mjs', '--client', port,
+      ...(reportOnly ? ['--report-only'] : [])], {
       cwd, encoding: 'utf8', timeout: 90_000,
       env: { ...process.env, NODE_EXTRA_CA_CERTS: join(directory, 'qa.crt'),
         COPAGE_PROXY_USER: username, COPAGE_PROXY_PASSWORD: password },
@@ -61,6 +65,8 @@ export async function runProxyCheck({ docker, source, username, password }) {
         '代理日志不得记录 JWT query 或密码')
     }
     assert.ok(access.includes(' /ws/collab 101 '), '必须保留不含 query 的 WS 升级证据')
+    console.log('PASS: TLS API/图片成功和错误响应均带 CSP、HSTS、nosniff、DENY、Referrer-Policy、Permissions-Policy，CSP 模式='
+      + (reportOnly ? 'report-only' : 'enforced'))
     console.log('PASS: nginx -t；校验测试证书的 HTTPS/WSS 登录、协同/持久化读取与 ping；精确 CORS/WS 来源；图片 GET/HEAD、拒绝写入/桶列举/管理；11 MiB 限制；代理日志不含 token')
   } finally {
     if (created) {
@@ -76,7 +82,20 @@ export async function runProxyCheck({ docker, source, username, password }) {
   }
 }
 
-async function checkClient(port) {
+async function checkClient(port, reportOnly) {
+  function assertSecurityHeaders(response) {
+    const headers = response.headers
+    const expectedCsp = reportOnly ? 'content-security-policy-report-only' : 'content-security-policy'
+    const otherCsp = reportOnly ? 'content-security-policy' : 'content-security-policy-report-only'
+    assert.equal(headers[expectedCsp], "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+    assert.equal(headers[otherCsp], undefined)
+    assert.equal(headers['strict-transport-security'], 'max-age=31536000; includeSubDomains')
+    assert.equal(headers['x-content-type-options'], 'nosniff')
+    assert.equal(headers['x-frame-options'], 'DENY')
+    assert.equal(headers['referrer-policy'], 'no-referrer')
+    assert.equal(headers['permissions-policy'], 'camera=(), microphone=(), geolocation=()')
+  }
+
   const request = (path, { host = 'localhost', method = 'GET', body, headers = {} } = {}) =>
     new Promise((resolve, reject) => {
       const req = https.request({ hostname: '127.0.0.1', port, servername: host, path, method,
@@ -94,6 +113,7 @@ async function checkClient(port) {
       req.on('error', reject)
       req.end(body)
     })
+      .then(response => { assertSecurityHeaders(response); return response })
   // Node 子进程已信任临时证书，使用空 CA 证明没有关闭证书校验。
   const untrusted = new Promise((resolve, reject) => {
     const req = https.get({ hostname: '127.0.0.1', port, servername: 'localhost', ca: [], timeout: 5000 }, reject)
@@ -190,5 +210,5 @@ async function checkClient(port) {
 }
 
 if (process.argv[2] === '--client') {
-  await checkClient(Number(process.argv[3]))
+  await checkClient(Number(process.argv[3]), process.argv.includes('--report-only'))
 }

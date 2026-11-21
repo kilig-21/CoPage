@@ -229,6 +229,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
         console.log(expiry.stdout.trim())
       }
       if (proxySmoke) {
+        await runProxyCheck({ docker, source: qaDocker, username, password, reportOnly: true })
         await runProxyCheck({ docker, source: qaDocker, username, password })
       }
       if (recoverySmoke) {
