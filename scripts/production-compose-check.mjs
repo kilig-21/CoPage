@@ -46,6 +46,7 @@ assertResourceConfig(JSON.parse(docker(['compose', '--env-file', '.env.example',
   'config', '--format', 'json']).stdout))
 assert.equal(config.name, 'copage-production')
 assert.equal(config.services.backend.environment.SPRING_PROFILES_ACTIVE, 'prod')
+assert.equal(config.services.backend.environment.COPAGE_CONFIG_MODE, 'private-compose')
 assert.equal(config.services.backend.environment.MYSQL_USER, 'copage')
 assert.notEqual(config.services.mysql.environment.MYSQL_PASSWORD, config.services.mysql.environment.MYSQL_ROOT_PASSWORD)
 assert.equal(config.services.backend.environment.REDIS_PASSWORD, config.services.redis.environment.REDIS_PASSWORD)
@@ -78,7 +79,8 @@ const searchRepairSmoke = process.argv.includes('--search-repair-smoke')
 const authLimitSmoke = process.argv.includes('--auth-limit-smoke')
 const healthProbeSmoke = process.argv.includes('--health-probe-smoke')
 const resourcesSmoke = process.argv.includes('--resources-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke || authLimitSmoke || healthProbeSmoke || resourcesSmoke
+const configGuardSmoke = process.argv.includes('--config-guard-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke || authLimitSmoke || healthProbeSmoke || resourcesSmoke || configGuardSmoke
 const runtimeImages = process.argv.filter(value => value.startsWith('--runtime-image='))
 assert.ok(runtimeImages.length <= 1, '预构建运行时镜像只能指定一次')
 const runtimeImage = runtimeImages[0]?.slice('--runtime-image='.length)
@@ -106,7 +108,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
     AUTH_FAILURE_ATTEMPTS: '3', AUTH_LOCK_SECONDS: '3', AUTH_REGISTER_ACCOUNT_IP_LIMIT: '2',
     AUTH_REGISTER_IP_LIMIT: '8', AUTH_LIMIT_TRUSTED_PROXIES: '',
   })
-  const qaDocker = (args, options = {}) => docker([...qa, ...args], { ...options, customEnv: qaEnv })
+  const qaDocker = (args, { customEnv = qaEnv, ...options } = {}) => docker([...qa, ...args], { ...options, customEnv })
   const sql = (statement, root = false, allowFailure = false) => qaDocker([
     'exec', '-T', 'mysql', 'sh', '-ec',
     root
@@ -230,6 +232,10 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       }
       if (recoverySmoke) {
         await runRecoveryCheck({ docker, base, env: qaEnv, source: qaDocker, sql, port: ports[0], peerPort: ports[1], username, password })
+      }
+      if (configGuardSmoke) {
+        const { runProductionConfigGuardCheck } = await import('./production-config-guard-smoke.mjs')
+        await runProductionConfigGuardCheck({ source: qaDocker, env: qaEnv, port: ports[0], username, password })
       }
     } else {
       // 在临时库单独应用开发种子，核对拆分后本地演示仍可初始化。

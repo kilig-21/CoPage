@@ -22,11 +22,11 @@ CoPage 是面向课程小组和小型团队的富文本文档工作区。成员�
 
 **Windows** 启动 Docker Desktop，然后双击 [启动CoPage.cmd](启动CoPage.cmd)。两个服务都显示可用后，打开 [http://localhost:5173](http://localhost:5173)。
 
-**分终端启动** 先运行基础服务，再在独立终端启动后端与前端。
+**分终端启动** 以下后端命令适用于 Bash。手动使用 PowerShell 时按本地使用指南生成密钥。
 
 ```sh
 docker compose up -d
-mvn -f backend/pom.xml spring-boot:run
+COPAGE_CONFIG_MODE=local SERVER_ADDRESS=127.0.0.1 JWT_SECRET="$(node -p "require('node:crypto').randomBytes(32).toString('hex')")" mvn -f backend/pom.xml spring-boot:run
 npm --prefix frontend ci
 npm --prefix frontend run dev
 ```

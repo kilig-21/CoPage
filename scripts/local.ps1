@@ -287,6 +287,13 @@ try {
     if ($taskBackendEnvironment.SPRING_PROFILES_ACTIVE -ne 'default' -or $taskBackendEnvironment.FRONTEND_ORIGIN -ne 'http://localhost:5173') {
         throw '本入口只用于 default profile 和 http://localhost:5173；其它环境请按部署说明启动，未覆盖现有配置。'
     }
+    if ([string]::IsNullOrWhiteSpace($taskBackendEnvironment.JWT_SECRET)) {
+        $taskBytes = New-Object byte[] 32
+        $taskRandom = [Security.Cryptography.RandomNumberGenerator]::Create()
+        try { $taskRandom.GetBytes($taskBytes) } finally { $taskRandom.Dispose() }
+        $taskBackendEnvironment.JWT_SECRET = [Convert]::ToBase64String($taskBytes)
+    }
+    $taskBackendEnvironment.SERVER_ADDRESS = '127.0.0.1'
     $taskMysqlPort = Get-PublishedPort $taskConfig 'mysql' 3306
     $taskBackendEnvironment.MYSQL_URL = "jdbc:mysql://127.0.0.1:$taskMysqlPort/$($taskConfig.services.mysql.environment.MYSQL_DATABASE)?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false"
     $taskBackendEnvironment.REDIS_HOST = '127.0.0.1'; $taskBackendEnvironment.REDIS_PORT = Get-PublishedPort $taskConfig 'redis' 6379

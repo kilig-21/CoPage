@@ -25,7 +25,8 @@ services:
     environment:
       JAVA_TOOL_OPTIONS: "${COPAGE_JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=60.0}"
       SPRING_PROFILES_ACTIVE: prod
-      MYSQL_URL: jdbc:mysql://mysql:3306/collab_doc?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+      COPAGE_CONFIG_MODE: private-compose
+      MYSQL_URL: jdbc:mysql://mysql:3306/collab_doc?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&sslMode=DISABLED
       MYSQL_USER: copage
       MYSQL_PASSWORD: ${PROD_MYSQL_PASSWORD:?设置独立的应用数据库密码}
       REDIS_HOST: redis

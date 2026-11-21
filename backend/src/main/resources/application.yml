@@ -35,6 +35,7 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6380}
+      password: ${REDIS_PASSWORD:}
       timeout: 3s
       connect-timeout: 3s
   rabbitmq:
@@ -85,6 +86,7 @@ mybatis-plus:
       logic-not-delete-value: 0
 
 collab:
+  config-mode: ${COPAGE_CONFIG_MODE:strict}
   auth-limit:
     login:
       ip-limit: ${AUTH_LOGIN_IP_LIMIT:300}
@@ -110,8 +112,7 @@ collab:
     protected-doc-ids: ${HISTORY_PROTECTED_DOC_IDS:26,536,548}
   frontend-origin: ${FRONTEND_ORIGIN:http://localhost:5173}
   jwt:
-    # 仅本地开发默认值；部署时必须通过环境变量覆盖，并至少 32 字节。
-    secret: ${JWT_SECRET:change-this-local-development-secret-key-please}
+    secret: ${JWT_SECRET:}
     expire-hours: ${JWT_EXPIRE_HOURS:24}
   minio:
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
