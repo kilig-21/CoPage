@@ -1,3 +1,5 @@
+import { collabProtocols } from './protocol.js'
+
 /** 原生 WebSocket 包装：统一处理重连、消息 JSON 解析与显式关闭。 */
 export default class CollabSocket {
   constructor({ token, onOpen, onMessage, onClose, onError, isCurrent = () => true, onIdentityChanged }) {
@@ -49,8 +51,7 @@ export default class CollabSocket {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const origin = (import.meta.env?.VITE_BACKEND_WS_ORIGIN || `${protocol}//${window.location.host}`).replace(/\/$/, '')
-    const url = `${origin}/ws/collab?token=${encodeURIComponent(this.token)}`
-    const socket = new WebSocket(url)
+    const socket = new WebSocket(`${origin}/ws/collab`, collabProtocols(this.token))
     this.socket = socket
 
     socket.onopen = () => {

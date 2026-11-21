@@ -15,7 +15,13 @@ function browser(t) {
     static OPEN = 1
     static CONNECTING = 0
     static instances = []
-    constructor() { this.readyState = 0; this.sent = []; Socket.instances.push(this) }
+    constructor(url, protocols) {
+      this.url = url
+      this.protocols = protocols
+      this.readyState = 0
+      this.sent = []
+      Socket.instances.push(this)
+    }
     open() { this.readyState = 1; this.onopen?.() }
     send(message) { this.sent.push(JSON.parse(message)) }
     close() { this.readyState = 3; this.onclose?.() }
@@ -41,6 +47,16 @@ function browser(t) {
   return { Socket, timers, network, emit: type => events.dispatchEvent(new Event(type)),
     fireTimeout(id) { const fn = timers.get(id); timers.delete(id); fn() } }
 }
+
+test('WebSocket sends the bearer as a separate offered protocol and keeps the URL clean', t => {
+  const env = browser(t)
+  const socket = new CollabSocket({ token: 'head.claims.signature' })
+  socket.connect()
+  const transport = env.Socket.instances[0]
+  assert.equal(transport.url, 'ws://localhost:5173/ws/collab')
+  assert.deepEqual(transport.protocols, ['copage.v1', 'bearer.head.claims.signature'])
+  socket.close()
+})
 
 test('原页面身份失效后不能首次连接，也不靠联网事件重新绑定新账号', t => {
   const env=browser(t);let current=false,invalidated=0

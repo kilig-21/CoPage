@@ -30,10 +30,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // 除注册、登录外，所有 /api/** 都必须带 token（见 docs/接口约定.md）。
-        // /ws/** 不走 MVC 拦截器，WebSocket 的鉴权在握手阶段用 ?token= 完成。
+        // Logout validates and revokes the bearer in the controller.
         registry.addInterceptor(jwtInterceptor)
                 .addPathPatterns("/api/**")
-                .excludePathPatterns("/api/auth/**", "/ws/**");
+                .excludePathPatterns("/api/auth/register", "/api/auth/login", "/api/auth/logout");
     }
 }

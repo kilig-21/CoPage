@@ -21,6 +21,7 @@ public class WsSessionRegistry {
 
     private final ConcurrentMap<String, SessionInfo> bySessionId = new ConcurrentHashMap<>();
     private final ConcurrentMap<Long, ConcurrentMap<String, SessionInfo>> byDocumentId = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, WebSocketSession> connections = new ConcurrentHashMap<>();
 
     /** 同一连接只保留一个发送队列；短锁仅用于初始化，真正发送不得持有此锁。 */
     static ConcurrentWebSocketSessionDecorator sendSessionFor(WebSocketSession session) {
@@ -66,8 +67,18 @@ public class WsSessionRegistry {
         return sessions == null ? List.of() : new ArrayList<>(sessions.values());
     }
 
-    public List<SessionInfo> sessionsOfUser(long userId) {
-        return bySessionId.values().stream().filter(info -> info.userId() == userId).toList();
+    public void trackConnection(WebSocketSession session) {
+        connections.put(session.getId(), sendSessionFor(session));
+    }
+
+    public List<WebSocketSession> connectionsOfUser(long userId) {
+        return connections.values().stream()
+                .filter(session -> Long.valueOf(userId).equals(session.getAttributes().get(WsHandshakeInterceptor.USER_ID)))
+                .toList();
+    }
+
+    public void untrackConnection(WebSocketSession session) {
+        connections.remove(session.getId());
     }
 
     public void unregister(WebSocketSession session) {

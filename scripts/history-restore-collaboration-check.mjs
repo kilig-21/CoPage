@@ -1,3 +1,4 @@
+import { collabProtocols } from '../frontend/src/ws/protocol.js'
 import assert from 'node:assert/strict'
 import { randomBytes, randomUUID } from 'node:crypto'
 import Delta from '../frontend/node_modules/quill-delta/dist/Delta.js'
@@ -70,7 +71,7 @@ export async function runHistoryRestoreCollaborationCheck({ docker, source, sql,
       const base = `/doc/${id}/history`
       await api(ports[0], owner.token, `/doc/${id}/collaborators`, 'POST', { username: credentials.username, permission: 2 })
       const ownerClient = randomUUID()
-      const channel = await openRecoveryChannel({ url: `ws://127.0.0.1:${ports[0]}/ws/collab?token=${encodeURIComponent(owner.token)}`,
+      const channel = await openRecoveryChannel({ url: `ws://127.0.0.1:${ports[0]}/ws/collab`, token: owner.token,
         docId: id, clientId: ownerClient, phase: 'test' })
       sockets.push(channel.ws)
       const image = { image: 'https://images.example.invalid/history-fixture.png' }
@@ -96,7 +97,7 @@ export async function runHistoryRestoreCollaborationCheck({ docker, source, sql,
       client = new CollabClient({ docId: id, clientId: peerClient, Delta,
         onSync: content => { if (content) local = new Delta(content) },
         onRemote: operation => { local = local.compose(operation) }, onError: message => failures.push(message) })
-      const ws = new WebSocket(`ws://127.0.0.1:${ports[1]}/ws/collab?token=${encodeURIComponent(peer.token)}`)
+      const ws = new WebSocket(`ws://127.0.0.1:${ports[1]}/ws/collab`, collabProtocols(peer.token))
       sockets.push(ws)
       ws.addEventListener('message', event => {
         try {

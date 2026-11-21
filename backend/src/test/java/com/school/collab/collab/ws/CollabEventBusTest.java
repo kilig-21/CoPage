@@ -28,14 +28,14 @@ class CollabEventBusTest {
     private final DocumentService documents = mock(DocumentService.class);
     private final AccountSessions accounts = mock(AccountSessions.class);
     private final CollabEventBus bus = new CollabEventBus(redis, objectMapper, registry, sender, documents, accounts);
-    @BeforeEach void validSessions() { when(accounts.isCurrent(anyLong(),anyLong())).thenReturn(true); }
+    @BeforeEach void validSessions() { when(accounts.isCurrent(anyLong(), anyLong(), anyString())).thenReturn(true); }
 
     @Test
     void lostPasswordNotificationStillCannotLeakDocumentToOldCredential() throws Exception {
         WebSocketSession old=session();
-        when(old.getAttributes()).thenReturn(java.util.Map.of(WsHandshakeInterceptor.CREDENTIAL_VERSION,0L, WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE));
+        when(old.getAttributes()).thenReturn(java.util.Map.of(WsHandshakeInterceptor.CREDENTIAL_VERSION,0L, WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE, WsHandshakeInterceptor.SESSION_KEY, "session-key"));
         when(registry.sessionsOf(9L)).thenReturn(List.of(new WsSessionRegistry.SessionInfo("old",old,9L,"a",1L,"owner")));
-        when(accounts.isCurrent(1L,0L)).thenReturn(false);
+        when(accounts.isCurrent(1L,0L,"session-key")).thenReturn(false);
         JsonNode payload=objectMapper.readTree("{\"type\":\"op\",\"docId\":9,\"revision\":2}");
         deliver(payload);
         verify(sender,never()).send(old,payload);
@@ -46,9 +46,9 @@ class CollabEventBusTest {
     @Test
     void delayedPasswordNotificationDoesNotCloseCurrentCredential() throws Exception {
         WebSocketSession current=session();
-        when(current.getAttributes()).thenReturn(java.util.Map.of(WsHandshakeInterceptor.CREDENTIAL_VERSION,4L, WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE));
-        when(registry.sessionsOfUser(1L)).thenReturn(List.of(new WsSessionRegistry.SessionInfo("new",current,9L,"a",1L,"owner")));
-        when(accounts.isCurrent(1L,4L)).thenReturn(true);
+        when(current.getAttributes()).thenReturn(java.util.Map.of(WsHandshakeInterceptor.CREDENTIAL_VERSION,4L, WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE, WsHandshakeInterceptor.SESSION_KEY, "session-key"));
+        when(registry.connectionsOfUser(1L)).thenReturn(List.of(current));
+        when(accounts.isCurrent(1L,4L,"session-key")).thenReturn(true);
         bus.publishAccountChanged(1);
         var body=ArgumentCaptor.forClass(Object.class);
         verify(redis).convertAndSend(eq(CollabEventBus.CHANNEL),body.capture());
@@ -177,7 +177,7 @@ class CollabEventBusTest {
     private WebSocketSession session() {
         var session = mock(WebSocketSession.class);
         when(session.getAttributes()).thenReturn(java.util.Map.of(
-                WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE));
+                WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE, WsHandshakeInterceptor.SESSION_KEY, "session-key"));
         return session;
     }
 
@@ -195,7 +195,7 @@ class CollabEventBusTest {
         verify(sender, never()).send(expired, payload);
         verify(sender).send(eq(expired), argThat(message -> message.path("code").asInt() == 401));
         verify(expired).close(org.springframework.web.socket.CloseStatus.POLICY_VIOLATION);
-        verify(accounts, never()).isCurrent(eq(1L), anyLong());
+        verify(accounts, never()).isCurrent(eq(1L), anyLong(), anyString());
         verify(documents, never()).permissionFor(9L, 1L);
         verify(sender).send(current, payload);
     }

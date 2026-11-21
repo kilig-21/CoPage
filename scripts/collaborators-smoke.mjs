@@ -1,3 +1,4 @@
+import { collabProtocols } from '../frontend/src/ws/protocol.js'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 
@@ -20,7 +21,7 @@ async function api(port, token, path, method = 'GET', body, status = 200) {
 }
 
 async function connect(port, token, clientId) {
-  const socket = new WebSocket(`ws://localhost:${port}/ws/collab?token=${encodeURIComponent(token)}`)
+  const socket = new WebSocket(`ws://localhost:${port}/ws/collab`, collabProtocols(token))
   sockets.push(socket)
   const messages = []
   socket.addEventListener('message', (event) => messages.push(JSON.parse(event.data)))

@@ -1,3 +1,4 @@
+import { collabProtocols } from '../frontend/src/ws/protocol.js'
 import assert from 'node:assert/strict'
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { createServer } from 'node:http'
@@ -36,7 +37,7 @@ function shortToken(token, seconds) {
   return { token: header + '.' + next + '.' + createHmac(algorithm, secret).update(header + '.' + next).digest('base64url'), expires }
 }
 async function connect(port, token, clientId, lastRevision = 0) {
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/collab?token=${encodeURIComponent(token)}`)
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/collab`, collabProtocols(token))
   sockets.push(ws)
   const messages = []
   let closed = false
@@ -65,7 +66,7 @@ async function connect(port, token, clientId, lastRevision = 0) {
   } }
 }
 async function handshakeDenied(port, token) {
-  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/collab?token=${encodeURIComponent(token)}`)
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/collab`, collabProtocols(token))
   sockets.push(ws)
   return await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('过期握手没有结束')), 15000)

@@ -56,10 +56,24 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
     }
 
     @Override
+    public void afterConnectionEstablished(WebSocketSession session) throws IOException {
+        registry.trackConnection(session);
+        try {
+            // Close the race between credential validation during upgrade and registration.
+            Object user = session.getAttributes().get(WsHandshakeInterceptor.USER_ID);
+            if (!(user instanceof Long id) || !WsHandshakeInterceptor.sessionCurrent(session, id, accounts)) {
+                session.close(CloseStatus.POLICY_VIOLATION);
+            }
+        } catch (RuntimeException unavailable) {
+            session.close(CloseStatus.SERVER_ERROR);
+        }
+    }
+
+    @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         try {
             Object user = session.getAttributes().get(WsHandshakeInterceptor.USER_ID);
-            if (!(user instanceof Long id) || !WsHandshakeInterceptor.tokenUnexpired(session) || !accounts.isCurrent(id, WsHandshakeInterceptor.credentialVersion(session))) {
+            if (!(user instanceof Long id) || !WsHandshakeInterceptor.sessionCurrent(session, id, accounts)) {
                 sendError(session, 401, "登录已失效，请重新登录；未确认内容仍保留");
                 try { session.close(CloseStatus.POLICY_VIOLATION); } catch (IOException ignored) { }
                 return;
@@ -88,6 +102,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        registry.untrackConnection(session);
         WsSessionRegistry.SessionInfo info = registry.current(session);
         registry.unregister(session);
         if (info != null) {

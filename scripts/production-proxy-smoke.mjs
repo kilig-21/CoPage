@@ -1,3 +1,4 @@
+import { collabProtocols } from '../frontend/src/ws/protocol.js'
 import assert from 'node:assert/strict'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { mkdtempSync, readFileSync, writeFileSync, unlinkSync, rmdirSync } from 'node:fs'
@@ -122,13 +123,14 @@ async function checkClient(port) {
     } })
     assert.equal(preflight.status, status)
     if (status === 200) assert.equal(preflight.headers['access-control-allow-origin'], origin)
-    const upgrade = await request('/ws/collab?token=' + encodeURIComponent(token), { headers: {
+    const upgrade = await request('/ws/collab', { headers: {
       Origin: origin, Upgrade: 'websocket', Connection: 'Upgrade', 'Sec-WebSocket-Version': '13',
       'Sec-WebSocket-Key': randomBytes(16).toString('base64'),
+      'Sec-WebSocket-Protocol': collabProtocols(token).join(', '),
     } })
     assert.equal(upgrade.status, status === 200 ? 101 : 403)
   }
-  const socket = new WebSocket(`wss://localhost:${port}/ws/collab?token=${encodeURIComponent(token)}`)
+  const socket = new WebSocket(`wss://localhost:${port}/ws/collab`, collabProtocols(token))
   const messages = []
   socket.addEventListener('message', event => messages.push(JSON.parse(event.data)))
   const wait = async predicate => {

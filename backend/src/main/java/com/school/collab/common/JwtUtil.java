@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.UUID;
 
 /** JWT通过签名与有效期验证；账号凭据版本由AccountSessions对照数据库校验。 */
 public final class JwtUtil {
@@ -23,7 +24,7 @@ public final class JwtUtil {
     }
     private static String buildToken(Long id,String username,String nickname,Long version,String secret,Duration duration) {
         Instant now=Instant.now();
-        var builder=Jwts.builder().subject(String.valueOf(id)).claim("username",username).claim("nickname",nickname)
+        var builder=Jwts.builder().id(UUID.randomUUID().toString()).subject(String.valueOf(id)).claim("username",username).claim("nickname",nickname)
                 .issuedAt(Date.from(now)).expiration(Date.from(now.plus(duration)));
         if(version!=null) builder.claim("credentialVersion",version);
         return builder.signWith(signingKey(secret)).compact();

@@ -80,7 +80,8 @@ const authLimitSmoke = process.argv.includes('--auth-limit-smoke')
 const healthProbeSmoke = process.argv.includes('--health-probe-smoke')
 const resourcesSmoke = process.argv.includes('--resources-smoke')
 const configGuardSmoke = process.argv.includes('--config-guard-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke || authLimitSmoke || healthProbeSmoke || resourcesSmoke || configGuardSmoke
+const sessionRevocationSmoke = process.argv.includes('--session-revocation-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke || authLimitSmoke || healthProbeSmoke || resourcesSmoke || configGuardSmoke || sessionRevocationSmoke
 const runtimeImages = process.argv.filter(value => value.startsWith('--runtime-image='))
 assert.ok(runtimeImages.length <= 1, '预构建运行时镜像只能指定一次')
 const runtimeImage = runtimeImages[0]?.slice('--runtime-image='.length)
@@ -236,6 +237,10 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       if (configGuardSmoke) {
         const { runProductionConfigGuardCheck } = await import('./production-config-guard-smoke.mjs')
         await runProductionConfigGuardCheck({ source: qaDocker, env: qaEnv, port: ports[0], username, password })
+      }
+      if (sessionRevocationSmoke) {
+        const { runSessionRevocationCheck } = await import('./session-revocation-smoke.mjs')
+        await runSessionRevocationCheck({ ports, username, password, source: qaDocker })
       }
     } else {
       // 在临时库单独应用开发种子，核对拆分后本地演示仍可初始化。

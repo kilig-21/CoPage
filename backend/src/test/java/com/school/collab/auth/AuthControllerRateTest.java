@@ -15,7 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AuthControllerRateTest {
     private final AuthService accounts = mock(AuthService.class);
     private final AuthRateLimiter limiter = mock(AuthRateLimiter.class);
-    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new AuthController(accounts, limiter))
+    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new AuthController(accounts, limiter, mock(AccountSessions.class)))
             .setControllerAdvice(new GlobalExceptionHandler()).build();
 
     @Test

@@ -1,3 +1,4 @@
+import { collabProtocols } from '../frontend/src/ws/protocol.js'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { joinForSmoke } from './smoke-join.mjs'
@@ -33,7 +34,7 @@ async function request(port, path, method = 'GET', body) {
 
 function openSocket(port) {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws/collab?token=${encodeURIComponent(token)}`)
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws/collab`, collabProtocols(token))
     const messages = []
     const listeners = new Set()
     let opened = false

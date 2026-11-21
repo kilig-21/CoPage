@@ -43,10 +43,11 @@ server {
         proxy_set_header X-Forwarded-For $remote_addr;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $copage_connection_upgrade;
+        proxy_set_header Sec-WebSocket-Protocol $http_sec_websocket_protocol;
         proxy_read_timeout 120s;
         proxy_send_timeout 120s;
         proxy_buffering off;
-        # Nginx 错误日志可能附完整 request/query。此位置仅保留脱敏访问日志。
+        # 保持协同入口仅有脱敏访问日志，避免记录握手凭据。
         error_log /dev/null;
     }
 

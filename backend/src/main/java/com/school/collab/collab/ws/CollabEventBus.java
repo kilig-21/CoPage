@@ -14,6 +14,7 @@ import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
+import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
 import java.util.UUID;
@@ -63,8 +64,8 @@ public class CollabEventBus implements MessageListener {
             JsonNode envelope = objectMapper.readTree(message.getBody());
             if ("account_changed".equals(envelope.path("payload").path("type").asText())) {
                 long userId = envelope.path("userId").asLong();
-                if (userId > 0) for (var target : registry.sessionsOfUser(userId)) {
-                    try { rejectExpired(target); } catch (IOException | IllegalStateException ignored) { }
+                if (userId > 0) for (var target : registry.connectionsOfUser(userId)) {
+                    try { rejectExpired(target, userId); } catch (IOException | IllegalStateException ignored) { }
                 }
                 return;
             }
@@ -84,7 +85,7 @@ public class CollabEventBus implements MessageListener {
                 }
                 try {
                     // 每次转发前以 MySQL 为准，不能依赖异步权限事件顺序或失效的会话权限。
-                    if (rejectExpired(target)) continue;
+                    if (rejectExpired(target.session(), target.userId())) continue;
                     int permission = currentPermission(docId, target.userId());
                     sender.send(target.session(), objectMapper.createObjectNode()
                             .put("type", "permission").put("docId", docId).put("permission", permission));
@@ -109,12 +110,11 @@ public class CollabEventBus implements MessageListener {
         redis.convertAndSend(CHANNEL, envelope.toString());
     }
 
-    private boolean rejectExpired(WsSessionRegistry.SessionInfo target) throws IOException {
-        if (WsHandshakeInterceptor.tokenUnexpired(target.session())
-                && accounts.isCurrent(target.userId(), WsHandshakeInterceptor.credentialVersion(target.session()))) return false;
-        try { sender.send(target.session(), objectMapper.createObjectNode().put("type", "error").put("code", 401)
+    private boolean rejectExpired(WebSocketSession session, long userId) throws IOException {
+        if (WsHandshakeInterceptor.sessionCurrent(session, userId, accounts)) return false;
+        try { sender.send(session, objectMapper.createObjectNode().put("type", "error").put("code", 401)
                 .put("message", "登录已失效，请重新登录；未确认内容仍保留")); }
-        finally { target.session().close(CloseStatus.POLICY_VIOLATION); }
+        finally { session.close(CloseStatus.POLICY_VIOLATION); }
         return true;
     }
 

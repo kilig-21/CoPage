@@ -37,7 +37,7 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, p
     return payload.data
   }
   const connect = (p, docId, clientId, lastRevision = 0, phase = 'source') => openRecoveryChannel({
-    url: `ws://127.0.0.1:${p}/ws/collab?token=${encodeURIComponent(token)}`,
+    url: `ws://127.0.0.1:${p}/ws/collab`, token: token,
     docId, clientId, lastRevision, phase,
   })
   const readSql = (stack, query) => stack([

@@ -11,7 +11,7 @@ class Socket extends EventTarget {
   send(value) { const message = JSON.parse(value); this.sent.push(message); this.reply(message, this) }
   close() { if (this.readyState === 3) return; this.readyState = 3; this.emit('close', { code: 1000 }) }
 }
-const options = socket => ({ url: 'ws://fixture.invalid/?token=PRIVATE_TOKEN', docId: 9, clientId: 'client', phase: 'test', createSocket: () => socket, timeoutMs: 100 })
+const options = socket => ({ url: 'ws://fixture.invalid/ws/collab', token: 'PRIVATE_TOKEN', docId: 9, clientId: 'client', phase: 'test', createSocket: () => socket, timeoutMs: 100 })
 const sync = (message, socket) => { if (message.type === 'join') socket.message({ type: 'sync', syncId: message.syncId, revision: 20 }) }
 
 test('同步和确认在send中立即到达时不丢响应；旧ack不能确认下一条操作', async () => {

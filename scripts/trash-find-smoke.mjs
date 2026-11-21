@@ -58,7 +58,7 @@ async function prepare() {
       await api('testA', '/doc/' + record.id + '/collaborators', 'POST', { username: 'testB', permission: 1 })
       let channel
       try {
-        channel = await openRecoveryChannel({ url: origin.replace(/^http/, 'ws') + '/ws/collab?token=' + encodeURIComponent(accounts.testA.token),
+        channel = await openRecoveryChannel({ url: origin.replace(/^http/, 'ws') + '/ws/collab', token: accounts.testA.token,
           docId: record.id, clientId: randomUUID(), lastRevision: 0, phase: 'test' })
         record.content = { ops: [{ insert: '恢复查找验收|' + record.content.ops[0].insert }] }
         record.hash = hash(record.content); record.revision = 1; save()

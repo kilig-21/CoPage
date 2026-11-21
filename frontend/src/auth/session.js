@@ -46,6 +46,21 @@ export function logoutSession(storage) {
   catch { return { usernameCleared: false } }
 }
 
+export async function revokeSessionAndClearLocal(storage, revoke, expectedIdentity = captureLoginIdentity(storage)) {
+  let serverConfirmed = false
+  if (expectedIdentity.token) {
+    try {
+      const result = await revoke(expectedIdentity.token)
+      serverConfirmed = result?.code === 0
+    } catch (error) {
+      serverConfirmed = error?.code === 401
+    }
+  }
+  const current = captureLoginIdentity(storage)
+  if (current.token !== expectedIdentity.token || current.username !== expectedIdentity.username) return null
+  return { ...logoutSession(storage), serverConfirmed }
+}
+
 // 只处理当前请求所属的会话，避免迟到的 401 退出刚登录的新账号；草稿键保持原样。
 export function expireSession(storage, requestToken, notify) {
   if (!requestToken || storage.getItem('collab-token') !== requestToken) return false

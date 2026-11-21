@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
+import { collabProtocols } from '../frontend/src/ws/protocol.js'
 
 const types = new Set(['sync', 'op', 'ack', 'error', 'permission', 'presence', 'cursor', 'pong'])
 const phases = new Set(['source', 'restored-readonly', 'restored-owner', 'test'])
 
 // 验证器专用；诊断只含阶段/文档/协议元数据，不输出URL、令牌或正文。
-export async function openRecoveryChannel({ url, docId, clientId, lastRevision = 0, phase = 'source',
-  timeoutMs = 20_000, createSocket = value => new WebSocket(value) }) {
+export async function openRecoveryChannel({ url, token, docId, clientId, lastRevision = 0, phase = 'source',
+  timeoutMs = 20_000, createSocket = (value, protocols) => new WebSocket(value, protocols) }) {
   if (!Number.isSafeInteger(docId) || docId <= 0 || !phases.has(phase)) throw new Error('恢复验证上下文无效')
   const messages = [], waiters = new Set()
   let terminal, opened = false, openDone, openFail
@@ -18,7 +19,7 @@ export async function openRecoveryChannel({ url, docId, clientId, lastRevision =
     return new Error(`恢复验证 ${phase}/${stage} doc=${docId}: ${reason}; recent=${JSON.stringify(recent)}`)
   }
   let ws
-  try { ws = createSocket(url) } catch { throw failure('handshake', '连接创建失败') }
+  try { ws = createSocket(url, collabProtocols(token)) } catch { throw failure('handshake', '连接创建失败') }
   const abort = reason => {
     terminal ??= reason
     if (!opened) openFail(terminal)

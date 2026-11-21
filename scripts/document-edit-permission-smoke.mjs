@@ -1,3 +1,4 @@
+import { collabProtocols } from '../frontend/src/ws/protocol.js'
 import assert from 'node:assert/strict'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { spawn } from 'node:child_process'
@@ -52,7 +53,7 @@ function holdDocument({ mysqlId, docId, cwd, env }) {
 // 记录消息及关闭码；拒绝必须有403或明确撤权通知，不能以断开/超时替代。
 async function openChannel({ port, token, docId, clientId, lastRevision }) {
   let ws
-  try { ws = new WebSocket('ws://127.0.0.1:' + port + '/ws/collab?token=' + encodeURIComponent(token)) }
+  try { ws = new WebSocket('ws://127.0.0.1:' + port + '/ws/collab', collabProtocols(token)) }
   catch { throw Error('隔离 WS 创建失败') }
   const messages = []
   let opened = false, closed = false, closeCode, failure

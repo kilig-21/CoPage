@@ -1,3 +1,4 @@
+import { collabProtocols } from '../frontend/src/ws/protocol.js'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import Delta from '../frontend/node_modules/quill-delta/dist/Delta.js'
@@ -15,7 +16,7 @@ async function api(path,method='GET',body,status=200) {
   const result=await response.json(); assert.equal(response.status,status,`${path}: ${result.message}`); return result.data
 }
 async function connect(docId,clientId,onMessage) {
-  const ws=new WebSocket(origin.replace(/^http/,'ws')+'/ws/collab?token='+encodeURIComponent(token));sockets.push(ws)
+  const ws=new WebSocket(origin.replace(/^http/,'ws')+'/ws/collab', collabProtocols(token));sockets.push(ws)
   const messages=[];ws.addEventListener('message',e=>{const m=JSON.parse(e.data);messages.push(m);onMessage?.(m)})
   await new Promise((resolve,reject)=>{ws.addEventListener('open',resolve,{once:true});ws.addEventListener('error',reject,{once:true})})
   return {ws,messages,send:message=>{ws.send(JSON.stringify(message));return true}}

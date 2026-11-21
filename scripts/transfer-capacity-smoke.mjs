@@ -34,7 +34,7 @@ async function keep(auth, title) {
   records.push(record); return record
 }
 async function edit(record, ops) {
-  channel = await openRecoveryChannel({ url: origin.replace(/^http/, 'ws') + '/ws/collab?token=' + encodeURIComponent(record.auth.token),
+  channel = await openRecoveryChannel({ url: origin.replace(/^http/, 'ws') + '/ws/collab', token: record.auth.token,
     docId: record.id, clientId: randomUUID(), lastRevision: record.revision, phase: 'test' })
   const ack = await channel.submit(randomUUID(), record.revision, { ops })
   assert.equal(ack.revision, record.revision + 1)

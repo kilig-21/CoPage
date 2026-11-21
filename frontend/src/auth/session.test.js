@@ -1,6 +1,30 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { safeReturnPath, captureLoginIdentity, saveSession, logoutSession, expireSession, subscribeSessionChanges, createReconnectSessionCheck } from './session.js'
+import { safeReturnPath, captureLoginIdentity, saveSession, logoutSession, revokeSessionAndClearLocal, expireSession, subscribeSessionChanges, createReconnectSessionCheck } from './session.js'
+
+test('logout clears only the captured session and distinguishes a server outage', async () => {
+  const data = new Map([['collab-token', 'old'], ['collab-user', 'owner'], ['draft-key', 'saved']])
+  const storage = { getItem: key => data.get(key), removeItem: key => data.delete(key) }
+  const attempted = []
+  const result = await revokeSessionAndClearLocal(storage, async token => {
+    attempted.push(token, data.get('collab-token'))
+    throw new Error('offline')
+  })
+  assert.deepEqual(attempted, ['old', 'old'])
+  assert.deepEqual(result, { usernameCleared: true, serverConfirmed: false })
+  assert.deepEqual([...data], [['draft-key', 'saved']])
+})
+
+test('logout leaves a session that a different tab saved while revocation was in flight', async () => {
+  const data = new Map([['collab-token', 'old'], ['collab-user', 'owner']])
+  const storage = { getItem: key => data.get(key), removeItem: key => data.delete(key) }
+  const result = await revokeSessionAndClearLocal(storage, async () => {
+    data.set('collab-token', 'new')
+    return { code: 0, data: null }
+  })
+  assert.equal(result, null)
+  assert.equal(data.get('collab-token'), 'new')
+})
 
 test('login only returns to supported internal pages', () => {
   assert.equal(safeReturnPath('/docs/60'), '/docs/60')

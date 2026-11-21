@@ -1,3 +1,4 @@
+import { collabProtocols } from '../frontend/src/ws/protocol.js'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 
@@ -22,7 +23,7 @@ try {
   const another=await api('/doc','POST',{templateId:template.id});created.push(another.id)
   assert.equal(another.title,template.title)
   assert.deepEqual((await api('/doc/'+doc.id)).content,template.content)
-  socket=new WebSocket(origin.replace(/^http/,'ws')+'/ws/collab?token='+encodeURIComponent(token))
+  socket=new WebSocket(origin.replace(/^http/,'ws')+'/ws/collab', collabProtocols(token))
   const messages=[];socket.addEventListener('message',e=>messages.push(JSON.parse(e.data)))
   await new Promise((resolve,reject)=>{socket.addEventListener('open',resolve,{once:true});socket.addEventListener('error',reject,{once:true})})
   const wait=async predicate=>{const deadline=Date.now()+15000;while(Date.now()<deadline){const m=messages.find(predicate);if(m)return m;await new Promise(r=>setTimeout(r,20))}throw new Error('WS timeout')}

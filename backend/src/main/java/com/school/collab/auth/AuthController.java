@@ -3,6 +3,7 @@ package com.school.collab.auth;
 import com.school.collab.common.BizException;
 import com.school.collab.common.ErrorCode;
 import com.school.collab.common.Result;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -12,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,10 +22,23 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
     private final AuthService authService;
     private final AuthRateLimiter rateLimiter;
+    private final AccountSessions sessions;
 
-    public AuthController(AuthService authService, AuthRateLimiter rateLimiter) {
+    public AuthController(AuthService authService, AuthRateLimiter rateLimiter, AccountSessions sessions) {
         this.authService = authService;
         this.rateLimiter = rateLimiter;
+        this.sessions = sessions;
+    }
+
+    @PostMapping("/logout")
+    public Result<Void> logout(@RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String header) {
+        if (header == null || !header.startsWith("Bearer ")) throw new BizException(ErrorCode.UNAUTHORIZED);
+        try {
+            sessions.revoke(header.substring(7));
+            return Result.ok(null);
+        } catch (JwtException | IllegalArgumentException exception) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
     }
 
     @PostMapping("/register")

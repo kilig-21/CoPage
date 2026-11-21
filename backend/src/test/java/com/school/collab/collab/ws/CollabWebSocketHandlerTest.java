@@ -35,10 +35,10 @@ class CollabWebSocketHandlerTest {
     private final CollabEventBus eventBus = mock(CollabEventBus.class);
     private final RedisPresenceStore presence = mock(RedisPresenceStore.class);
     private final AccountSessions accounts = mock(AccountSessions.class);
-    @BeforeEach void validSessions() { when(accounts.isCurrent(anyLong(),anyLong())).thenReturn(true); }
+    @BeforeEach void validSessions() { when(accounts.isCurrent(anyLong(), anyLong(), anyString())).thenReturn(true); }
     private WebSocketSession session() {
         var session=mock(WebSocketSession.class);
-        when(session.getAttributes()).thenReturn(Map.of(WsHandshakeInterceptor.USER_ID,2L,WsHandshakeInterceptor.NICKNAME,"testB", WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE));
+        when(session.getAttributes()).thenReturn(Map.of(WsHandshakeInterceptor.USER_ID,2L,WsHandshakeInterceptor.NICKNAME,"testB", WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE, WsHandshakeInterceptor.SESSION_KEY, "session-key"));
         return session;
     }
     private final CollabWebSocketHandler handler =
@@ -68,7 +68,7 @@ class CollabWebSocketHandlerTest {
     }
     @Test
     void revokedCredentialCannotSendAnyCollaborationMessage() throws Exception {
-        when(accounts.isCurrent(2L,0L)).thenReturn(false);
+        when(accounts.isCurrent(2L,0L,"session-key")).thenReturn(false);
         for(String type:List.of("join","op","history_request","cursor","ping")) {
             var session=session();
             handler.handleTextMessage(session,new TextMessage("{\"type\":\""+type+"\"}"));
@@ -98,7 +98,7 @@ class CollabWebSocketHandlerTest {
     void unsupportedPendingOperationCannotEnterReconnectRecovery() throws Exception {
         WebSocketSession session = session();
         when(session.getAttributes()).thenReturn(Map.of(
-                WsHandshakeInterceptor.USER_ID, 2L, WsHandshakeInterceptor.NICKNAME, "testB", WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE));
+                WsHandshakeInterceptor.USER_ID, 2L, WsHandshakeInterceptor.NICKNAME, "testB", WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE, WsHandshakeInterceptor.SESSION_KEY, "session-key"));
         handler.handleTextMessage(session, new TextMessage("""
                 {"type":"join","docId":5,"clientId":"test-client","lastRevision":0,"syncId":"sync-1",
                  "pendingOpId":"op-1","pendingBaseRevision":0,
@@ -114,7 +114,7 @@ class CollabWebSocketHandlerTest {
     void joinRegistersAndSendsCatchupInsideTheServiceCallback() throws Exception {
         WebSocketSession session = session();
         when(session.getAttributes()).thenReturn(Map.of(
-                WsHandshakeInterceptor.USER_ID, 2L, WsHandshakeInterceptor.NICKNAME, "testB", WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE));
+                WsHandshakeInterceptor.USER_ID, 2L, WsHandshakeInterceptor.NICKNAME, "testB", WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE, WsHandshakeInterceptor.SESSION_KEY, "session-key"));
         WsSessionRegistry.SessionInfo info = new WsSessionRegistry.SessionInfo(
                 "session-1", session, 5L, "test-client", 2L, "testB");
         when(registry.register(session, 5L, "test-client", 2L, "testB")).thenReturn(info);
@@ -151,7 +151,7 @@ class CollabWebSocketHandlerTest {
         WebSocketSession session = session();
         when(session.getAttributes()).thenReturn(Map.of(
                 WsHandshakeInterceptor.USER_ID, 2L,
-                WsHandshakeInterceptor.NICKNAME, "测试用户 B", WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE));
+                WsHandshakeInterceptor.NICKNAME, "测试用户 B", WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE, WsHandshakeInterceptor.SESSION_KEY, "session-key"));
         when(documents.permissionFor(5L, 2L)).thenThrow(new BizException(ErrorCode.FORBIDDEN));
 
         handler.handleTextMessage(session,

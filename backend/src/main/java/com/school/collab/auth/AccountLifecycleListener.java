@@ -4,6 +4,7 @@ import com.school.collab.collab.ws.CollabEventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.context.event.EventListener;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 @Component
@@ -13,9 +14,16 @@ public class AccountLifecycleListener {
     public AccountLifecycleListener(CollabEventBus events) { this.events=events; }
     @TransactionalEventListener
     public void passwordChanged(AccountService.PasswordChanged event) {
-        try { events.publishAccountChanged(event.userId()); }
+        notifyConnections(event.userId());
+    }
+    @EventListener
+    public void sessionRevoked(AccountSessions.SessionRevoked event) {
+        notifyConnections(event.userId());
+    }
+    private void notifyConnections(long userId) {
+        try { events.publishAccountChanged(userId); }
         catch(RuntimeException exception) {
-            log.warn("密码已更新，旧连接通知暂时失败，后续请求及心跳仍校验当前凭据版本, userId={}",event.userId());
+            log.warn("旧连接通知暂时失败，后续请求及心跳仍校验会话, userId={}", userId);
         }
     }
 }

@@ -1,3 +1,4 @@
+import { collabProtocols } from '../frontend/src/ws/protocol.js'
 import assert from 'node:assert/strict'
 import { randomBytes, randomUUID } from 'node:crypto'
 
@@ -23,7 +24,7 @@ async function api(port, token, path, method = 'GET', body, status = 200) {
 }
 const credentialVersion = token => JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).credentialVersion
 async function connect(port, token, clientId, revision = 0) {
-  const ws = new WebSocket(`ws://localhost:${port}/ws/collab?token=${encodeURIComponent(token)}`)
+  const ws = new WebSocket(`ws://localhost:${port}/ws/collab`, collabProtocols(token))
   sockets.push(ws)
   const messages = []
   let closed = false
@@ -48,7 +49,7 @@ async function connect(port, token, clientId, revision = 0) {
   } }
 }
 async function rejectedHandshake(port, token) {
-  const ws = new WebSocket(`ws://localhost:${port}/ws/collab?token=${encodeURIComponent(token)}`)
+  const ws = new WebSocket(`ws://localhost:${port}/ws/collab`, collabProtocols(token))
   sockets.push(ws)
   return await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('旧WS握手未得到拒绝')), 15000)

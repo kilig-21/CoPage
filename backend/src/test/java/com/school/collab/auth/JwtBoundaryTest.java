@@ -26,7 +26,9 @@ class JwtBoundaryTest {
         AccountRepository accounts=mock(AccountRepository.class);
         when(accounts.profile(12L)).thenReturn(Optional.of(new AccountRepository.Profile(12,"alice","Alice",null,0)));
         when(accounts.profile(13L)).thenReturn(Optional.of(new AccountRepository.Profile(13,"bob","Bob",null,0)));
-        return new AccountSessions(accounts,SECRET);
+        return new AccountSessions(accounts, SECRET,
+                mock(org.springframework.data.redis.core.StringRedisTemplate.class),
+                mock(org.springframework.context.ApplicationEventPublisher.class));
     }
 
     @Test
@@ -47,7 +49,7 @@ class JwtBoundaryTest {
     }
 
     @Test
-    void websocketRequiresValidQueryToken() {
+    void websocketRejectsQueryCredentialsAndRequiresTheBearerSubprotocol() {
         WsHandshakeInterceptor interceptor = new WsHandshakeInterceptor(sessions());
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/ws/collab");
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -55,13 +57,14 @@ class JwtBoundaryTest {
                 new ServletServerHttpResponse(response), null, new HashMap<>()));
         assertEquals(401, response.getStatus());
 
-        request.setQueryString("token=not-a-jwt");
+        request.setQueryString("token=" + JwtUtil.createToken(13L, "bob", SECRET, Duration.ofHours(1)));
         response = new MockHttpServletResponse();
         assertFalse(interceptor.beforeHandshake(new ServletServerHttpRequest(request),
                 new ServletServerHttpResponse(response), null, new HashMap<>()));
         assertEquals(401, response.getStatus());
 
-        request.setQueryString("token=" +
+        request.setQueryString(null);
+        request.addHeader("Sec-WebSocket-Protocol", "copage.v1, bearer." +
                 JwtUtil.createToken(13L, "bob", SECRET, Duration.ofHours(1)));
         response = new MockHttpServletResponse();
         Map<String, Object> attributes = new HashMap<>();
