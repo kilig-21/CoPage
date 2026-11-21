@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Form, Input, Typography } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
 import request from '../api/request'
-import UserGuide from '../components/UserGuide'
+import LazyUserGuide from '../components/LazyUserGuide'
 import PasswordInput from '../components/PasswordInput'
 import { captureLoginIdentity, safeReturnPath, saveSession } from '../auth/session'
 import { confirmRegistrationReply, isDefinitiveRegistrationRejection, parseLoginReply } from '../auth/replies'
@@ -13,6 +13,7 @@ export default function Login() {
   const [form] = Form.useForm()
   const [registering, setRegistering] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
+  const guideTrigger = useRef(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -122,9 +123,9 @@ export default function Login() {
         }}>
           {registering ? '已有账号？返回登录' : '没有账号？注册'}
         </Button>
-        <Button type="link" disabled={submitting} onClick={() => setShowGuide(true)}>使用指南</Button>
+        <Button ref={guideTrigger} type="link" aria-haspopup="dialog" disabled={submitting} onClick={() => setShowGuide(true)}>使用指南</Button>
       </Card>
-      {showGuide && <UserGuide onClose={() => setShowGuide(false)} />}
+      {showGuide && <LazyUserGuide triggerRef={guideTrigger} onClose={() => setShowGuide(false)} />}
     </main>
   )
 }

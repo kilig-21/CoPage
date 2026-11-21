@@ -7,7 +7,6 @@ import { usePageSession } from '../auth/PageSessionContext'
 import createDocument from '../api/createDocument'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import WorkspacePageHeading from '../components/WorkspacePageHeading'
-import UserGuide from '../components/UserGuide'
 import DocumentPreview from '../components/DocumentPreview'
 import { templateCategories as categories } from '../templates/categories'
 
@@ -15,7 +14,6 @@ const SIZE = 20
 export default function PersonalTemplates() {
   const pageSession = usePageSession()
   const request = pageSession.request
-  const [showGuide, setShowGuide] = useState(false)
   const [params, setParams] = useSearchParams()
   const location = useLocation()
   const sourcePath = location.pathname + location.search + location.hash
@@ -157,7 +155,7 @@ export default function PersonalTemplates() {
     setDetail(null); setDetailError(''); setDetailLoading(true); setDetailRefresh(n => n + 1)
   }
   return <Layout className="app-shell">
-    <WorkspaceHeader title="我的模板" onGuide={() => setShowGuide(true)} />
+    <WorkspaceHeader title="我的模板" guideSection="templates" />
     <main id="workspace-main" tabIndex={-1} className="content-wrap template-center personal-template-page">
       <WorkspacePageHeading title="复用自己的工作框架" description="在编辑器“更多”选择“保存为个人模板”，也可从“我的文档”保存。模板只供本人使用，使用时新建独立文档；修改资料不替换模板正文。">
         <Space wrap>
@@ -234,6 +232,5 @@ export default function PersonalTemplates() {
         <Input.TextArea aria-label="修改个人模板说明" maxLength={300} rows={3} showCount value={editing.description} disabled={busy || Boolean(uncertain)} onChange={e => setEditing(current => ({ ...current, description: e.target.value }))} />
       </>}
     </Modal>}
-    {showGuide && <UserGuide initialSection="templates" onClose={() => setShowGuide(false)} />}
   </Layout>
 }

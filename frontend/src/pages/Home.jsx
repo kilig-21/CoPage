@@ -6,7 +6,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import { usePageRequest } from '../auth/PageSessionContext'
 import { parseAccountProfile } from '../auth/accountProfile'
-import UserGuide from '../components/UserGuide'
 import WorkspaceOverview from '../components/WorkspaceOverview'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import AccountDraftsDrawer from '../components/AccountDraftsDrawer'
@@ -28,7 +27,6 @@ export default function Home() {
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
   const lifecycle = useDocumentLifecycle({ onConfirmed: () => setRefresh(value => value + 1) })
-  const [showGuide, setShowGuide] = useState(false)
   const [showDrafts, setShowDrafts] = useState(false)
   const draftsButton = useRef(null)
   function closeDrafts() {
@@ -59,7 +57,7 @@ export default function Home() {
     return () => controller.abort()
   }, [profileRefresh])
   return <Layout className="app-shell">
-    <WorkspaceHeader title="工作台" onGuide={() => setShowGuide(true)} />
+    <WorkspaceHeader title="工作台" />
     <main id="workspace-main" tabIndex={-1} className="content-wrap workbench">
       <div className="page-heading cp-workbench-heading"><div className="cp-workbench-intro">
         <Typography.Text className="cp-workbench-kicker">{profile ? <>你好，<span className="cp-workbench-account-name">{profile.nickname?.trim() || profile.username}</span></> : '你的资料与协作'}</Typography.Text>
@@ -112,7 +110,6 @@ export default function Home() {
         </aside>
       </div>
     </main>
-    {showGuide && <UserGuide onClose={() => setShowGuide(false)} />}
     {showDrafts && <AccountDraftsDrawer sourcePath={sourcePath} onClose={closeDrafts} />}
   </Layout>
 }

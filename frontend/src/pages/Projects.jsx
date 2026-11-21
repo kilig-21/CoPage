@@ -6,7 +6,6 @@ import { documentHref } from '../navigation/documents'
 import { usePageRequest } from '../auth/PageSessionContext'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import WorkspacePageHeading from '../components/WorkspacePageHeading'
-import UserGuide from '../components/UserGuide'
 import ProjectDocumentsModal from '../components/ProjectDocumentsModal'
 import useProjectOperation from '../api/useProjectOperation'
 import useProjectCreations from '../api/useProjectCreations'
@@ -50,7 +49,6 @@ function Fields({ value, context, ready, busy, uncertain, error, notice, onSave,
 export default function Projects() {
   const request = usePageRequest()
   const goTo = useNavigate()
-  const [showGuide, setShowGuide] = useState(false)
   const [params, setParams] = useSearchParams()
   const location = useLocation()
   const sourcePath = location.pathname + location.search + location.hash
@@ -230,7 +228,7 @@ export default function Projects() {
     })
   }
   return <Layout className="app-shell">
-    <WorkspaceHeader title="我的项目" onGuide={() => setShowGuide(true)} />
+    <WorkspaceHeader title="我的项目" guideSection="projects" />
     <main id="workspace-main" tabIndex={-1} className="content-wrap project-page">
       <WorkspacePageHeading title={context ? context.name + '的项目' : '把资料整理成项目'} description="整理个人或小组工作，关联保留同一份原文档。项目内只显示你有权限访问的资料。">
         <Space wrap>
@@ -368,6 +366,5 @@ export default function Projects() {
       error={operationError} onClose={() => setAdding(false)} onReview={review}
       onAdd={doc => mutate({ kind: 'add', projectId: current.id, groupId: current.groupId, docId: doc.id, title: doc.title }, config =>
         request.post('/projects/' + current.id + '/documents', { docId: doc.id }, config), () => setAdding(false))} />}
-    {showGuide && <UserGuide initialSection="projects" onClose={() => setShowGuide(false)} />}
   </Layout>
 }

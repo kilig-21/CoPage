@@ -6,7 +6,6 @@ import request from '../api/request'
 import { usePageSession } from '../auth/PageSessionContext'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import WorkspacePageHeading from '../components/WorkspacePageHeading'
-import UserGuide from '../components/UserGuide'
 import CreateGroupModal from '../components/CreateGroupModal'
 import PendingGroupCreations from '../components/PendingGroupCreations'
 import WorkspaceDetailCard from '../components/WorkspaceDetailCard'
@@ -42,7 +41,6 @@ function GroupFields({ fields, busy, blocked, uncertain, error, onClose, onRevie
 export default function Groups() {
   const pageSession = usePageSession()
   const request = pageSession.request
-  const [showGuide, setShowGuide] = useState(false)
   const [params, setParams] = useSearchParams()
   const location = useLocation()
   const navigate = useNavigate()
@@ -297,7 +295,7 @@ export default function Groups() {
     }
   }
   return <Layout className="app-shell">
-    <WorkspaceHeader title="我的小组" onGuide={() => setShowGuide(true)} />
+    <WorkspaceHeader title="我的小组" guideSection="groups" />
     <main id="workspace-main" tabIndex={-1} className="content-wrap group-page" onFocusCapture={event => { feedbackAction.current = event.target }}>
       <WorkspacePageHeading title="和同伴组织工作" description="在小组管理成员与角色。加入小组不会自动获得文档权限，资料仍逐篇共享。">
         <Space wrap>
@@ -432,6 +430,5 @@ export default function Groups() {
       onRelogin={relogin}
       onSave={values => mutate(config => request.put('/groups/' + fields.id, values, config),
         '小组资料已保存', () => setFields(null))} />}
-    {showGuide && <UserGuide initialSection="groups" onClose={() => setShowGuide(false)} />}
   </Layout>
 }

@@ -18,7 +18,7 @@ import { downloadTextFile } from '../editor/downloadTextFile'
 import DraftBackupDownloads from '../components/DraftBackupDownloads'
 import DocumentFindPanel from '../components/DocumentFindPanel'
 import DocumentImagesModal from '../components/DocumentImagesModal'
-import UserGuide from '../components/UserGuide'
+import LazyUserGuide from '../components/LazyUserGuide'
 import PendingCopyHint from '../components/PendingCopyHint'
 import { usePageRequest } from '../auth/PageSessionContext'
 import '../styles/editor-workspace.css'
@@ -261,7 +261,7 @@ export default function Editor() {
           <div ref={editorHostRef} className="editor-host" aria-label="协同编辑器" />
         </section>
       </main>
-      {showGuide && <UserGuide initialSection="save" onClose={() => setShowGuide(false)} />}
+      {showGuide && <LazyUserGuide initialSection="save" triggerRef={toolsButtonRef} onClose={() => setShowGuide(false)} />}
       {showImages && permission > 0 && <DocumentImagesModal state={documentImagesState} permission={permission}
         onSave={saveDocumentImageDescription} onClose={() => {
           closeDocumentImages(); setShowImages(false)

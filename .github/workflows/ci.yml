@@ -86,3 +86,5 @@ jobs:
         run: npm audit --registry=https://registry.npmjs.org --audit-level=moderate
       - name: Build production frontend
         run: npm run build
+      - name: Check initial JavaScript bundles
+        run: node scripts/check-initial-bundles.mjs

@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { Button, Collapse, Drawer, Typography } from 'antd'
 
 const { Paragraph, Text } = Typography
@@ -27,7 +28,7 @@ const sections = [
       <Paragraph>分享链接不会自动授予权限。“与我协作”显示别人共享给你的文档；只读成员可以阅读、查看历史、导出或创建自己的副本。</Paragraph>
       <Paragraph>文档暂时无法访问时，先核对登录账号和逐篇权限；文档所有者可到回收站查看。恢复后可从原入口重新打开，加载失败页也可点“重试加载”。若页面保留了未确认修改，请先按提示备份。</Paragraph>
       <Paragraph>所有者也可从“分享”进入“设置协作者权限”，处理后点击“返回分享”继续复制链接。返回分享不代表权限更新成功；更新结果未确认时，请重新进入管理核对当前权限。</Paragraph>
-      <Paragraph>文档权限控制正文访问。当前图片通过公开可读取的地址展示，能读取图片地址的人仍可查看图片；上传前请确认图片适合这样展示。</Paragraph>
+      <Paragraph>共页上传的图片按文档或模板权限展示，分享图片地址不会授予访问权限。粘贴的外部图片仍由原站控制访问。</Paragraph>
       <Paragraph>在编辑器“更多 → 图片说明”中选择本文图片，可查看或填写简短内容说明。只读成员可以查看，编辑成员在连接与保存完成后可修改；说明按普通正文编辑共同保存，可撤销，并由 CoPage 富文本副本保留。纯文本副本仍只包含图片地址。说明不是图片文件，也不会改变图片访问权限。</Paragraph>
     </>,
   },
@@ -117,7 +118,7 @@ const sections = [
       <Paragraph>历史恢复显示“结果未确认”时，点击“确认原恢复”继续同一次恢复，不重复生成版本，也不覆盖恢复之后的新编辑。刷新历史列表、查看其他版本或关闭窗口后重开，不会结束等待；期间暂不能发起新恢复或清理历史。</Paragraph>
       <Paragraph>原恢复标识保存在当前浏览器，按账号、服务和文档隔离。刷新、关闭标签或重登原账号后，打开本篇“历史版本”仍可确认原请求，不会自动重发。清除站点数据、退出无痕窗口或换浏览器可能失去记录，请先核对正文。</Paragraph>
       <Paragraph>需要继续其他操作时，可明确“结束等待”；这不撤销或确认原恢复，原请求仍可能已生效，请先查看当前正文再决定是否重做。记录无法可靠保存或读取时，先恢复本站存储并使用当前版本浏览器，不会用新标识替代原请求。</Paragraph>
-      <Paragraph>普通历史自动清理默认关闭。出现“清理过期历史”时，先核对范围；确认后，范围外的普通旧版本将无法恢复，重要版本继续保留。</Paragraph>
+      <Paragraph>普通历史默认按保留策略自动清理，已标记的重要版本继续保留。手动选择“清理过期历史”时，请先核对范围，清理后的普通旧版本无法恢复。</Paragraph>
       <Paragraph>列表“删除”会将文档移入回收站并停止协作者访问。所有者可在“回收站”恢复文档，正文、版本与原成员权限会保留。恢复成功后可直接“打开文档”，编辑页可返回回收站。</Paragraph>
       <Paragraph>回收站可以按标题查找本人已删除的资料，最多200字符；不搜索正文，“%”和“_”按普通字符匹配。提交查找后从第一页开始，翻页、刷新及打开恢复文档后返回保留关键词；需要查看所有资料时“清除查找”。</Paragraph>
       <Paragraph>文档删除或恢复结果未确认时，可在工作台、“我的文档”或“回收站”按原文档编号核对当前状态。刷新、关页或在同一浏览器重登原账号后仍可核对。核对只读取状态。查询失败时可以重试，也可以结束等待。结束等待只移除本地记录，后台已提交的操作继续生效。</Paragraph>
@@ -137,7 +138,9 @@ const sections = [
 ]
 
 export default function UserGuide({ onClose, initialSection = 'start' }) {
-  return <Drawer rootClassName="user-guide-drawer" title="CoPage 使用指南" aria-label="CoPage 使用指南" open
+  const title = useRef(null)
+  return <Drawer rootClassName="user-guide-drawer" title={<span ref={title} tabIndex={-1}>CoPage 使用指南</span>}
+    aria-label="CoPage 使用指南" open afterOpenChange={visible => { if (visible) title.current?.focus({ preventScroll: true }) }}
     width="min(680px, 100vw)" onClose={onClose}
     footer={<Button type="primary" onClick={onClose}>继续当前操作</Button>}>
     <Paragraph>查看步骤时仍留在当前页面，关闭指南后可继续操作。</Paragraph>

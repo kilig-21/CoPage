@@ -3,17 +3,18 @@ import { Button, Space } from 'antd'
 import { QuestionCircleOutlined, UserOutlined } from '@ant-design/icons'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import LogoutButton from './LogoutButton'
-import UserGuide from './UserGuide'
+import LazyUserGuide from './LazyUserGuide'
 
 const destinations = [
   ['/home', '工作台'], ['/docs', '我的文档'], ['/groups', '我的小组'],
   ['/projects', '我的项目'], ['/templates', '模板中心'], ['/search', '搜索'], ['/trash', '回收站'],
 ]
 
-export default function WorkspaceHeader({ title, onGuide }) {
+export default function WorkspaceHeader({ title, guideSection }) {
   const location = useLocation()
   const header = useRef(null)
   const navigation = useRef(null)
+  const guideTrigger = useRef(null)
   const [showGuide, setShowGuide] = useState(false)
   function skipNavigation(event) {
     const main = document.getElementById('workspace-main')
@@ -78,11 +79,11 @@ export default function WorkspaceHeader({ title, onGuide }) {
           className={({ isActive }) => 'workspace-nav-link' + (isActive ? ' is-active' : '')}>{label}</NavLink>)}
       </nav>
       <Space className="workspace-utilities" size={4}>
-        <Button type="text" icon={<QuestionCircleOutlined />} aria-label="使用指南" onClick={onGuide || (() => setShowGuide(true))}><span className="workspace-utility-label">指南</span></Button>
+        <Button ref={guideTrigger} type="text" icon={<QuestionCircleOutlined />} aria-label="使用指南" aria-haspopup="dialog" onClick={() => setShowGuide(true)}><span className="workspace-utility-label">指南</span></Button>
         <Link className={'workspace-account' + (location.pathname === '/account' ? ' is-active' : '')} to="/account" aria-label="账号设置"><UserOutlined /><span className="workspace-utility-label">账号</span></Link>
         <LogoutButton compact />
       </Space>
     </header>
-    {showGuide && <UserGuide onClose={() => setShowGuide(false)} />}
+    {showGuide && <LazyUserGuide initialSection={guideSection} triggerRef={guideTrigger} onClose={() => setShowGuide(false)} />}
   </>
 }

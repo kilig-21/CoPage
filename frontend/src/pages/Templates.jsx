@@ -8,7 +8,6 @@ import createDocument from '../api/createDocument'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import WorkspacePageHeading from '../components/WorkspacePageHeading'
 import DocumentPreview from '../components/DocumentPreview'
-import UserGuide from '../components/UserGuide'
 
 import { templateCategories as categories } from '../templates/categories'
 export default function Templates() {
@@ -24,7 +23,6 @@ export default function Templates() {
   const [input, setInput] = useState(keyword)
   const [templates, setTemplates] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [showGuide, setShowGuide] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [createError, setCreateError] = useState('')
   const [refresh, setRefresh] = useState(0)
@@ -86,7 +84,7 @@ export default function Templates() {
     }
   }
   return <Layout className="app-shell">
-    <WorkspaceHeader title="模板中心" onGuide={() => setShowGuide(true)} />
+    <WorkspaceHeader title="模板中心" />
     <main id="workspace-main" tabIndex={-1} className="content-wrap template-center">
       <WorkspacePageHeading title="选一个适合这次工作的框架" description="先预览内容，再创建独立文档。内置模板只提供通用框架，不读取其他用户的资料。">
         <Button onClick={() => navigate('/templates?source=personal')}>我的模板</Button>
@@ -114,7 +112,6 @@ export default function Templates() {
         </Card></List.Item>} />
       <Link to="/docs">也可以返回我的文档创建空白文档</Link>
     </main>
-    {showGuide && <UserGuide onClose={() => setShowGuide(false)} />}
     <Modal className="builtin-template-modal" title={selected ? '使用' + selected.title : '使用模板'} open={Boolean(selected)} width={720}
       onCancel={() => { if (!creating) { setSelected(null); if (!uncertain) setCreateError('') } }}
       closable={!creating} maskClosable={!creating} keyboard={!creating} footer={[

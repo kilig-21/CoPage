@@ -15,7 +15,6 @@ import CollaboratorModal from '../components/CollaboratorModal'
 import ImportModal from '../components/ImportModal'
 import CopyModal from '../components/CopyModal'
 import RenameModal from '../components/RenameModal'
-import UserGuide from '../components/UserGuide'
 import PendingCopies from '../components/PendingCopies'
 import PendingDocumentCreations from '../components/PendingDocumentCreations'
 
@@ -26,7 +25,6 @@ export default function DocList() {
   const request = pageSession.request
   const [managing, setManaging] = useState(null)
   const [copying, setCopying] = useState(null)
-  const [showGuide, setShowGuide] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const sourcePath = location.pathname + location.search + location.hash
@@ -107,7 +105,7 @@ export default function DocList() {
 
   return (
     <Layout className="app-shell">
-      <WorkspaceHeader title="我的文档" onGuide={() => setShowGuide(true)} />
+      <WorkspaceHeader title="我的文档" />
       <main id="workspace-main" tabIndex={-1} className="content-wrap">
         <WorkspacePageHeading title="我的文档" description="编辑时可查看连接与保存状态，删除的文档可从回收站找回">
           <Space wrap>
@@ -170,7 +168,6 @@ export default function DocList() {
       {savingTemplate && <SavePersonalTemplateModal key={savingTemplate.id} doc={savingTemplate} onClose={() => setSavingTemplate(null)} onUncertain={setTemplatePendingName}
         onSaved={data => { message.success('已保存服务端版本 ' + data.sourceRevision + ' 的个人模板'); navigate('/templates?' + new URLSearchParams({ source: 'personal', keyword: data.name }).toString()) }}
         onReview={name => navigate('/templates?' + new URLSearchParams({ source: 'personal', keyword: name }).toString())} />}
-      {showGuide && <UserGuide onClose={() => setShowGuide(false)} />}
       {copying && <CopyModal doc={copying} onClose={() => setCopying(null)}
         onCreated={data => { message.success('已创建服务端版本 ' + data.sourceRevision + ' 的副本'); navigate(documentHref(data.id, sourcePath)) }} />}
       {managing && <CollaboratorModal doc={managing} onClose={() => setManaging(null)} />}
