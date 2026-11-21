@@ -278,7 +278,15 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         ObjectNode pong = objectMapper.createObjectNode().put("type", "pong");
         if (info != null) {
             pong.put("permission", documents.permissionFor(info.docId(), info.userId()));
-            presence.heartbeat(info, eventBus.instanceId());
+            if (!presence.heartbeat(info, eventBus.instanceId())) {
+                Boolean rejoined = docRevService.maintenanceLock(info.docId(), () -> {
+                    documents.permissionFor(info.docId(), info.userId());
+                    if (!session.isOpen() || !info.equals(registry.current(session))) return false;
+                    presence.join(info, eventBus.instanceId());
+                    return true;
+                });
+                if (Boolean.TRUE.equals(rejoined)) publishPresence(info.docId());
+            }
             pong.put("docId", info.docId()).put("revision", docRevService.currentRevision(info.docId()));
         }
         send(session, pong);

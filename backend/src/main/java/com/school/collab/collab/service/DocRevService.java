@@ -352,6 +352,7 @@ public class DocRevService {
         CollabDocumentSnapshot durable = persistence.snapshot(docId);
         CollabDocumentSnapshot hot = store.snapshot(docId);
         if (hot.revision() <= durable.revision()) {
+            expireDurableLegacyState(docId, hot.revision());
             return durable;
         }
         var missing = store.operationsAfter(docId, durable.revision());
@@ -371,9 +372,18 @@ public class DocRevService {
             persistence.persist(docId, revision, content, entry.operation(), null);
             revision++;
         }
+        expireDurableLegacyState(docId, revision);
         return new CollabDocumentSnapshot(revision, content);
     }
 
+    private void expireDurableLegacyState(long docId, long revision) {
+        try {
+            store.expireDurableLegacyState(docId, revision);
+        } catch (RuntimeException failure) {
+            // A failed TTL update cannot invalidate a MySQL-persisted revision.
+            log.debug("未能更新旧热状态 TTL, docId={}", docId, failure);
+        }
+    }
     private static void validateDocId(long docId) {
         if (docId <= 0) {
             throw new CollabException(400, "docId 必须大于 0");

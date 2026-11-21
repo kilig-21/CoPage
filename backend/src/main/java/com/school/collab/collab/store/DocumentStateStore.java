@@ -19,5 +19,7 @@ public interface DocumentStateStore {
 
     void save(long docId, CollabDocumentSnapshot snapshot, VersionedOperation operation, int historyLimit);
 
+    default void expireDurableLegacyState(long docId, long hotRevision) { }
+
     <T> T withDocumentLock(long docId, Supplier<T> action);
 }

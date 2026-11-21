@@ -82,7 +82,8 @@ const resourcesSmoke = process.argv.includes('--resources-smoke')
 const configGuardSmoke = process.argv.includes('--config-guard-smoke')
 const sessionRevocationSmoke = process.argv.includes('--session-revocation-smoke')
 const privateImageSmoke = process.argv.includes('--private-image-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke || authLimitSmoke || healthProbeSmoke || resourcesSmoke || configGuardSmoke || sessionRevocationSmoke || privateImageSmoke
+const redisRetentionSmoke = process.argv.includes('--redis-retention-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke || authLimitSmoke || healthProbeSmoke || resourcesSmoke || configGuardSmoke || sessionRevocationSmoke || privateImageSmoke || redisRetentionSmoke
 const runtimeImages = process.argv.filter(value => value.startsWith('--runtime-image='))
 assert.ok(runtimeImages.length <= 1, '预构建运行时镜像只能指定一次')
 const runtimeImage = runtimeImages[0]?.slice('--runtime-image='.length)
@@ -106,6 +107,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
   // 动态分配回环端口，防止覆盖已有本机服务。
   const qaEnv = { ...env, PROD_BACKEND_PORT: '0', PROD_MINIO_PORT: '0' }
   if (privateImageSmoke) qaEnv.IMAGE_UPLOAD_COUNT_LIMIT = '2'
+  if (redisRetentionSmoke) qaEnv.DOCUMENT_CACHE_TTL_SECONDS = '12'
   if (resourcesSmoke && process.argv.includes('--compact-resources')) Object.assign(qaEnv, compactResources)
   if (authLimitSmoke) Object.assign(qaEnv, {
     AUTH_FAILURE_ATTEMPTS: '3', AUTH_LOCK_SECONDS: '3', AUTH_REGISTER_ACCOUNT_IP_LIMIT: '2',
@@ -253,6 +255,10 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       if (privateImageSmoke) {
         const { runPrivateImageCheck } = await import('./private-image-smoke.mjs')
         await runPrivateImageCheck({ ports, username, password })
+      }
+      if (redisRetentionSmoke) {
+        const { runRedisRetentionCheck } = await import('./redis-retention-smoke.mjs')
+        await runRedisRetentionCheck({ ports, username, password, source: qaDocker, sql })
       }
     } else {
       // 在临时库单独应用开发种子，核对拆分后本地演示仍可初始化。

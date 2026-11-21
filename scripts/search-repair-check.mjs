@@ -21,6 +21,7 @@ export async function runSearchRepairCheck({ source, sql, username }) {
   try {
     await pause(2500)
     assert.equal(redis('ZADD', key, '0', 'fixture:expired'), '1')
+    assert.equal(redis('ZADD', 'collab:presence:active-docs', '0', String(firstId)), '1')
     const start = performance.now()
     do {
       if (redis('ZCARD', key) === '0') {

@@ -231,6 +231,11 @@ public class DocumentRepository {
 
     public record OwnedStatus(long id, String title, boolean deleted) { }
 
+    public Optional<Long> lockDeletedRevision(long docId) {
+        return jdbc.query("SELECT revision FROM document WHERE id = ? AND is_deleted = 1 FOR UPDATE",
+                (rs, index) -> rs.getLong(1), docId).stream().findFirst();
+    }
+
     /** 只锁当前所有者自己的文档，包含已删除行；并发/重试恢复不会改写正文。 */
     public Optional<OwnedState> findOwnedForUpdate(long docId, long userId) {
         return jdbc.query("""

@@ -10,6 +10,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -43,6 +45,8 @@ public class SearchIndex {
         this.endpoint = endpoint.replaceAll("/+$", "");
     }
 
+    /** Called after a document transaction commits. The index acknowledgement must commit separately. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void upsert(long docId) {
         write(docId, true);
     }

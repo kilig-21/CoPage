@@ -23,7 +23,7 @@ class PresenceExpiryBroadcasterTest {
 
     @Test
     void 仅过期清理成功的实例广播剩余在线用户() {
-        when(presence.documentsWithPresence()).thenReturn(List.of(5L, 6L));
+        when(presence.documentsWithExpiredPresence()).thenReturn(List.of(5L, 6L));
         when(presence.pruneExpired(5)).thenReturn(true);
         when(presence.users(5)).thenReturn(List.of(
                 new RedisPresenceStore.PresenceUser(1, "A", "#2563eb")));
@@ -40,7 +40,7 @@ class PresenceExpiryBroadcasterTest {
 
     @Test
     void 无过期会话时不广播() {
-        when(presence.documentsWithPresence()).thenReturn(List.of(5L));
+        when(presence.documentsWithExpiredPresence()).thenReturn(List.of(5L));
 
         broadcaster.publishExpired();
 

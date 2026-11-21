@@ -27,7 +27,7 @@ public class PresenceExpiryBroadcaster {
     @Scheduled(initialDelay = 5_000, fixedDelay = 5_000)
     public void publishExpired() {
         try {
-            for (Long docId : presence.documentsWithPresence()) {
+            for (Long docId : presence.documentsWithExpiredPresence()) {
                 if (!presence.pruneExpired(docId)) continue;
                 ObjectNode payload = mapper.createObjectNode()
                         .put("type", "presence")

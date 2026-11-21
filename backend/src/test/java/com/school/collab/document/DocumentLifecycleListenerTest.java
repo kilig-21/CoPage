@@ -12,7 +12,7 @@ class DocumentLifecycleListenerTest {
     void renameInvalidatesWithoutLeakingTitleAndFailureDoesNotUndoCommit() {
         var events = mock(CollabEventBus.class);
         var mapper = new ObjectMapper();
-        var listener = new DocumentLifecycleListener(events, mapper);
+        var listener = new DocumentLifecycleListener(events, mapper, mock(DeletedDocumentCache.class));
         listener.renamed(new DocumentService.DocumentRenamed(5));
         verify(events).publish(5L, "", mapper.createObjectNode().put("type", "metadata").put("docId", 5L));
         doThrow(new IllegalStateException("offline")).when(events).publish(eq(5L), anyString(), any());
@@ -23,10 +23,25 @@ class DocumentLifecycleListenerTest {
     void deletionNotifiesWholeDocumentAndBroadcastFailureDoesNotUndoCommit() {
         var events=mock(CollabEventBus.class);
         var mapper=new ObjectMapper();
-        var listener=new DocumentLifecycleListener(events,mapper);
+        var cache = mock(DeletedDocumentCache.class);
+        var listener = new DocumentLifecycleListener(events, mapper, cache);
         listener.deleted(new DocumentService.DocumentDeleted(5));
-        verify(events).publish(5L,"",mapper.createObjectNode().put("type","permission").put("docId",5L));
+        var order = inOrder(cache, events);
+        order.verify(cache).clearIfDeleted(5L);
+        order.verify(events).publish(5L,"",mapper.createObjectNode().put("type","permission").put("docId",5L));
         doThrow(new IllegalStateException("offline")).when(events).publish(eq(5L),anyString(),any());
         assertDoesNotThrow(()->listener.deleted(new DocumentService.DocumentDeleted(5)));
+    }
+
+    @Test
+    void deletionStillInvalidatesSessionsWhenCacheCleanupFails() {
+        var events = mock(CollabEventBus.class);
+        var cache = mock(DeletedDocumentCache.class);
+        var mapper = new ObjectMapper();
+        doThrow(new IllegalStateException("offline")).when(cache).clearIfDeleted(5L);
+
+        new DocumentLifecycleListener(events, mapper, cache).deleted(new DocumentService.DocumentDeleted(5));
+
+        verify(events).publish(5L, "", mapper.createObjectNode().put("type", "permission").put("docId", 5L));
     }
 }

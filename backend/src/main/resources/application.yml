@@ -86,6 +86,7 @@ mybatis-plus:
       logic-not-delete-value: 0
 
 collab:
+  document-cache-ttl-seconds: ${DOCUMENT_CACHE_TTL_SECONDS:3600}
   config-mode: ${COPAGE_CONFIG_MODE:strict}
   auth-limit:
     login:
