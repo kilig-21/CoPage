@@ -14,6 +14,7 @@ import { clipboardPasteError, configureClipboardImages } from './clipboardImages
 import { createCompositionInbox } from './compositionInbox'
 import { createEditCapacityGuard } from './editCapacityGuard'
 import { createDraftBackup } from './draftBackup'
+import { createDraftPersistence } from './draftPersistence'
 import { readDraftRecords } from './draftRecords'
 import { createSkippedDraftNotice } from './skippedDraftNotice'
 import { createDocumentFind, EMPTY_DOCUMENT_FIND } from './documentFind'
@@ -161,7 +162,8 @@ export default function useQuillCollab(docId) {
     skippedDraftNoticeRef.current = skippedDrafts
     let composing = false
     let compositionDirty = false
-    let lastKnownContents = quill.getContents()
+    let compositionBase = null
+    let lastSaveStatus = '等待同步'
     let canEdit = false
     let connected = false
     let synced = false
@@ -189,13 +191,17 @@ export default function useQuillCollab(docId) {
       const pending = client.hasUnconfirmedChanges()
       documentFind?.refreshStatus()
       imageDescriptions?.refreshStatus()
-      setSaveStatus(recoveryActionsRef.current ? '等待恢复本地草稿'
+      const status = recoveryActionsRef.current ? '等待恢复本地草稿'
         : client.state === 'blocked' ? (pending ? '有修改尚未确认' : '当前内容已保留')
         : !connected || !synced ? (pending ? '有修改尚未同步' : '等待同步')
         : uploading ? '正在上传图片'
         : composing ? '正在输入'
         : pending ? '正在保存…'
-        : canEdit ? '所有修改已保存' : '只读 · 内容已同步')
+        : canEdit ? '所有修改已保存' : '只读 · 内容已同步'
+      if (status !== lastSaveStatus) {
+        lastSaveStatus = status
+        setSaveStatus(status)
+      }
     }
     const updateEditable = () => {
       const editable = canEdit && connected && synced
@@ -324,7 +330,7 @@ export default function useQuillCollab(docId) {
         lastSentCursor = null
         // 仅应用服务端差异，避免重连全文替换抹掉本标签的撤销记录。
         if (content) updateWithFindFocus(() => quill.updateContents(quill.getContents().diff(content), 'api'))
-        lastKnownContents = quill.getContents()
+        if (composing) compositionBase = quill.getContents()
       },
       onRemote: (operation) => {
         if (!active) return
@@ -336,7 +342,7 @@ export default function useQuillCollab(docId) {
             quill.setSelection(nextIndex, selection.length, 'silent')
           }
         })
-        lastKnownContents = quill.getContents()
+        if (composing) compositionBase = quill.getContents()
       },
       onUsers: (onlineUsers) => {
         setUsers(onlineUsers)
@@ -368,20 +374,27 @@ export default function useQuillCollab(docId) {
       if (message.type === 'metadata' && message.docId === docId) { refreshTitle(); return }
       // 撤权必须立即生效；先把尚未结束的组合输入收进本地草稿。
       flushComposition()
+      const { pending, buffer } = client
+      let permission
       if (message.docId === docId && [0, 1, 2].includes(message.permission)) {
-        setPermission(message.permission)
-        canEdit = message.permission === 2
+        permission = message.permission
+        setPermission(permission)
+        canEdit = permission === 2
         if (!canEdit) abortImageUpload()
         updateEditable()
-        client.receive({ type: 'permission', docId, permission: message.permission })
-        if (message.permission === 0) {
-          persistDraft()
+        client.receive({ type: 'permission', docId, permission })
+        if (permission === 0) {
+          drafts.flush()
+          updateSaveStatus()
           socket.close()
           return
         }
       }
       client.receive(message)
-      persistDraft()
+      const draftChanged = pending !== client.pending || buffer !== client.buffer
+      if (draftChanged) drafts.schedule()
+      if (permission === 1 || client.state === 'blocked' || (draftChanged && !client.hasUnconfirmedChanges())) drafts.flush()
+      if (draftChanged || permission !== undefined) updateSaveStatus()
     }
     const compositionInbox = createCompositionInbox({
       isComposing: () => composing,
@@ -410,12 +423,13 @@ export default function useQuillCollab(docId) {
         abortImageUpload()
         flushComposition()
         composing = false
+        compositionBase = null
         compositionInbox.clear()
         connected = false
         synced = false
         updateEditable()
         client.disconnect()
-        persistDraft()
+        drafts.flush()
         checkReconnectSession()
       },
       onError: setError,
@@ -433,7 +447,7 @@ export default function useQuillCollab(docId) {
       },
       onExpired: () => {
         flushComposition()
-        persistDraft()
+        if (!drafts.flush()) preserveFailedDraft()
         socket.close()
         expireSession(localStorage, token,
           detail => window.dispatchEvent(new CustomEvent('copage-auth-expired', { detail })))
@@ -470,15 +484,14 @@ export default function useQuillCollab(docId) {
       draftChannel.postMessage({ type: 'probe', requestId, clientId: ownerClientId })
     })
 
-    const persistDraft = () => {
-      updateSaveStatus()
+    const drafts = createDraftPersistence(() => {
       // 初始读取/草稿归属探测尚未完成时，空客户端不拥有旧草稿。
       // 加载失败、离开或重试都不得用“没有 pending”清除原数据。
       if (!draftReady || recoveryActionsRef.current) return true
       if (!draftPrefix) return !client.hasUnconfirmedChanges()
       const key = draftPrefix + client.clientId
       try {
-        const draft = client.exportDraft(quill.getContents())
+        const draft = client.hasUnconfirmedChanges() ? client.exportDraft(quill.getContents(), { copy: false }) : null
         if (draft) localStorage.setItem(key, JSON.stringify(draft))
         else localStorage.removeItem(key)
         return true
@@ -486,7 +499,7 @@ export default function useQuillCollab(docId) {
         setError('本地草稿保存失败；离开页面前请复制当前内容')
         return false
       }
-    }
+    })
     const preserveFailedDraft = () => {
       if (backupSent || !client.hasUnconfirmedChanges()) return
       backupSent = true
@@ -518,9 +531,10 @@ export default function useQuillCollab(docId) {
     }
 
     const submit = (delta) => {
-      if (delta.ops?.length) client.submit(delta)
-      lastKnownContents = quill.getContents()
-      persistDraft()
+      if (!delta.ops?.length) return
+      client.submit(delta)
+      drafts.schedule()
+      updateSaveStatus()
     }
     const editCapacityGuard = createEditCapacityGuard(quill, setError, updateToolbar)
     const onTextChange = (delta, old, source) => {
@@ -540,7 +554,11 @@ export default function useQuillCollab(docId) {
       }
       submit(delta)
     }
-    const onCompositionStart = () => { composing = true; updateSaveStatus() }
+    const onCompositionStart = () => {
+      compositionBase = quill.getContents()
+      composing = true
+      updateSaveStatus()
+    }
     const flushComposition = () => {
       if (composing) {
         // Quill 延迟到 compositionend 微任务才结束 batch。断线/撤权/离开
@@ -552,7 +570,10 @@ export default function useQuillCollab(docId) {
       }
       if (!compositionDirty) return
       compositionDirty = false
-      submit(lastKnownContents.diff(quill.getContents()))
+      const content = quill.getContents()
+      const change = compositionBase.diff(content)
+      compositionBase = content
+      submit(change)
     }
     const onCompositionEnd = () => {
       // Quill 先结束自己的 batch，再提交本地输入和按序处理远端消息。
@@ -560,6 +581,7 @@ export default function useQuillCollab(docId) {
         if (!active) return
         flushComposition()
         composing = false
+        compositionBase = null
         compositionInbox.drain()
         updateSaveStatus()
       })
@@ -574,12 +596,13 @@ export default function useQuillCollab(docId) {
       socket.close()
       abortImageUpload()
       flushComposition()
-      const draftPersisted = persistDraft()
+      const draftPersisted = drafts.flush()
       if (!draftPersisted) preserveFailedDraft()
       connected = false
       synced = false
       client.disconnect()
       composing = false
+      compositionBase = null
       compositionInbox.clear()
       updateEditable()
       setConnection('登录已变化')
@@ -589,14 +612,23 @@ export default function useQuillCollab(docId) {
       skippedDrafts.dispose()
       skippedDraftNoticeRef.current = null
       setSkippedDraftNotice(false)
+      drafts.dispose()
       active = false
     }
     const onBeforeUnload = (event) => {
       flushComposition()
-      persistDraft()
+      drafts.flush()
       if (!client.hasUnconfirmedChanges() && !compositionDirty) return
       event.preventDefault()
       event.returnValue = ''
+    }
+    const onPageHide = () => {
+      if (!active) return
+      flushComposition()
+      drafts.flush()
+    }
+    const onVisibilityChange = () => {
+      if (active && document.visibilityState === 'hidden') drafts.flush()
     }
 
     documentFind = createDocumentFind(quill, {
@@ -620,6 +652,8 @@ export default function useQuillCollab(docId) {
     quill.root.addEventListener('scroll', renderRemoteCursors)
     window.addEventListener('resize', renderRemoteCursors)
     window.addEventListener('beforeunload', onBeforeUnload)
+    window.addEventListener('pagehide', onPageHide)
+    document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('copage-auth-changed', onSessionChanged)
     const cursorKeepaliveTimer = window.setInterval(() => {
       cursorLayer.expire()
@@ -636,7 +670,6 @@ export default function useQuillCollab(docId) {
         setIsOwner(doc.isOwner === true)
         canEdit = doc.permission === 2
         quill.setContents(new Delta(doc.content), 'api')
-        lastKnownContents = quill.getContents()
         updateEditable()
         let stored = null
         for (const candidate of findDrafts()) {
@@ -656,7 +689,8 @@ export default function useQuillCollab(docId) {
         if (!active) return
         if (stored) {
           setConnection('等待恢复选择')
-          setSaveStatus('等待恢复本地草稿')
+          lastSaveStatus = '等待恢复本地草稿'
+          setSaveStatus(lastSaveStatus)
           setRecoveryDraft({ ...createDraftBackup({ docId, username, title: draftTitle, content: stored.draft.content }),
             savedAt: stored.draft.savedAt })
           recoveryActionsRef.current = {
@@ -668,12 +702,12 @@ export default function useQuillCollab(docId) {
               try {
                 const content = client.restoreDraft(stored.draft)
                 quill.setContents(content, 'api')
-                lastKnownContents = quill.getContents()
                 sessionStorage.setItem(tabKey, client.clientId)
                 setRecoveryDraft(null)
                 recoveryActionsRef.current = null
                 draftReady = true
-                persistDraft()
+                drafts.schedule()
+                drafts.flush()
                 startSocket()
               } catch {
                 setError('草稿无法自动恢复，原始草稿仍保存在此浏览器中')
@@ -700,7 +734,8 @@ export default function useQuillCollab(docId) {
             ? '这篇文档暂时无法打开，可能已被删除。请返回核对，文档所有者可到回收站查看。'
             : loadError?.message || '文档加载失败'
         setConnection('加载失败')
-        setSaveStatus('未能加载文档')
+        lastSaveStatus = '未能加载文档'
+        setSaveStatus(lastSaveStatus)
         setPlaceholder('正文尚未加载')
         setError(failureMessage)
         // 无权限、文档已删除或读取失败时，只提供当前账号的本地副本。
@@ -722,7 +757,8 @@ export default function useQuillCollab(docId) {
       onSessionChanged()
       hideCursor()
       flushComposition()
-      if (!persistDraft()) preserveFailedDraft()
+      if (!drafts.flush()) preserveFailedDraft()
+      drafts.dispose()
       active = false
       compositionInbox.clear()
       sessionCheckController.abort()
@@ -738,6 +774,8 @@ export default function useQuillCollab(docId) {
       quill.root.removeEventListener('scroll', renderRemoteCursors)
       window.removeEventListener('resize', renderRemoteCursors)
       window.removeEventListener('beforeunload', onBeforeUnload)
+      window.removeEventListener('pagehide', onPageHide)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('copage-auth-changed', onSessionChanged)
       client.close()
       socket.close()

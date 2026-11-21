@@ -384,8 +384,10 @@ export default class CollabClient {
     return this.pending !== null || this.buffer !== null
   }
 
-  exportDraft(content) {
+  exportDraft(content, { copy = true } = {}) {
     if (!this.hasUnconfirmedChanges()) return null
+    // Synchronous serialization can borrow the current Deltas without deep cloning.
+    const snapshot = delta => copy ? this.copy(delta) : delta
     return {
       version: 1,
       docId: this.docId,
@@ -394,11 +396,11 @@ export default class CollabClient {
       pending: this.pending ? {
         opId: this.pending.opId,
         baseRevision: this.pending.baseRevision,
-        original: this.copy(this.pending.original),
-        delta: this.copy(this.pending.delta),
+        original: snapshot(this.pending.original),
+        delta: snapshot(this.pending.delta),
       } : null,
-      buffer: this.buffer ? this.copy(this.buffer) : null,
-      content: this.copy(content),
+      buffer: this.buffer ? snapshot(this.buffer) : null,
+      content: snapshot(content),
       savedAt: Date.now(),
     }
   }

@@ -41,11 +41,18 @@ export function configureEditorToolbar(quill) {
   }
   const undo = toolbar.querySelector('button.ql-undo')
   const redo = toolbar.querySelector('button.ql-redo')
+  const formatButtons = [...toolbar.querySelectorAll('button')].filter(button => button !== undo && button !== redo)
+  let wasEditable
   return () => {
     const editable = quill.isEnabled()
-    toolbar.inert = !editable
-    for (const button of toolbar.querySelectorAll('button')) button.disabled = !editable
-    undo.disabled = !editable || history.stack.undo.length === 0
-    redo.disabled = !editable || history.stack.redo.length === 0
+    if (editable !== wasEditable) {
+      wasEditable = editable
+      toolbar.inert = !editable
+      for (const button of formatButtons) button.disabled = !editable
+    }
+    const undoDisabled = !editable || history.stack.undo.length === 0
+    const redoDisabled = !editable || history.stack.redo.length === 0
+    if (undo.disabled !== undoDisabled) undo.disabled = undoDisabled
+    if (redo.disabled !== redoDisabled) redo.disabled = redoDisabled
   }
 }
