@@ -221,10 +221,16 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, p
     }
     assertSearchHit(searchResult)
     assertSearchHit(await api(restoredPort, searchPath(bodyMarker)))
-    const recoveredImage = await fetch(origin(minioPort) + publicPath, { signal: AbortSignal.timeout(5000) })
+    const privatePath = '/api' + publicPath.slice('/collab'.length)
+    const readPrivate = () => fetch(origin(restoredPort) + privatePath, {
+      headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(5000),
+    })
+    assert.equal((await fetch(origin(minioPort) + publicPath, { signal: AbortSignal.timeout(5000) })).status, 403)
+    const recoveredImage = await readPrivate()
     assert.equal(recoveredImage.status, 200)
     assert.equal(sha256(Buffer.from(await recoveredImage.arrayBuffer())), sha256(image))
     token = (await api(restoredPort, '/auth/login', 'POST', viewer)).token
+    assert.equal((await readPrivate()).status, 200)
     assert.equal((await api(restoredPort, '/doc/' + docId)).permission, 1)
     assertSearchHit(await api(restoredPort, searchPath(title)))
     assertSearchHit(await api(restoredPort, searchPath(bodyMarker)))
@@ -234,6 +240,7 @@ export async function runRecoveryCheck({ docker, base, env, source, sql, port, p
     socket.ws.close()
     socket = null
     token = (await api(restoredPort, '/auth/login', 'POST', outsider)).token
+    assert.equal((await readPrivate()).status, 404)
     const denied = await fetch(origin(restoredPort) + '/api/doc/' + docId, {
       headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(5000),
     })

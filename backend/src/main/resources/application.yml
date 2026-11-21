@@ -115,6 +115,8 @@ collab:
     secret: ${JWT_SECRET:}
     expire-hours: ${JWT_EXPIRE_HOURS:24}
   minio:
+    image-count-limit: ${IMAGE_UPLOAD_COUNT_LIMIT:1000}
+    image-byte-limit: ${IMAGE_UPLOAD_BYTE_LIMIT:268435456}
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
     public-endpoint: ${MINIO_PUBLIC_ENDPOINT:http://localhost:9000}
     access-key: ${MINIO_ACCESS_KEY:minioadmin}

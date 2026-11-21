@@ -2,10 +2,12 @@ package com.school.collab.storage;
 
 import com.school.collab.common.BizException;
 import com.school.collab.common.ErrorCode;
+import com.school.collab.common.UserContext;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
@@ -21,15 +23,25 @@ public class ImageUploadService {
     private final MinioClient minio;
     private final String bucket;
     private final String publicEndpoint;
+    private final ImageAssetRepository assets;
+    private final long countLimit;
+    private final long byteLimit;
 
-    public ImageUploadService(MinioClient minio,
+    public ImageUploadService(MinioClient minio, ImageAssetRepository assets,
                               @Value("${collab.minio.bucket}") String bucket,
-                              @Value("${collab.minio.public-endpoint}") String publicEndpoint) {
+                              @Value("${collab.minio.public-endpoint}") String publicEndpoint,
+                              @Value("${collab.minio.image-count-limit}") long countLimit,
+                              @Value("${collab.minio.image-byte-limit}") long byteLimit) {
+        if (countLimit <= 0 || byteLimit <= 0) throw new IllegalArgumentException("图片配额必须为正整数");
         this.minio = minio;
         this.bucket = bucket;
         this.publicEndpoint = publicEndpoint.replaceAll("/+$", "");
+        this.assets = assets;
+        this.countLimit = countLimit;
+        this.byteLimit = byteLimit;
     }
 
+    @Transactional
     public ImageView upload(MultipartFile file) {
         if (file == null || file.isEmpty() || file.getSize() > MAX_BYTES) {
             throw new BizException(ErrorCode.PARAM_ERROR, "图片不能为空且不能超过 10 MiB");
@@ -44,8 +56,15 @@ public class ImageUploadService {
             throw new BizException(ErrorCode.PARAM_ERROR, "仅支持 JPEG、PNG、GIF、WebP 图片");
         }
 
+        Long owner = UserContext.getUserId();
+        if (owner == null || owner <= 0) throw new BizException(ErrorCode.UNAUTHORIZED);
+        var usage = assets.lockOwnerAndReadUsage(owner);
+        if (usage.count() >= countLimit || file.getSize() > byteLimit - usage.bytes()) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "当前账号的图片数量或存储容量已达上限");
+        }
         String key = "images/" + LocalDate.now().format(PATH_DATE) + "/"
                 + UUID.randomUUID() + "." + type.extension;
+        assets.create(key, owner, file.getSize(), type.mime);
         try (InputStream input = file.getInputStream()) {
             minio.putObject(PutObjectArgs.builder()
                     .bucket(bucket).object(key)

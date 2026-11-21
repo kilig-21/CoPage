@@ -112,12 +112,14 @@ async function main() {
   assert.equal(imageUrl.protocol, 'http:')
   assert.ok(['localhost', '127.0.0.1'].includes(imageUrl.hostname), '图片 URL 不应指向容器内部地址')
   assert.match(imageUrl.pathname, /^\/collab\/images\/\d{4}\/\d{2}\/[\w-]+\.png$/)
-  const imageResponse = await fetch(url)
-  assert.equal(imageResponse.status, 200, `公开图片读取返回 HTTP ${imageResponse.status}`)
+  assert.equal((await fetch(url)).status, 403, 'MinIO 对象必须拒绝匿名读取')
+  const protectedUrl = new URL('/api' + imageUrl.pathname.slice('/collab'.length), parsedOrigin)
+  assert.equal((await fetch(protectedUrl)).status, 401)
+  const imageResponse = await fetch(protectedUrl, { headers: { Authorization: `Bearer ${token}` } })
+  assert.equal(imageResponse.status, 200, `鉴权图片读取返回 HTTP ${imageResponse.status}`)
   assert.match(imageResponse.headers.get('content-type') ?? '', /^image\/png/)
   assert.deepEqual(Buffer.from(await imageResponse.arrayBuffer()), image)
-  console.log('PASS: JWT 上传限制、图片签名校验、前端上传函数、MinIO 公开 URL 与文件内容')
-  console.log(`测试图片地址：${url}`)
+  console.log('PASS: JWT 上传限制、图片签名校验、前端上传函数、MinIO 私有桶和鉴权读取')
   console.log('注意：此烟测会在本地 MinIO 留下一张 64×64 测试图片；真实浏览器选图/协同插入仍需单独验收。')
 }
 

@@ -3,6 +3,7 @@ import { Alert, Button, Checkbox, Modal, Space, Spin, Typography } from 'antd'
 import { usePageRequest } from '../auth/PageSessionContext'
 import { confirmPrintAccess, parsePrintSnapshot } from '../api/printSnapshot'
 import DocumentPreview from './DocumentPreview'
+import { IMAGE_PENDING } from '../editor/privateImages'
 
 export default function PrintModal({ docId, canPrint, onClose }) {
   const request = usePageRequest()
@@ -59,7 +60,7 @@ export default function PrintModal({ docId, canPrint, onClose }) {
   useEffect(() => {
     if (!snapshot || !sheet.current) return undefined
     const images = [...sheet.current.querySelectorAll('img')]
-    const pending = new Set(images.filter(image => !image.complete))
+    const pending = new Set(images.filter(image => !image.complete || image.hasAttribute(IMAGE_PENDING)))
     let timer
     const finish = () => {
       if (pending.size) return

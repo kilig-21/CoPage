@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal, Typography } from 'antd'
+import { usePageRequest } from '../auth/PageSessionContext'
+import { loadPrivateImages, privateImagePath } from '../editor/privateImages'
 
 export default function DocumentImagesModal({ state, permission, onSave, onClose }) {
   const [selected, setSelected] = useState(null)
@@ -9,6 +11,8 @@ export default function DocumentImagesModal({ state, permission, onSave, onClose
   const [imageFailed, setImageFailed] = useState(false)
   const inputRef = useRef(null)
   const feedbackRef = useRef(null)
+  const previewRef = useRef(null)
+  const request = usePageRequest()
   function select(image) {
     setSelected(image ? { id: image.id, alt: image.alt } : null)
     setDescription(image?.alt ?? '')
@@ -17,6 +21,11 @@ export default function DocumentImagesModal({ state, permission, onSave, onClose
   }
   useEffect(() => { if (!selected && state.images.length) select(state.images[0]) }, [state.images, selected])
   const image = state.images.find(item => item.id === selected?.id)
+  const managed = image && privateImagePath(image.src)
+  useEffect(() => {
+    if (previewRef.current) return loadPrivateImages(previewRef.current, request)
+    return undefined
+  }, [image?.id, managed, request])
   const ordinal = image ? state.images.indexOf(image) + 1 : 0
   const conflict = image && image.alt !== selected.alt
   const disabled = !image || !state.canEdit || Boolean(conflict)
@@ -62,7 +71,8 @@ export default function DocumentImagesModal({ state, permission, onSave, onClose
         {!image && <option value="">请选择图片</option>}
         {state.images.map((item, index) => <option key={item.id} value={item.id}>图片 {index + 1} · {item.alt ? item.alt.slice(0, 40) : '未填写说明'}</option>)}
       </select>
-      {image && <div className="document-image-preview"><img key={image.id} src={image.src} alt={image.alt || `图片 ${ordinal}（尚未填写说明）`}
+      {image && <div className="document-image-preview" ref={previewRef}><img key={image.id} src={managed ? undefined : image.src}
+        data-copage-image={managed ? image.src : undefined} data-copage-image-pending={managed ? '' : undefined} alt={image.alt || `图片 ${ordinal}（尚未填写说明）`}
         onError={() => setImageFailed(true)} />{imageFailed && <Typography.Text>图片暂时无法显示，原地址和说明仍保留。</Typography.Text>}</div>}
       <label className="document-images-label" htmlFor="document-image-description">图片内容说明</label>
       <Input id="document-image-description" ref={inputRef} aria-label="图片内容说明" maxLength={512} showCount

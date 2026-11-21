@@ -81,7 +81,8 @@ const healthProbeSmoke = process.argv.includes('--health-probe-smoke')
 const resourcesSmoke = process.argv.includes('--resources-smoke')
 const configGuardSmoke = process.argv.includes('--config-guard-smoke')
 const sessionRevocationSmoke = process.argv.includes('--session-revocation-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke || authLimitSmoke || healthProbeSmoke || resourcesSmoke || configGuardSmoke || sessionRevocationSmoke
+const privateImageSmoke = process.argv.includes('--private-image-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke || authLimitSmoke || healthProbeSmoke || resourcesSmoke || configGuardSmoke || sessionRevocationSmoke || privateImageSmoke
 const runtimeImages = process.argv.filter(value => value.startsWith('--runtime-image='))
 assert.ok(runtimeImages.length <= 1, '预构建运行时镜像只能指定一次')
 const runtimeImage = runtimeImages[0]?.slice('--runtime-image='.length)
@@ -104,6 +105,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
   const qa = [...base, '-p', project]
   // 动态分配回环端口，防止覆盖已有本机服务。
   const qaEnv = { ...env, PROD_BACKEND_PORT: '0', PROD_MINIO_PORT: '0' }
+  if (privateImageSmoke) qaEnv.IMAGE_UPLOAD_COUNT_LIMIT = '2'
   if (resourcesSmoke && process.argv.includes('--compact-resources')) Object.assign(qaEnv, compactResources)
   if (authLimitSmoke) Object.assign(qaEnv, {
     AUTH_FAILURE_ATTEMPTS: '3', AUTH_LOCK_SECONDS: '3', AUTH_REGISTER_ACCOUNT_IP_LIMIT: '2',
@@ -135,8 +137,13 @@ if (process.argv.includes('--smoke') || fullSmoke) {
     assert.ok(redisNoAuth.includes('NOAUTH'), 'Redis 无凭据请求必须拒绝')
     const redisAuth = qaDocker(['exec', '-T', 'redis', 'sh', '-ec', 'REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli ping']).stdout.trim()
     assert.equal(redisAuth, 'PONG')
-    assert.equal(initial.slice(2).filter(table => table !== 'flyway_schema_history').length, 18, '全新数据库业务表契约须为十八张')
-    console.log('PASS: 全新 MySQL 无演示账号、十八张表齐全、数据库权限隔离、Redis 认证')
+    assert.equal(initial.slice(2).filter(table => table !== 'flyway_schema_history').length, fullSmoke ? 21 : 18)
+    if (fullSmoke) {
+      for (const table of ['image_asset', 'document_image_asset', 'template_image_asset']) {
+        assert.ok(initial.slice(2).includes(table), '缺少图片存储表 ' + table)
+      }
+    }
+    console.log('PASS: 全新 MySQL 无演示账号、业务表齐全、数据库权限隔离、Redis 认证')
     if (fullSmoke) {
       const ports = [1, 2].map(index => {
         const address = qaDocker(['port', '--index', String(index), 'backend', '8080']).stdout.trim()
@@ -162,7 +169,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       }
       assert.deepEqual(
         sql('SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank;').stdout.trim().split(/\r?\n/),
-        ['0', '1', '2', '3', '4', '5', '6'],
+        ['0', '1', '2', '3', '4', '5', '6', '7', '8'],
       )
       const username = 'qa' + randomBytes(6).toString('hex')
       const password = secret()
@@ -242,6 +249,10 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       if (sessionRevocationSmoke) {
         const { runSessionRevocationCheck } = await import('./session-revocation-smoke.mjs')
         await runSessionRevocationCheck({ ports, username, password, source: qaDocker })
+      }
+      if (privateImageSmoke) {
+        const { runPrivateImageCheck } = await import('./private-image-smoke.mjs')
+        await runPrivateImageCheck({ ports, username, password })
       }
     } else {
       // 在临时库单独应用开发种子，核对拆分后本地演示仍可初始化。

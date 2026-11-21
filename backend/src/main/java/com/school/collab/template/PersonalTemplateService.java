@@ -7,6 +7,8 @@ import com.school.collab.common.ErrorCode;
 import com.school.collab.common.UserContext;
 import com.school.collab.document.DocumentService;
 import com.school.collab.document.DocumentFormats;
+import com.school.collab.storage.ImageGrants;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
@@ -20,8 +22,15 @@ public class PersonalTemplateService {
     private final PersonalTemplateRepository templates;
     private final DocumentService documents;
     private final ObjectMapper mapper;
+    private final ImageGrants images;
     public PersonalTemplateService(PersonalTemplateRepository templates,DocumentService documents,ObjectMapper mapper) {
+        this(templates, documents, mapper, null);
+    }
+    @Autowired
+    public PersonalTemplateService(PersonalTemplateRepository templates, DocumentService documents,
+                                   ObjectMapper mapper, ImageGrants images) {
         this.templates=templates;this.documents=documents;this.mapper=mapper;
+        this.images=images;
     }
     @Transactional(readOnly=true)
     public ListView list(String category,String keyword,int page,int size) {
@@ -43,6 +52,7 @@ public class PersonalTemplateService {
         var usage=templates.usage(user);
         if(usage.count()>=COUNT_LIMIT||usage.bytes()+bytes>BYTE_LIMIT)throw bad("个人模板最多100份、正文合计32 MiB，请先删除不再需要的模板");
         long id=templates.create(user,title,about,category,serialized,bytes,source.revision());
+        if (images != null) images.attachToTemplate(id, user, serialized);
         return new Created(id,source.revision());
     }
     @Transactional
@@ -54,6 +64,7 @@ public class PersonalTemplateService {
     @Transactional
     public void delete(long id,long expectedVersion) {
         templates.lockOwner(user());var t=owned(id,true);version(t,expectedVersion);templates.delete(id);
+        if (images != null) images.removeTemplate(id);
     }
     @Transactional
     public DocumentService.SummaryView instantiate(long id,String title,long expectedVersion) {

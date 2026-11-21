@@ -193,10 +193,15 @@ async function checkClient(port, reportOnly) {
   assert.equal(payload.code, 0)
   const url = new URL(payload.data.url)
   assert.equal(url.origin, 'https://images.example.invalid')
-  const publicImage = await request(url.pathname, { host: url.hostname })
-  assert.equal(publicImage.status, 200)
-  assert.deepEqual(publicImage.body, png)
-  assert.equal((await request(url.pathname, { host: url.hostname, method: 'HEAD' })).status, 200)
+  const imagePath = '/api' + url.pathname.slice('/collab'.length)
+  const headers = { Authorization: 'Bearer ' + token }
+  const privateImage = await request(imagePath, { headers })
+  assert.equal(privateImage.status, 200)
+  assert.match(privateImage.headers['content-type'], /^image\/png/)
+  assert.deepEqual(privateImage.body, png)
+  assert.equal((await request(imagePath, { method: 'HEAD', headers })).status, 200)
+  assert.equal((await request(imagePath)).status, 401)
+  assert.equal((await request(url.pathname, { host: url.hostname })).status, 403)
   for (const method of ['POST', 'PUT', 'DELETE', 'OPTIONS']) {
     assert.equal((await request(url.pathname, { host: url.hostname, method })).status, 403)
   }

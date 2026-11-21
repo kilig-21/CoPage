@@ -8,6 +8,7 @@ import com.school.collab.common.ErrorCode;
 import com.school.collab.common.UserContext;
 import com.school.collab.document.DocumentRepository.DocumentRow;
 import com.school.collab.search.SearchIndex;
+import com.school.collab.storage.ImageGrants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +30,7 @@ public class DocumentService {
     private final ObjectMapper objectMapper;
     private final SearchIndex searchIndex;
     private final org.springframework.context.ApplicationEventPublisher lifecycle;
+    private final ImageGrants imageGrants;
 
     public DocumentService(DocumentRepository documents, ObjectMapper objectMapper) {
         this(documents, objectMapper, null);
@@ -38,13 +40,19 @@ public class DocumentService {
         this(documents, objectMapper, searchIndex, null);
     }
 
-    @Autowired
     public DocumentService(DocumentRepository documents, ObjectMapper objectMapper, SearchIndex searchIndex,
                            org.springframework.context.ApplicationEventPublisher lifecycle) {
+        this(documents, objectMapper, searchIndex, lifecycle, null);
+    }
+
+    @Autowired
+    public DocumentService(DocumentRepository documents, ObjectMapper objectMapper, SearchIndex searchIndex,
+                           org.springframework.context.ApplicationEventPublisher lifecycle, ImageGrants imageGrants) {
         this.documents = documents;
         this.objectMapper = objectMapper;
         this.searchIndex = searchIndex;
         this.lifecycle = lifecycle;
+        this.imageGrants = imageGrants;
     }
 
     @Transactional(readOnly = true)
@@ -118,6 +126,7 @@ public class DocumentService {
         String normalized = title == null ? defaultCopyTitle(source.title()) : normalizeTitle(title, false);
         String content = source.content() == null ? EMPTY_CONTENT : source.content();
         long id = documents.create(normalized, userId, 0L, content);
+        if (imageGrants != null) imageGrants.attachToDocument(id, userId, content);
         documents.saveInitialSnapshot(id, content);
         indexAfterCommit(id);
         return new CopyView(id, normalized, source.revision());
@@ -149,6 +158,7 @@ public class DocumentService {
         try {
             String serialized = objectMapper.writeValueAsString(content);
             long id = documents.create(normalizedTitle, userId, 0L, serialized);
+            if (imageGrants != null) imageGrants.attachToDocument(id, userId, serialized);
             documents.saveInitialSnapshot(id, serialized);
             indexAfterCommit(id);
             return summary(documents.find(id).orElseThrow(() -> new BizException(ErrorCode.INTERNAL_ERROR)));

@@ -6,6 +6,9 @@ import com.school.collab.collab.CollabException;
 import com.school.collab.collab.store.CollabDocumentSnapshot;
 import com.school.collab.collab.store.VersionedOperation;
 import com.school.collab.ot.Delta;
+import com.school.collab.storage.ImageAssetRepository;
+import com.school.collab.storage.ImageGrants;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,10 +23,17 @@ public class DocumentPersistence {
     private static final int MAX_OPERATION_BYTES = 4 * 1024 * 1024;
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
+    private final ImageGrants imageGrants;
 
     public DocumentPersistence(JdbcTemplate jdbc, ObjectMapper mapper) {
+        this(jdbc, mapper, new ImageGrants(new ImageAssetRepository(jdbc), mapper));
+    }
+
+    @Autowired
+    public DocumentPersistence(JdbcTemplate jdbc, ObjectMapper mapper, ImageGrants imageGrants) {
         this.jdbc = jdbc;
         this.mapper = mapper;
+        this.imageGrants = imageGrants;
     }
 
     public Receipt receipt(long docId, long userId, String clientId, String opId) {
@@ -155,6 +165,7 @@ public class DocumentPersistence {
         String operationJson = write(operation);
         validateSerializedSize(contentJson, operationJson);
         requireCurrentEditor(docId, userId);
+        if (userId != null) imageGrants.attachToDocument(docId, userId, operationJson);
         int updated = jdbc.update("""
                 UPDATE document SET content = ?, revision = revision + 1,
                        update_time = CURRENT_TIMESTAMP, search_version = search_version + 1, search_pending = TRUE

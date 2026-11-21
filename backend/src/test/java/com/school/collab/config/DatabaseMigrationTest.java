@@ -47,8 +47,8 @@ class DatabaseMigrationTest {
 
         context(clean).run(app -> assertThat(app).hasNotFailed());
         context(bootstrap).run(app -> assertThat(app).hasNotFailed());
-        assertThat(versions(cleanDb)).containsExactly("1", "2", "3", "4", "5", "6");
-        assertThat(versions(bootstrapDb)).containsExactly("0", "1", "2", "3", "4", "5", "6");
+        assertThat(versions(cleanDb)).containsExactly("1", "2", "3", "4", "5", "6", "7", "8");
+        assertThat(versions(bootstrapDb)).containsExactly("0", "1", "2", "3", "4", "5", "6", "7", "8");
         assertThat(createTable(cleanDb, "document")).isEqualTo(createTable(bootstrapDb, "document"));
     }
 
@@ -64,7 +64,7 @@ class DatabaseMigrationTest {
         execute(legacy, oldDdl);
         jdbc.update("INSERT INTO `user` (id, username, password, nickname) VALUES (7001, 'migration_fixture', 'fixture', '合成账号')");
         jdbc.update("INSERT INTO document (id, title, owner_id, content, revision) VALUES (7002, '合成文档', 7001, ?, 7)",
-                "{\"ops\":[{\"insert\":\"迁移数据\\n\"}]}");
+                "{\"ops\":[{\"insert\":{\"image\":\"http://localhost:9000/collab/images/2026/09/11111111-1111-1111-1111-111111111111.png\"}},{\"insert\":\"迁移数据\\n\"}]}");
         jdbc.update("INSERT INTO doc_operation (doc_id, revision, op, user_id) VALUES (7002, 7, '{}', 7001)");
         jdbc.update("INSERT INTO doc_operation_receipt (doc_id, user_id, client_id, op_id, revision) VALUES (7002, 7001, 'cli', 'op', 7)");
         jdbc.update("INSERT INTO group_invitation (group_id, user_id, inviter_id, status) VALUES (7003, 7001, 7001, 'pending')");
@@ -73,12 +73,15 @@ class DatabaseMigrationTest {
         var accounts = jdbc.queryForList("SELECT id, username, password, nickname, create_time FROM `user`");
 
         context(legacy).run(app -> assertThat(app).hasNotFailed());
-        assertThat(versions(jdbc)).containsExactly("0", "1", "2", "3", "4", "5", "6");
+        assertThat(versions(jdbc)).containsExactly("0", "1", "2", "3", "4", "5", "6", "7", "8");
         assertThat(jdbc.queryForList("SELECT id,title,content,revision,owner_id,is_deleted,create_time,update_time FROM document"))
                 .isEqualTo(documents);
         assertThat(jdbc.queryForObject("SELECT search_version FROM document WHERE id=7002", Long.class)).isEqualTo(1L);
         assertThat(jdbc.queryForObject("SELECT search_pending FROM document WHERE id=7002", Boolean.class)).isTrue();
         assertThat(jdbc.queryForList("SELECT * FROM doc_operation")).isEqualTo(operations);
+        assertThat(jdbc.queryForList("SELECT doc_id, object_key FROM document_image_asset"))
+                .containsExactly(java.util.Map.of("doc_id", 7002L, "object_key", "images/2026/09/11111111-1111-1111-1111-111111111111.png"));
+        assertThat(jdbc.queryForObject("SELECT owner_id FROM image_asset", Long.class)).isNull();
         assertThat(jdbc.queryForList("SELECT id, username, password, nickname, create_time FROM `user`")).isEqualTo(accounts);
         assertThat(jdbc.queryForObject("SELECT credential_version FROM `user` WHERE id=7001", Long.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT request_hash FROM doc_operation_receipt WHERE revision=7", String.class)).isNull();
@@ -86,7 +89,7 @@ class DatabaseMigrationTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM doc_creation_receipt", Long.class)).isZero();
 
         context(legacy).run(app -> assertThat(app).hasNotFailed());
-        assertThat(versions(jdbc)).containsExactly("0", "1", "2", "3", "4", "5", "6");
+        assertThat(versions(jdbc)).containsExactly("0", "1", "2", "3", "4", "5", "6", "7", "8");
     }
 
     @Test

@@ -18,6 +18,7 @@ import { readDraftRecords } from './draftRecords'
 import { createSkippedDraftNotice } from './skippedDraftNotice'
 import { createDocumentFind, EMPTY_DOCUMENT_FIND } from './documentFind'
 import { createDocumentImages, EMPTY_DOCUMENT_IMAGES } from './documentImages'
+import { loadPrivateImages, registerPrivateImageBlot } from './privateImages'
 
 function createClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `client-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -92,6 +93,7 @@ export default function useQuillCollab(docId) {
     imageInput.accept = IMAGE_ACCEPT
     imageInput.hidden = true
 
+    registerPrivateImageBlot(Quill)
     const quill = new Quill(host, {
       bounds: host,
       formats: DOCUMENT_FORMATS,
@@ -144,6 +146,7 @@ export default function useQuillCollab(docId) {
     }
     setPlaceholder('正在加载文档…')
     quillRef.current = quill
+    const disposePrivateImages = loadPrivateImages(quill.root, request)
     const cursorLayer = new RemoteCursorLayer(quill)
     const Delta = Quill.import('delta')
     const token = pageSession.identity.token
@@ -749,6 +752,7 @@ export default function useQuillCollab(docId) {
       documentFind?.dispose()
       documentFindRef.current = null
       imageDescriptions?.dispose()
+      disposePrivateImages()
       documentImagesRef.current = null
       quill.getModule('toolbar')?.container.remove()
       host.replaceChildren()
