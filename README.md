@@ -4,6 +4,8 @@ CoPage 是面向课程小组和小型团队的富文本文档工作区。成员�
 
 [本地运行](#本地运行) · [一次编辑如何保存](#一次编辑如何保存) · [使用与交付文档](#使用与交付文档)
 
+演示入口为本地运行的 [http://localhost:5173](http://localhost:5173)，目前尚未公网部署。
+
 ![CoPage 工作台，显示最近文档和组织入口](docs/media/copage-workspace.png)
 
 ## 可以做什么
@@ -43,16 +45,16 @@ flowchart LR
     Backend <-->|正文、版本与收据| MySQL[(MySQL)]
     Backend <-->|文档锁、在线状态与广播| Redis[(Redis)]
     Backend -->|提交后通知| RabbitMQ[RabbitMQ]
-    RabbitMQ -->|异步快照与索引更新| Backend
+    RabbitMQ -->|异步快照| Backend
     Backend <-->|可重建的检索副本| Elasticsearch[(Elasticsearch)]
     Backend <-->|图片上传| MinIO[(MinIO)]
 ```
 
-Redis 协调多实例的文档锁和增量广播。搜索在 MySQL 中确认权限，再查询 Elasticsearch。历史和文档内容可从 MySQL 恢复，图片由 MinIO 持久化。
+Redis 协调多实例的文档锁和增量广播。MySQL 在提交时标记检索待更新，后台批量更新 Elasticsearch。搜索按 MySQL 权限过滤。历史和文档内容可从 MySQL 恢复，图片由 MinIO 持久化。
 
 ## 交付范围
 
-当前提供本地演示及隔离环境的启动、健康检查和备份恢复验证。公网入口与真实服务器演练由负责人后续安排。最终视觉和真实系统中文输入法需要人工确认。知识平台和 AI 功能属于后续规划。
+当前提供本地演示及隔离环境的启动、健康检查和备份恢复验证。视觉验收覆盖主要页面的桌面与窄屏。公网入口、真实服务器恢复演练和系统中文输入法仍待对应环境验证。知识平台和 AI 功能属于后续规划。
 
 ## 使用与交付文档
 
@@ -61,3 +63,4 @@ Redis 协调多实例的文档锁和增量广播。搜索在 MySQL 中确认权�
 - [数据库迁移](docs/数据库结构迁移.md)、[部署准备与备份恢复](docs/后端服务器部署.md)
 - [开发与验收沿革](docs/开发与验收沿革.md)、[交付验收清单](docs/交付验收清单.md)和[产品交付质量复核](docs/产品交付质量复核.md)。沿革保存原 README 的过程记录，质量复核列出验收边界。
 - [Playwright 浏览器冒烟](docs/qa/CODI-124-playwright.md)。在隔离 Compose 环境验证编辑、协作和资料恢复。
+- [发布说明](CHANGELOG.md)和[上线评审交付报告](docs/上线评审交付报告.md)。
