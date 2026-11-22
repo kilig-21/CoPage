@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeftOutlined, FileTextOutlined } from '@ant-design/icons'
-import { Alert, Button, Card, Input, Layout, List, Tag, Typography } from 'antd'
-import ListEmptyState from '../components/ListEmptyState'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { ArrowRightOutlined } from '@ant-design/icons'
+import { Alert, Button, Input, Layout, List, Skeleton, Tag, Typography } from 'antd'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import { usePageRequest } from '../auth/PageSessionContext'
 import { requestFailureMessage } from '../api/requestError'
@@ -14,7 +13,6 @@ const PAGE_SIZE = 10
 
 export default function Search() {
   const request = usePageRequest()
-  const navigate = useNavigate()
   const location = useLocation()
   const sourcePath = location.pathname + location.search + location.hash
   const [params, setParams] = useSearchParams()
@@ -22,6 +20,7 @@ export default function Search() {
   const rawPage = Number(params.get('page') || 1)
   const page = Number.isInteger(rawPage) && rawPage > 0 && rawPage <= 1000 ? rawPage : 1
   const [input, setInput] = useState(query)
+  const searchInput = useRef(null)
   const [read, setRead] = useState(null)
   const [retry, setRetry] = useState(0)
   const readKey = JSON.stringify([query, page, retry])
@@ -87,31 +86,50 @@ export default function Search() {
     discardRead()
     setRetry(value => value + 1)
   }
+  function clearSearch() {
+    search('')
+    searchInput.current?.focus()
+  }
+
+  const resultStatus = loading ? '正在搜索…'
+    : ready ? (total === 0 ? '没有找到相关文档' : `找到 ${total} 篇可访问的文档`)
+      : error ? '' : '可按标题或正文查找有权限访问的文档。'
 
   return (
     <Layout className="app-shell"><WorkspaceHeader title="搜索" />
-    <main id="workspace-main" tabIndex={-1} className="content-wrap">
-      <WorkspacePageHeading title="搜索文档" description="从有权限访问的标题和正文中查找。增加关键词可缩小范围，没有结果时可试着减少关键词。">
-        <Button type="text" aria-label="返回文档列表" icon={<ArrowLeftOutlined />} onClick={() => navigate('/docs')}>返回文档列表</Button></WorkspacePageHeading>
-      <Input.Search aria-label="搜索标题和正文" placeholder="搜索标题和正文" value={input} maxLength={100} onChange={(event) => setInput(event.target.value)} onSearch={search} size="large" enterButton="搜索" className="search-box" />
-      {error && <Alert type="error" showIcon message={error} action={validQuery && <Button size="small" disabled={loading} onClick={retrySearch}>重试</Button>} />}
-      <Card role="region" aria-label="搜索结果" aria-busy={loading} className="search-results-card">
-        {ready && <Typography.Paragraph type="secondary">找到 {total} 篇可访问的文档</Typography.Paragraph>}
+    <main id="workspace-main" tabIndex={-1} className="content-wrap document-search">
+      <WorkspacePageHeading title="搜索文档" />
+      <div role="search" aria-label="文档搜索">
+        <Input.Search ref={searchInput} aria-label="搜索标题和正文" placeholder="搜索标题和正文" value={input} maxLength={100}
+          onChange={event => setInput(event.target.value)} onSearch={search} size="large" enterButton="搜索" />
+      </div>
+      <div className="search-result-summary">
+        <p role="status">{resultStatus}</p>
+        {(query || input) && <Button type="text" onClick={clearSearch}>清除搜索</Button>}
+      </div>
+      <section aria-label="搜索结果" aria-busy={loading} className="search-results">
+        {error && <Alert type="error" showIcon message={error}
+          action={validQuery && <Button onClick={retrySearch}>重试搜索</Button>} />}
+        {loading && <div className="search-loading" aria-hidden="true"><Skeleton title={false} paragraph={{ rows: 2 }} /></div>}
+        {ready && total === 0 && <p className="search-empty-hint">试试减少关键词，或换一个文档标题或正文中的词。</p>}
         {ready && total > 10000 && <Typography.Paragraph type="secondary">最多显示前 10000 条结果，试试更具体的关键词。</Typography.Paragraph>}
-        <List rowKey="id" loading={{ spinning: loading, tip: '正在搜索…' }} dataSource={results}
-          locale={{ emptyText: <ListEmptyState description={error ? '暂时无法显示搜索结果' : ready ? '没有找到相关文档' : '输入关键词，搜索你有权限访问的标题和正文'} /> }}
+        {results.length > 0 && <List rowKey="id" dataSource={results}
           pagination={ready && total > PAGE_SIZE ? { current: page, pageSize: PAGE_SIZE, total: Math.min(total, 10000), showSizeChanger: false, responsive: true, showLessItems: true, onChange: (next) => changePage(next) } : false}
-          renderItem={(item) => <List.Item><List.Item.Meta avatar={<FileTextOutlined className="doc-icon" />} title={<Link to={documentHref(item.id, sourcePath)}>{item.title}</Link>} description={<div className="search-result-description">
+          renderItem={item => <List.Item className="search-result-item">
+            <h2 className="search-result-title"><Link to={documentHref(item.id, sourcePath)}>
+              <span>{item.title}</span><ArrowRightOutlined aria-hidden="true" />
+            </Link></h2>
+            <SearchExcerpt snippet={item.snippet} title={item.title} />
             <div className="search-result-metadata">
               <Tag>{item.isOwner === true ? '所有者' : item.permission === 2 ? '可编辑' : item.permission === 1 ? '只读' : '打开后查看权限'}</Tag>
-              <Typography.Text type="secondary">文档 #{item.id}</Typography.Text>
               <Typography.Text type="secondary" className="search-result-owner">所有者：{typeof item.ownerName === 'string' && item.ownerName.trim()
                 ? item.ownerName : Number.isSafeInteger(item.ownerId) && item.ownerId > 0 ? `用户 #${item.ownerId}` : '暂不可用'}</Typography.Text>
+              {typeof item.updateTime === 'string' && item.updateTime && <Typography.Text type="secondary">更新于 {item.updateTime}</Typography.Text>}
+              <Typography.Text type="secondary">文档 #{item.id}</Typography.Text>
             </div>
-            <SearchExcerpt snippet={item.snippet} title={item.title} />
-            {typeof item.updateTime === 'string' && item.updateTime && <Typography.Text type="secondary" className="search-result-updated">更新于 {item.updateTime}</Typography.Text>}
-          </div>} /></List.Item>} />
-      </Card>
+          </List.Item>} />}
+      </section>
+      <Link to="/docs" className="search-document-list-link">返回文档列表</Link>
     </main></Layout>
   )
 }
