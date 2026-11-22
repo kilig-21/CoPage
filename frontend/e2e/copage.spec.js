@@ -75,6 +75,26 @@ test('login, logout, and protected route redirect', async ({ page, request }) =>
   await expect(page).toHaveURL(/\/login(?:\?|$)/)
 })
 
+test('share and collaborator dialogs keep keyboard focus at desktop and narrow widths', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  await createDocument(page)
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 850 })
+    const shareButton = page.getByRole('button', { name: '分享链接' })
+    await shareButton.press('Enter')
+    const share = page.getByRole('dialog', { name: '分享文档链接' })
+    await share.getByRole('button', { name: '设置协作者权限' }).press('Enter')
+    const collaborators = page.getByRole('dialog', { name: /^协作者管理/ })
+    await expect(collaborators.getByText('尚未添加协作者')).toBeVisible()
+    await collaborators.getByRole('button', { name: '返回分享' }).press('Enter')
+    await expect(share).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(share).toBeHidden()
+    await expect(shareButton).toBeFocused()
+  }
+})
+
 test('login surfaces Chinese messages for bad credentials, offline, timeout, and HTTP errors', async ({ page, context, request }) => {
   const account = await createAccount(request)
   const endpoint = `${backend}/api/auth/login`

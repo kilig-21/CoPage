@@ -34,6 +34,7 @@ export default function Editor() {
   const topbarRef = useRef(null)
   const statusRef = useRef(null)
   const toolsButtonRef = useRef(null)
+  const shareButtonRef = useRef(null)
   useEditorStickyOffsets(topbarRef, statusRef)
   const [renaming, setRenaming] = useState(false)
   const [sharing, setSharing] = useState(false)
@@ -137,6 +138,11 @@ export default function Editor() {
     const returnToShare = context?.fromShare && currentManagement(context)
     changeManagement(null)
     if (returnToShare) setSharing(true)
+    else queueMicrotask(() => toolsButtonRef.current?.focus({ preventScroll: true }))
+  }
+  function closeShare() {
+    setSharing(false)
+    queueMicrotask(() => shareButtonRef.current?.focus({ preventScroll: true }))
   }
   useEffect(() => { setToolsOpen(false); setTitleOpen(false) }, [docId, permission])
   useEffect(() => { changeManagement(null); setSharing(false); setShareError(''); setShowImages(false) }, [docId])
@@ -212,7 +218,7 @@ export default function Editor() {
         <Space className="editor-actions" size={4}>
           {permission > 0 && <Tooltip title="文档内查找（Ctrl/⌘+F）"><Button type="text" aria-label="文档内查找"
             icon={<SearchOutlined aria-hidden="true" />} onClick={openFind}><span className="editor-action-label">查找</span></Button></Tooltip>}
-          {permission > 0 && <Tooltip title="分享链接"><Button type="text" aria-label="分享链接" icon={<ShareAltOutlined aria-hidden="true" />}
+          {permission > 0 && <Tooltip title="分享链接"><Button ref={shareButtonRef} type="text" aria-label="分享链接" icon={<ShareAltOutlined aria-hidden="true" />}
             onClick={() => setSharing(true)}><span className="editor-action-label">分享</span></Button></Tooltip>}
           <Dropdown trigger={['click']} autoFocus open={toolsOpen} onOpenChange={setToolsOpen} menu={{ items: tools, onClick: selectTool }}>
             <Button ref={toolsButtonRef} type="text" aria-label="更多文档操作" aria-haspopup="menu" aria-expanded={toolsOpen} icon={<MoreOutlined aria-hidden="true" />}>
@@ -280,7 +286,7 @@ export default function Editor() {
           queueMicrotask(() => toolsButtonRef.current?.focus({ preventScroll: true }))
         }} />}
       {renaming && permission === 2 && <RenameModal doc={{ id: docId, title }} onSaved={refreshTitle} onClose={() => setRenaming(false)} />}
-      {sharing && <ShareModal docId={docId} isOwner={isOwner && permission === 2} managementError={shareError} onClose={() => setSharing(false)}
+      {sharing && <ShareModal docId={docId} isOwner={isOwner && permission === 2} managementError={shareError} onClose={closeShare}
         onManage={() => openManagement(true)} />}
       {managing && currentManagement(managing) && <CollaboratorModal doc={{ id: docId, title }} returnToShare={managing.fromShare} onClose={() => closeManagement(managing)} />}
       {showHistory && permission > 0 && <HistoryDrawer docId={docId} isOwner={isOwner && permission === 2}

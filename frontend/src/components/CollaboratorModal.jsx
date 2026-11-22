@@ -17,6 +17,7 @@ export default function CollaboratorModal({ doc, onClose, returnToShare = false 
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [form] = Form.useForm()
+  const backButton = useRef(null)
   const base = '/doc/' + doc.id + '/collaborators'
 
   useEffect(() => {
@@ -67,7 +68,11 @@ export default function CollaboratorModal({ doc, onClose, returnToShare = false 
     }
   }
 
-  return <Modal className="document-collaborators-modal" title={'协作者管理 · ' + doc.title} open onCancel={() => { if (!busy) onClose() }} closable={!busy} maskClosable={!busy} keyboard={!busy} footer={<Button disabled={busy} onClick={onClose}>{returnToShare ? '返回分享' : '关闭'}</Button>}>
+  return <Modal className="document-collaborators-modal" title={'协作者管理 · ' + doc.title} open
+    transitionName={returnToShare ? '' : undefined} maskTransitionName={returnToShare ? '' : undefined}
+    afterOpenChange={open => { if (open && returnToShare) backButton.current?.focus({ preventScroll: true }) }}
+    onCancel={() => { if (!busy) onClose() }} closable={!busy} maskClosable={!busy} keyboard={!busy}
+    footer={<Button ref={backButton} disabled={busy} onClick={onClose}>{returnToShare ? '返回分享' : '关闭'}</Button>}>
     <Typography.Paragraph type="secondary">只有文档所有者可以管理成员。输入对方已注册的用户名；添加后把文档链接发给对方即可。</Typography.Paragraph>
     {error && <Alert type="error" showIcon message={error} action={<Button size="small" disabled={busy || loading} onClick={() => { setError(''); setRefresh((value) => value + 1) }}>刷新列表</Button>} />}
     <Form form={form} layout="vertical" initialValues={{ permission: 1 }} onFinish={(values) => mutate(signal => request.post(base, { ...values, username: values.username.trim() }, { signal }), () => form.resetFields(['username']))}>
