@@ -44,9 +44,14 @@ spring:
     username: ${RABBITMQ_USER:collab}
     password: ${RABBITMQ_PASSWORD:123456}
     connection-timeout: 3s
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
     listener:
       simple:
         acknowledge-mode: manual
+        prefetch: 16
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
   task:
@@ -86,6 +91,13 @@ mybatis-plus:
       logic-not-delete-value: 0
 
 collab:
+  mq:
+    confirm-timeout-ms: ${MQ_CONFIRM_TIMEOUT_MS:1500}
+    operation-consumers: ${MQ_OPERATION_CONSUMERS:2}
+    snapshot-consumers: ${MQ_SNAPSHOT_CONSUMERS:2}
+  snapshot:
+    repair-initial-delay-ms: ${SNAPSHOT_REPAIR_INITIAL_DELAY_MS:30000}
+    repair-interval-ms: ${SNAPSHOT_REPAIR_INTERVAL_MS:60000}
   document-cache-ttl-seconds: ${DOCUMENT_CACHE_TTL_SECONDS:3600}
   frontend-error-reporting:
     enabled: ${FRONTEND_ERROR_REPORTING_ENABLED:false}

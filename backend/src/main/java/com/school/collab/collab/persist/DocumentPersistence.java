@@ -110,16 +110,15 @@ public class DocumentPersistence {
     }
 
     /** 巡检漏发消息的文档；一次只取有限批次，下一轮继续补齐。 */
-    public List<Long> snapshotCandidates(int interval) {
+    public List<Long> snapshotCandidates(int interval, long after, int limit) {
         return jdbc.query("""
                 SELECT d.id FROM document d
-                LEFT JOIN (
-                    SELECT doc_id, MAX(revision) AS revision
-                    FROM doc_snapshot GROUP BY doc_id
-                ) s ON s.doc_id = d.id
-                WHERE d.is_deleted = 0 AND d.revision - COALESCE(s.revision, 0) >= ?
-                ORDER BY d.id LIMIT 100
-                """, (rs, index) -> rs.getLong(1), interval);
+                WHERE d.id > ? AND d.is_deleted = 0 AND d.revision - COALESCE((
+                    SELECT s.revision FROM doc_snapshot s WHERE s.doc_id = d.id
+                    ORDER BY s.revision DESC LIMIT 1
+                ), 0) >= ?
+                ORDER BY d.id LIMIT ?
+                """, (rs, index) -> rs.getLong(1), after, interval, limit);
     }
 
     /** 锁住文档行后检查并保存快照，重复 MQ 消息和多实例消费都不会重复插入。 */

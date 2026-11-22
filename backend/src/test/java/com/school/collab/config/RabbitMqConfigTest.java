@@ -6,11 +6,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.support.converter.MessageConverter;
+import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RabbitMqConfigTest {
     private final MessageConverter converter = new RabbitMqConfig().jsonMessageConverter();
@@ -37,6 +40,19 @@ class RabbitMqConfigTest {
         for (String type : new String[]{RabbitMqConfig.class.getName(), "java.io.File"}) {
             assertThrows(IllegalArgumentException.class, () -> converter.fromMessage(message(type, "{}")));
         }
+    }
+
+    @Test
+    void confirmsReturnsAndBoundedPrefetchApplyInProductionProfile() {
+        new ApplicationContextRunner().withInitializer(new ConfigDataApplicationContextInitializer())
+                .withPropertyValues("spring.profiles.active=prod").run(context -> {
+                    var env = context.getEnvironment();
+                    assertTrue(env.matchesProfiles("prod"));
+                    assertEquals("correlated", env.getProperty("spring.rabbitmq.publisher-confirm-type"));
+                    assertEquals("true", env.getProperty("spring.rabbitmq.publisher-returns"));
+                    assertEquals("true", env.getProperty("spring.rabbitmq.template.mandatory"));
+                    assertEquals("16", env.getProperty("spring.rabbitmq.listener.simple.prefetch"));
+                });
     }
 
     private Message message(String type, String json) {

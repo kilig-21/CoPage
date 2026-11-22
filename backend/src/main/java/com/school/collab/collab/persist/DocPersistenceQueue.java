@@ -1,98 +1,153 @@
 package com.school.collab.collab.persist;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.rabbitmq.client.Channel;
 import com.school.collab.config.RabbitMqConfig;
-import com.school.collab.search.SearchIndex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.TransactionException;
 
 import java.io.IOException;
+import java.util.function.BooleanSupplier;
 
-/** 已持久化操作经 MQ 触发异步快照；定时巡检弥补数据库提交后、发消息前的崩溃窗口。 */
+/** 已持久化操作经 MQ 触发异步快照；定时巡检弥补提交后漏发的通知。 */
 @Component
 public class DocPersistenceQueue {
     private static final Logger log = LoggerFactory.getLogger(DocPersistenceQueue.class);
+    private static final int MAX_NOTICE_BYTES = 1024;
+    private static final int CONSUMPTION_ATTEMPTS = 3;
+    private static final int REPAIR_BATCH = 100;
 
-    private final RabbitTemplate rabbit;
+    private final ConfirmedDocPublisher publisher;
     private final DocumentPersistence persistence;
-    private final ObjectMapper mapper;
-    private final SearchIndex searchIndex;
+    private final ObjectReader operationReader;
+    private final ObjectReader snapshotReader;
     private final int interval;
+    private long repairAfter;
 
-    public DocPersistenceQueue(RabbitTemplate rabbit, DocumentPersistence persistence,
-                               ObjectMapper mapper, SearchIndex searchIndex,
+    public DocPersistenceQueue(ConfirmedDocPublisher publisher, DocumentPersistence persistence, ObjectMapper mapper,
                                @Value("${collab.snapshot.interval:20}") int interval) {
-        this.rabbit = rabbit;
+        if (interval < 1) throw new IllegalArgumentException("快照间隔必须大于 0");
+        this.publisher = publisher;
         this.persistence = persistence;
-        this.mapper = mapper;
-        this.searchIndex = searchIndex;
+        this.operationReader = noticeReader(mapper, OperationCommitted.class);
+        this.snapshotReader = noticeReader(mapper, SnapshotRequested.class);
         this.interval = interval;
-        if (interval < 1) {
-            throw new IllegalArgumentException("快照间隔必须大于 0");
-        }
     }
 
     public void publishCommitted(long docId, long revision) {
-        rabbit.convertAndSend(RabbitMqConfig.DOC_EXCHANGE,
-                RabbitMqConfig.OP_ROUTING_KEY, new OperationCommitted(docId, revision));
+        publisher.submitOperation(new OperationCommitted(docId, revision));
     }
 
-    private void requestSnapshot(long docId) {
-        rabbit.convertAndSend(RabbitMqConfig.DOC_EXCHANGE,
-                RabbitMqConfig.SNAPSHOT_ROUTING_KEY, new SnapshotRequested(docId));
+    private static ObjectReader noticeReader(ObjectMapper mapper, Class<?> event) {
+        return mapper.readerFor(event).with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS,
+                DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
+                .without(DeserializationFeature.ACCEPT_FLOAT_AS_INT);
     }
 
-    @RabbitListener(queues = RabbitMqConfig.OP_QUEUE)
+    private static <T> T parse(Message message, ObjectReader reader) {
+        if (message.getBody().length > MAX_NOTICE_BYTES) return null;
+        try {
+            return reader.readValue(message.getBody());
+        } catch (IOException invalidJson) {
+            return null;
+        }
+    }
+
+    @RabbitListener(queues = RabbitMqConfig.OP_QUEUE, concurrency = "${collab.mq.operation-consumers:2}")
     public void onOperation(Message message, Channel channel) throws IOException {
         long tag = message.getMessageProperties().getDeliveryTag();
-        try {
-            OperationCommitted event = mapper.readValue(message.getBody(), OperationCommitted.class);
-            if (!persistence.operationExists(event.docId(), event.revision())) {
-                throw new IllegalStateException("操作日志尚未落库: " + event);
-            }
-            try {
-                searchIndex.upsertEventually(event.docId());
-            } catch (RuntimeException exception) {
-                log.warn("ES 索引暂时失败，巡检会补建, docId={}", event.docId(), exception);
-            }
-            if (event.revision() % interval == 0) {
-                requestSnapshot(event.docId());
-            }
-            channel.basicAck(tag, false);
-        } catch (Exception exception) {
-            log.error("操作通知处理失败，已送死信队列", exception);
+        OperationCommitted event = parse(message, operationReader);
+        if (event == null || event.docId() <= 0 || event.revision() <= 0) {
+            log.warn("RabbitMQ 拒绝无效操作通知，转入死信队列");
             channel.basicNack(tag, false, false);
+            return;
         }
+        handle(channel, tag, RabbitMqConfig.OP_ROUTING_KEY, event.docId(), event.revision(), () -> {
+            if (!persistence.operationExists(event.docId(), event.revision())) {
+                return event.revision() <= persistence.minimumRevision(event.docId());
+            }
+            // 待索引标记与操作在同一事务提交，由搜索巡检合并处理。
+            if (event.revision() % interval == 0 && !publisher.publishSnapshot(event.docId(), event.revision())) {
+                persistence.saveSnapshotIfNeeded(event.docId(), interval);
+            }
+            return true;
+        });
     }
 
-    @RabbitListener(queues = RabbitMqConfig.SNAPSHOT_QUEUE)
+    @RabbitListener(queues = RabbitMqConfig.SNAPSHOT_QUEUE, concurrency = "${collab.mq.snapshot-consumers:2}")
     public void onSnapshot(Message message, Channel channel) throws IOException {
         long tag = message.getMessageProperties().getDeliveryTag();
-        try {
-            SnapshotRequested event = mapper.readValue(message.getBody(), SnapshotRequested.class);
+        SnapshotRequested event = parse(message, snapshotReader);
+        if (event == null || event.docId() <= 0) {
+            log.warn("RabbitMQ 拒绝无效快照请求，转入死信队列");
+            channel.basicNack(tag, false, false);
+            return;
+        }
+        handle(channel, tag, RabbitMqConfig.SNAPSHOT_ROUTING_KEY, event.docId(), 0, () -> {
             persistence.saveSnapshotIfNeeded(event.docId(), interval);
+            return true;
+        });
+    }
+
+    private void handle(Channel channel, long tag, String route, long docId, long revision,
+                        BooleanSupplier process) throws IOException {
+        boolean handled = false;
+        String failureReason = "MISSING_OPERATION";
+        for (int attempt = 1; attempt <= CONSUMPTION_ATTEMPTS; attempt++) {
+            try {
+                handled = process.getAsBoolean();
+                if (!handled) failureReason = "MISSING_OPERATION";
+                break;
+            } catch (DataAccessException | TransactionException failure) {
+                failureReason = failure.getClass().getSimpleName();
+                if (attempt < CONSUMPTION_ATTEMPTS) {
+                    try {
+                        Thread.sleep(100L * attempt);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw new IOException("RabbitMQ 消费重试被中断", interrupted);
+                    }
+                }
+            } catch (RuntimeException failure) {
+                failureReason = failure.getClass().getSimpleName();
+                break;
+            }
+        }
+        // 如果 ack 本身失败，由 broker 决定是否重投，不在相同 delivery tag 上再发 nack。
+        if (handled) {
             channel.basicAck(tag, false);
-        } catch (Exception exception) {
-            log.error("快照任务处理失败，已送死信队列", exception);
+        } else {
+            log.warn("RabbitMQ 消费失败，转入死信队列, route={}, docId={}, revision={}, reason={}",
+                    route, docId, revision, failureReason);
             channel.basicNack(tag, false, false);
         }
     }
 
-    @Scheduled(initialDelay = 30_000, fixedDelay = 60_000)
+    @Scheduled(initialDelayString = "${collab.snapshot.repair-initial-delay-ms:30000}",
+            fixedDelayString = "${collab.snapshot.repair-interval-ms:60000}")
     public void repairMissedSnapshots() {
         try {
-            for (Long docId : persistence.snapshotCandidates(interval)) {
-                requestSnapshot(docId);
+            var candidates = persistence.snapshotCandidates(interval, repairAfter, REPAIR_BATCH);
+            for (long docId : candidates) {
+                repairAfter = docId;
+                try {
+                    persistence.saveSnapshotIfNeeded(docId, interval);
+                } catch (RuntimeException failure) {
+                    log.warn("巡检暂未补建快照, docId={}, reason={}", docId, failure.getClass().getSimpleName());
+                }
             }
-        } catch (RuntimeException exception) {
-            log.warn("快照巡检暂时失败，下轮重试", exception);
+            if (candidates.size() < REPAIR_BATCH) repairAfter = 0;
+        } catch (RuntimeException failure) {
+            log.warn("快照巡检暂时失败，下轮重试, reason={}", failure.getClass().getSimpleName());
         }
     }
 

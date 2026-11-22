@@ -62,10 +62,12 @@ class SearchRepairTest {
         });
         when(documents.findForIndex(7)).thenReturn(Optional.of(row(7, 3, true)), Optional.of(row(7, 2, false)),
                 Optional.of(row(7, 3, true)));
+        server.createContext(CHECKPOINT, call -> reply(call, 200, "{\"_source\":{\"complete\":true}}"));
+        when(documents.pendingIndexIdsAfter(0, 32)).thenReturn(List.of(7L));
 
         index.upsert(7);
-        index.upsertEventually(7);
-        index.upsertEventually(7);
+        index.rebuild();
+        index.rebuild();
 
         assertEquals(3, appliedVersion.get());
         assertEquals("{\"id\":7,\"deleted\":true}", appliedBody.get());

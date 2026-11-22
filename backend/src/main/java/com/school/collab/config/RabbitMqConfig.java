@@ -12,8 +12,10 @@ import org.springframework.amqp.support.converter.DefaultJackson2JavaTypeMapper;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.Map;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * 已落库操作通知与异步快照通道。正文、版本和操作日志由 MySQL 事务先行提交。
@@ -73,6 +75,17 @@ public class RabbitMqConfig {
     @Bean
     public Binding deadLetterBinding() {
         return BindingBuilder.bind(deadLetterQueue()).to(deadLetterExchange()).with("#");
+    }
+
+    @Bean(defaultCandidate = false)
+    public ThreadPoolTaskExecutor docPublishExecutor() {
+        var executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("doc-publish-");
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(256);
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
+        return executor;
     }
 
     /**

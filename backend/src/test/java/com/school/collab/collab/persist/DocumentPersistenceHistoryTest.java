@@ -65,6 +65,26 @@ class DocumentPersistenceHistoryTest {
         assertEquals(List.of(2L), secondPage.operations().stream().map(VersionedOperation::revision).toList());
     }
 
+    @Test
+    void mysqlSnapshotScanPagesEligibleDocumentsAndUsesLatestSnapshot() {
+        var db = freshDatabase();
+        var mapper = new ObjectMapper();
+        var persistence = new DocumentPersistence(db, mapper);
+        db.update("""
+                INSERT INTO document (id, content, revision, owner_id, is_deleted) VALUES
+                (7803, NULL, 20, 1, 0), (7804, NULL, 21, 1, 0), (7805, NULL, 20, 1, 1), (7806, NULL, 50, 1, 0)
+                """);
+        db.update("""
+                INSERT INTO doc_snapshot (doc_id, revision, content) VALUES
+                (7804, 5, '{"ops":[]}'), (7806, 10, '{"ops":[]}'), (7806, 40, '{"ops":[]}')
+                """);
+
+        assertEquals(List.of(7803L), persistence.snapshotCandidates(10, 7802, 1));
+        assertEquals(List.of(7804L, 7806L), persistence.snapshotCandidates(10, 7803, 10));
+        persistence.saveSnapshotIfNeeded(7804, 10);
+        assertEquals(List.of(7806L), persistence.snapshotCandidates(10, 7803, 10));
+    }
+
     private JdbcTemplate freshDatabase() {
         return new JdbcTemplate(createMigrated());
     }
