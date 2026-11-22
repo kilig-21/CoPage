@@ -12,6 +12,8 @@ npm --prefix frontend run test:e2e
 
 命令创建随机 Compose 项目、隔离卷、动态回环端口和临时生产前端产物。测试账号、文档和上传内容均为合成数据。测试使用启动守卫的本地配置，后端仍校验回环前端来源。默认从仓库 Dockerfile 构建后端，退出时核对项目标签后清理临时容器、网络、卷和前端产物。常规开发环境无需停机。可选 `COPAGE_E2E_BROWSER_CHANNEL=chrome` 使用本机 Chrome。离线条件下已有对应的非 root 后端镜像时，可显式传入 `-- --runtime-image=copage-backend:<tag>`。
 
+MinIO 镜像优先使用 Compose 锁定的镜像。Quay 拒绝拉取时，浏览器烟测会为自己的隔离项目从同版本提交构建 MinIO 和 `mc`。本机有缓存时，可在命令后追加 `-- --browser-storage-from-source` 验证此路径。这个流程需要访问 GitHub 和 Go 模块镜像。 [MinIO 服务端版本](https://github.com/minio/minio/tree/07c3a429bfed433e49018cb0f78a52145d4bedeb) · [mc 客户端版本](https://github.com/minio/mc/tree/7394ce0dd2a80935aded936b09fa12cbb3cb8096)
+
 ## 覆盖
 
 1. 真实登录后登出，再打开受保护的文档列表应回到登录页。
@@ -37,3 +39,5 @@ npm --prefix frontend run test:e2e
 2026-11-22 使用 `COPAGE_E2E_BROWSER_CHANNEL=chrome` 运行 `npm --prefix frontend run test:e2e -- --runtime-image=copage-backend:codi123-verified`。隔离双实例的通用协作烟测确认了 30 次并发提交，七条 Chromium 浏览器用例全部通过，用例阶段耗时 31.4 秒。真实导出文件经解析和再次上传。曾以失败 trace 核对定位问题和凭据脱敏，脱敏后压缩包仍可读取。 [仅正文关键词的搜索命中](assets/codi124/search-result.png)
 
 同轮隔离 MySQL 的 Maven verify 通过 455 项测试，前端通过 468 项测试，Vite 构建与静态分片检查通过。本机浏览器烟测使用当前代码构建的非 root JAR 镜像。默认源码构建由 CI 作业单独执行。
+
+首次远端运行的浏览器作业在拉取 Quay 固定镜像时遇到 401。启用源码回退后，在本机的新隔离项目再次跑完七条用例，耗时 30.4 秒，MinIO 初始化正常完成，测试资源随后清理。 [首次 GitHub Actions](https://github.com/kilig-21/CoPage/actions/runs/44971606677)

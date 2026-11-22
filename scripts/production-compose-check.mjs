@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
-import { mkdtempSync, readFileSync, writeFileSync, unlinkSync, rmdirSync } from 'node:fs'
+import { appendFileSync, mkdtempSync, readFileSync, writeFileSync, unlinkSync, rmdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -106,10 +106,11 @@ if (process.argv.includes('--smoke') || fullSmoke) {
   // 随机项目名只属于本次验收，不触及开发或实际生产项目的数据卷。
   const project = 'copage-prod-qa-' + randomBytes(6).toString('hex')
   const browser = browserSmoke ? await (await import('../frontend/scripts/isolate-browser-smoke.mjs')).isolateBrowserSmoke() : null
+  let browserBackendOverride
   if (browser) {
-    const override = join(browser.directory, 'local-backend.yml')
-    writeFileSync(override, `services:\n  backend:\n    environment:\n      COPAGE_CONFIG_MODE: local\n      SPRING_PROFILES_ACTIVE: default\n`)
-    base.push('-f', override)
+    browserBackendOverride = join(browser.directory, 'local-backend.yml')
+    writeFileSync(browserBackendOverride, `services:\n  backend:\n    environment:\n      COPAGE_CONFIG_MODE: local\n      SPRING_PROFILES_ACTIVE: default\n`)
+    base.push('-f', browserBackendOverride)
   }
   const qa = [...base, '-p', project]
   // 动态分配回环端口，防止覆盖已有本机服务。
@@ -133,6 +134,19 @@ if (process.argv.includes('--smoke') || fullSmoke) {
   try {
     if (fullSmoke) {
       if (!runtimeImage) qaDocker(['build', 'backend'])
+      if (browser) {
+        const buildStorage = process.argv.includes('--browser-storage-from-source')
+        const missingStorageImage = ['minio', 'minio-init'].some(service =>
+          docker(['image', 'inspect', config.services[service].image], { allowFailure: true }).status !== 0)
+        if (buildStorage || (missingStorageImage && qaDocker(['pull', 'minio', 'minio-init'], { allowFailure: true }).status !== 0)) {
+          console.log('Building the pinned upstream MinIO and mc revisions for this browser project')
+          const server = 'copage-browser-minio:07c3a429'
+          const client = 'copage-browser-mc:7394ce0d'
+          docker(['build', '-f', 'scripts/browser-storage.Dockerfile', '--target', 'server', '-t', server, 'scripts'])
+          docker(['build', '-f', 'scripts/browser-storage.Dockerfile', '--target', 'client', '-t', client, 'scripts'])
+          appendFileSync(browserBackendOverride, `  minio:\n    image: ${server}\n  minio-init:\n    image: ${client}\n`)
+        }
+      }
       qaDocker(['up', '-d', '--no-build', '--wait', '--wait-timeout', '150', '--scale', 'backend=2'])
     } else {
       qaDocker(['up', '-d', '--wait', '--wait-timeout', '90', 'mysql', 'redis'])
