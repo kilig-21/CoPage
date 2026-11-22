@@ -6,6 +6,7 @@ import com.school.collab.common.ErrorCode;
 import com.school.collab.common.UserContext;
 import com.school.collab.document.DocumentRepository;
 import com.school.collab.document.DocumentRepository.DocumentRow;
+import com.school.collab.ot.DeltaJson;
 import org.springframework.stereotype.Service;
 
 import java.time.format.DateTimeFormatter;
@@ -50,7 +51,7 @@ public class SearchService {
     }
 
     private HitView view(DocumentRow row, Pattern literal, int permission, boolean isOwner) {
-        String body = SearchIndex.plainText(mapper, row.content());
+        String body = DeltaJson.plainText(mapper, row.content());
         String snippet = literal.matcher(body).find() ? highlight(body, literal) : opening(body);
         if (snippet == null) snippet = literal.matcher(row.title()).find()
                 ? "标题匹配，暂无文字摘要" : "暂无文字摘要";

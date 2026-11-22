@@ -1,7 +1,6 @@
 package com.school.collab.ot;
 
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Objects;
 
 public final class OpIterator {
@@ -76,9 +75,4 @@ public final class OpIterator {
         };
     }
 
-    private void ensureHasNext() {
-        if (!hasNext()) {
-            throw new NoSuchElementException("没有更多操作可读取");
-        }
-    }
 }

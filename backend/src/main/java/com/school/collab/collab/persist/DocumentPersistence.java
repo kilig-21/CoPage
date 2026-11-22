@@ -1,11 +1,11 @@
 package com.school.collab.collab.persist;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.school.collab.collab.CollabException;
 import com.school.collab.collab.store.CollabDocumentSnapshot;
 import com.school.collab.collab.store.VersionedOperation;
 import com.school.collab.ot.Delta;
+import com.school.collab.ot.DeltaJson;
 import com.school.collab.storage.ImageAssetRepository;
 import com.school.collab.storage.ImageGrants;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -212,19 +212,11 @@ public class DocumentPersistence {
         if (json == null) {
             return new Delta().insert("\n");
         }
-        try {
-            return mapper.readValue(json, Delta.class);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("数据库中的 Delta 内容损坏", exception);
-        }
+        return DeltaJson.read(mapper, json, "数据库中的 Delta 内容损坏");
     }
 
     private String write(Delta delta) {
-        try {
-            return mapper.writeValueAsString(delta);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("无法序列化 Delta", exception);
-        }
+        return DeltaJson.write(mapper, delta, "无法序列化 Delta");
     }
 
     public record Receipt(long revision, String requestHash) {

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.school.collab.collab.CollabException;
+import com.school.collab.collab.presence.PresenceColor;
 import com.school.collab.collab.presence.RedisPresenceStore;
 import com.school.collab.collab.service.DocRevService;
 import com.school.collab.auth.AccountSessions;
@@ -154,13 +155,11 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         if (syncId != null) sync.put("syncId", syncId);
         sync.set("content", objectMapper.valueToTree(state.content()));
         sync.set("pendingCommittedRevision", objectMapper.valueToTree(state.pendingCommittedRevision()));
-        var history = sync.putArray("history");
-        state.history().forEach(entry -> history.addObject().put("revision", entry.revision())
-                .set("op", objectMapper.valueToTree(entry.operation())));
+        CollabMessages.appendHistory(objectMapper, sync, state.history());
         sync.set("users", objectMapper.valueToTree(presence.users(docId)));
         if (objectMapper.writeValueAsBytes(sync).length > MAX_SYNC_BYTES) {
-            if (!history.isEmpty()) {
-                history.removeAll();
+            if (!state.history().isEmpty()) {
+                sync.putArray("history");
                 sync.put("historyComplete", false).put("historyPaged", true);
             }
             // presence 会在同步后独立广播，给快照和恢复元数据保留空间。
@@ -190,9 +189,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
                 .put("revision", page.revision()).put("permission", documents.permissionFor(docId, info.userId()));
         if (pending != null) response.set("pendingCommittedRevision", objectMapper.valueToTree(page.pendingCommittedRevision()));
         // VersionedOperation 字段名为 operation，协议仍使用 op。
-        var history = response.putArray("history");
-        page.history().forEach(entry -> history.addObject().put("revision", entry.revision())
-                .set("op", objectMapper.valueToTree(entry.operation())));
+        CollabMessages.appendHistory(objectMapper, response, page.history());
         send(info.session(), response);
     }
 
@@ -286,7 +283,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
                 .put("length", length)
                 .put("visible", visible)
                 .put("nickname", source.nickname())
-                .put("color", colorFor(source.userId()));
+                .put("color", PresenceColor.forUser(source.userId()));
 
         eventBus.publish(docId, source.sessionId(), cursor);
     }
@@ -311,11 +308,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void publishPresence(long docId) {
-        ObjectNode payload = objectMapper.createObjectNode()
-                .put("type", "presence")
-                .put("docId", docId);
-        payload.set("users", objectMapper.valueToTree(presence.users(docId)));
-        eventBus.publish(docId, "", payload);
+        eventBus.publish(docId, "", CollabMessages.presence(objectMapper, docId, presence.users(docId)));
     }
 
     private void publishHiddenCursor(WsSessionRegistry.SessionInfo info) {
@@ -327,7 +320,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
                 .put("length", 0)
                 .put("visible", false)
                 .put("nickname", info.nickname())
-                .put("color", colorFor(info.userId()));
+                .put("color", PresenceColor.forUser(info.userId()));
         try {
             eventBus.publish(info.docId(), info.sessionId(), cursor);
         } catch (RuntimeException exception) {
@@ -426,8 +419,4 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         return node.asInt();
     }
 
-    private static String colorFor(long userId) {
-        String[] colors = {"#2563eb", "#db2777", "#059669", "#d97706", "#7c3aed"};
-        return colors[(int) Math.floorMod(userId, colors.length)];
-    }
 }

@@ -3,20 +3,13 @@ package com.school.collab.collab.ws;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.school.collab.auth.AccountSessions;
-import com.school.collab.common.BizException;
-import com.school.collab.common.ErrorCode;
-import com.school.collab.document.DocumentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.connection.Message;
 import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.web.socket.CloseStatus;
-import org.springframework.web.socket.WebSocketSession;
 
-import java.io.IOException;
 import java.util.UUID;
 
 /** Redis Pub/Sub 承载跨实例 op/cursor 广播；同一实例也通过它走唯一发送路径。 */
@@ -28,21 +21,12 @@ public class CollabEventBus implements MessageListener {
     private final String instanceId = UUID.randomUUID().toString();
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
-    private final WsSessionRegistry registry;
-    private final WsSender sender;
-    private final DocumentService documents;
-    private final AccountSessions accounts;
+    private final CollabEventDelivery delivery;
 
-    public CollabEventBus(
-            StringRedisTemplate redis, ObjectMapper objectMapper,
-            WsSessionRegistry registry, WsSender sender, DocumentService documents, AccountSessions accounts
-    ) {
+    public CollabEventBus(StringRedisTemplate redis, ObjectMapper objectMapper, CollabEventDelivery delivery) {
         this.redis = redis;
         this.objectMapper = objectMapper;
-        this.registry = registry;
-        this.sender = sender;
-        this.documents = documents;
-        this.accounts = accounts;
+        this.delivery = delivery;
     }
 
     public String instanceId() {
@@ -62,43 +46,18 @@ public class CollabEventBus implements MessageListener {
     public void onMessage(Message message, byte[] pattern) {
         try {
             JsonNode envelope = objectMapper.readTree(message.getBody());
-            if ("account_changed".equals(envelope.path("payload").path("type").asText())) {
-                long userId = envelope.path("userId").asLong();
-                if (userId > 0) for (var target : registry.connectionsOfUser(userId)) {
-                    try { rejectExpired(target, userId); } catch (IOException | IllegalStateException ignored) { }
-                }
+            JsonNode payload = envelope.path("payload");
+            if ("account_changed".equals(payload.path("type").asText())) {
+                delivery.accountChanged(envelope.path("userId").asLong());
                 return;
             }
             long docId = envelope.path("docId").asLong();
-            JsonNode payload = envelope.path("payload");
             if (docId <= 0 || !payload.isObject()) {
                 log.warn("忽略非法协同广播消息");
                 return;
             }
-            boolean sameInstance = instanceId.equals(envelope.path("instanceId").asText());
-            String originSessionId = envelope.path("sessionId").asText();
-            for (WsSessionRegistry.SessionInfo target : registry.sessionsOf(docId)) {
-                boolean permissionEvent = "permission".equals(payload.path("type").asText());
-                if (permissionEvent && payload.has("userId") && payload.path("userId").asLong() != target.userId()) continue;
-                if (sameInstance && target.sessionId().equals(originSessionId)) {
-                    continue;
-                }
-                try {
-                    // 每次转发前以 MySQL 为准，不能依赖异步权限事件顺序或失效的会话权限。
-                    if (rejectExpired(target.session(), target.userId())) continue;
-                    int permission = currentPermission(docId, target.userId());
-                    sender.send(target.session(), objectMapper.createObjectNode()
-                            .put("type", "permission").put("docId", docId).put("permission", permission));
-                    if (permission == 0) {
-                        target.session().close(CloseStatus.POLICY_VIOLATION);
-                    } else if (!permissionEvent) {
-                        sender.send(target.session(), payload);
-                    }
-                } catch (IOException | IllegalStateException exception) {
-                    // SessionDecorator可能在isOpen与send/close之间关闭；只隔离该连接，不终止后续广播。
-                    log.debug("跨实例协同消息发送失败, session={}", target.sessionId(), exception);
-                }
-            }
+            String excluded = instanceId.equals(envelope.path("instanceId").asText()) ? envelope.path("sessionId").asText() : null;
+            delivery.documentChanged(docId, excluded, payload);
         } catch (Exception exception) {
             log.warn("无法解析 Redis 协同广播消息", exception);
         }
@@ -110,22 +69,4 @@ public class CollabEventBus implements MessageListener {
         redis.convertAndSend(CHANNEL, envelope.toString());
     }
 
-    private boolean rejectExpired(WebSocketSession session, long userId) throws IOException {
-        if (WsHandshakeInterceptor.sessionCurrent(session, userId, accounts)) return false;
-        try { sender.send(session, objectMapper.createObjectNode().put("type", "error").put("code", 401)
-                .put("message", "登录已失效，请重新登录；未确认内容仍保留")); }
-        finally { session.close(CloseStatus.POLICY_VIOLATION); }
-        return true;
-    }
-
-    private int currentPermission(long docId, long userId) {
-        try {
-            return documents.permissionFor(docId, userId);
-        } catch (BizException exception) {
-            if (exception.getErrorCode() == ErrorCode.FORBIDDEN || exception.getErrorCode() == ErrorCode.NOT_FOUND) {
-                return 0;
-            }
-            throw exception;
-        }
-    }
 }

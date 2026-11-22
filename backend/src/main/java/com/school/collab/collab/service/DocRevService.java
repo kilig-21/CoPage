@@ -128,9 +128,7 @@ public class DocRevService {
         if (pending.baseRevision() < 0 || pending.operation() == null || pending.operation().getOps().isEmpty()) {
             throw new CollabException(400, "待确认操作不完整");
         }
-        DocumentPersistence.Receipt receipt = persistence == null
-                ? inMemoryReceipts.get(new OperationKey(docId, userId, clientId, pending.opId()))
-                : persistence.receipt(docId, userId, clientId, pending.opId());
+        DocumentPersistence.Receipt receipt = receipt(new OperationKey(docId, userId, clientId, pending.opId()));
         if (receipt == null) return null;
         if (!OperationFingerprint.of(pending.baseRevision(), pending.operation()).equals(receipt.requestHash())) {
             throw new CollabException(40904, "opId 已用于其他操作，保留本地编辑并停止重放");
@@ -198,9 +196,8 @@ public class DocRevService {
 
         validateDocId(docId);
         String requestHash = opId == null ? null : OperationFingerprint.of(baseRevision, operation);
-        var committed = store.withDocumentLock(docId, () -> commitLocked(docId, baseRevision,
-                ignored -> operation, userId, clientId, opId, requestHash, false));
-        return notifyCommitted(docId, committed, afterCommit);
+        var key = opId == null ? null : new OperationKey(docId, userId, clientId, opId);
+        return applyCommit(new EditRequest(docId, baseRevision, userId, key, requestHash, false), ignored -> operation, afterCommit);
     }
 
     /** 历史恢复也是新操作；版本变化时拒绝覆盖，重复请求只返回原收据。 */
@@ -214,22 +211,22 @@ public class DocRevService {
         }
         String hash = OperationFingerprint.of(expectedRevision,
                 new Delta().insert("restore:" + targetRevision));
-        var committed = store.withDocumentLock(docId, () -> commitLocked(docId, expectedRevision,
-                current -> {
-                    try {
-                        Delta restored = target.get();
-                        Delta operation = DeltaDiff.diff(current.content(), restored);
-                        // Fragmented diffs can exceed the existing operation
-                        // limit even when the restored document fits. Reject
-                        // before applying or reserving the request receipt.
-                        if (persistence != null) persistence.validateSize(restored, operation);
-                        return operation;
-                    } catch (DeltaDiff.ComplexityLimitException | DeltaDiff.TerminalNewlineAttributeException
-                             | DeltaDiff.OperationSizeLimitException failure) {
-                        throw new CollabException(400, failure.getMessage());
-                    }
-                }, userId, "history-api", requestId, hash, true));
-        return notifyCommitted(docId, committed, afterCommit);
+        var key = new OperationKey(docId, userId, "history-api", requestId);
+        return applyCommit(new EditRequest(docId, expectedRevision, userId, key, hash, true),
+                current -> restoreOperation(current.content(), target), afterCommit);
+    }
+
+    private Delta restoreOperation(Delta current, Supplier<Delta> target) {
+        try {
+            Delta restored = target.get();
+            Delta operation = DeltaDiff.diff(current, restored);
+            // A fragmented diff can exceed the operation limit even if the document fits.
+            if (persistence != null) persistence.validateSize(restored, operation);
+            return operation;
+        } catch (DeltaDiff.ComplexityLimitException | DeltaDiff.TerminalNewlineAttributeException
+                 | DeltaDiff.OperationSizeLimitException failure) {
+            throw new CollabException(400, failure.getMessage());
+        }
     }
 
     /** 读历史、分页追赶和维护共用提交锁，避免读取或清理跨过一次提交。 */
@@ -246,72 +243,69 @@ public class DocRevService {
         return store.withDocumentLock(docId, action);
     }
 
-    private CommitResult commitLocked(long docId, long baseRevision,
-            Function<CollabDocumentSnapshot, Delta> operationFactory, Long userId,
-            String clientId, String opId, String requestHash, boolean strict) {
-            OperationKey key = opId == null ? null : new OperationKey(docId, userId, clientId, opId);
-            if (key != null) {
-                DocumentPersistence.Receipt prior = persistence == null
-                        ? inMemoryReceipts.get(key)
-                        : persistence.receipt(docId, userId, clientId, opId);
-                if (prior != null) {
-                    if (!requestHash.equals(prior.requestHash())) {
-                        throw new CollabException(40904, "opId 已用于其他操作，请重新同步文档");
-                    }
-                    // 仅补发原 ack；正文、广播及 MQ 事件均不得再次执行。
-                    return new CommitResult(prior.revision(), null, false);
-                }
-            }
-            CollabDocumentSnapshot current = persistence == null
-                    ? store.snapshot(docId) : reconcileLegacy(docId);
-            if (strict && baseRevision != current.revision()) {
-                throw new CollabException(40902, "文档已被继续编辑，请查看最新版本后再恢复");
-            }
-            if (baseRevision > current.revision()) {
-                throw new CollabException(40902, "客户端版本超前");
-            }
-            if (persistence != null && baseRevision < persistence.minimumRevision(docId)) {
-                throw new CollabException(40903, "操作基线超出保留范围，拒绝重放过期操作");
-            }
-            if (current.revision() - baseRevision > REBASE_MAX_OPERATIONS) {
-                throw rebaseLimit();
-            }
-            Delta transformed = rebase(docId, baseRevision, current.revision(), operationFactory.apply(current).copy());
+    private CommitResult applyCommit(EditRequest request, Function<CollabDocumentSnapshot, Delta> operationFactory,
+                                     Consumer<CommitResult> afterCommit) {
+        var committed = store.withDocumentLock(request.docId(), () -> commitLocked(request, operationFactory));
+        return notifyCommitted(request.docId(), committed, afterCommit);
+    }
 
-            long revision = current.revision() + 1;
-            Delta nextContent = DeltaApply.apply(current.content(), transformed);
-            // 在OT变换后的最终正文上检查，不能只看原请求；拒绝时尚未写入日志或收据。
-            if (nextContent.getOps().isEmpty() || !nextContent.getOps().getLast().isTextInsert()
-                    || !nextContent.getOps().getLast().text().endsWith("\n")) {
-                throw new CollabException(400, "文档正文必须保留末尾换行");
+    private CommitResult commitLocked(EditRequest request, Function<CollabDocumentSnapshot, Delta> operationFactory) {
+        var prior = request.key() == null ? null : receipt(request.key());
+        if (prior != null) {
+            if (!request.requestHash().equals(prior.requestHash())) {
+                throw new CollabException(40904, "opId 已用于其他操作，请重新同步文档");
             }
-            if (persistence != null) {
-                if (key == null) {
-                    persistence.persist(docId, current.revision(), nextContent, transformed, userId);
-                } else {
-                    persistence.persist(docId, current.revision(), nextContent, transformed,
-                            userId, clientId, opId, requestHash);
-                }
-            }
-            try {
-                store.save(
-                        docId,
-                        new CollabDocumentSnapshot(revision, nextContent),
-                        new VersionedOperation(revision, transformed),
-                        HISTORY_LIMIT
-                );
-            } catch (RuntimeException exception) {
-                if (persistence == null) {
-                    throw exception;
-                }
-                // MySQL 已提交；Redis 只是缓存，不能让客户端误以为操作失败后重放。
-                log.warn("MySQL 已持久化但 Redis 热状态更新失败, docId={}, revision={}",
-                        docId, revision, exception);
-            }
-            if (key != null && persistence == null) {
-                inMemoryReceipts.put(key, new DocumentPersistence.Receipt(revision, requestHash));
-            }
-            return new CommitResult(revision, transformed.copy());
+            return new CommitResult(prior.revision(), null, false);
+        }
+
+        long docId = request.docId();
+        var current = persistence == null ? store.snapshot(docId) : reconcileLegacy(docId);
+        validateBase(request, current.revision());
+        Delta transformed = rebase(docId, request.baseRevision(), current.revision(), operationFactory.apply(current).copy());
+        Delta nextContent = DeltaApply.apply(current.content(), transformed);
+        if (nextContent.getOps().isEmpty() || !nextContent.getOps().getLast().isTextInsert()
+                || !nextContent.getOps().getLast().text().endsWith("\n")) {
+            throw new CollabException(400, "文档正文必须保留末尾换行");
+        }
+        persistApplied(request, current.revision(), nextContent, transformed);
+        return new CommitResult(current.revision() + 1, transformed.copy());
+    }
+
+    private DocumentPersistence.Receipt receipt(OperationKey key) {
+        return persistence == null ? inMemoryReceipts.get(key)
+                : persistence.receipt(key.docId(), key.userId(), key.clientId(), key.opId());
+    }
+
+    private void validateBase(EditRequest request, long current) {
+        long base = request.baseRevision();
+        if (request.exactBase() && base != current) {
+            throw new CollabException(40902, "文档已被继续编辑，请查看最新版本后再恢复");
+        }
+        if (base > current) throw new CollabException(40902, "客户端版本超前");
+        if (persistence != null && base < persistence.minimumRevision(request.docId())) {
+            throw new CollabException(40903, "操作基线超出保留范围，拒绝重放过期操作");
+        }
+        if (current - base > REBASE_MAX_OPERATIONS) throw rebaseLimit();
+    }
+
+    private void persistApplied(EditRequest request, long previous, Delta content, Delta operation) {
+        long docId = request.docId();
+        long revision = previous + 1;
+        var key = request.key();
+        if (persistence != null) {
+            if (key == null) persistence.persist(docId, previous, content, operation, request.userId());
+            else persistence.persist(docId, previous, content, operation, request.userId(),
+                    key.clientId(), key.opId(), request.requestHash());
+        }
+        try {
+            store.save(docId, new CollabDocumentSnapshot(revision, content), new VersionedOperation(revision, operation), HISTORY_LIMIT);
+        } catch (RuntimeException exception) {
+            if (persistence == null) throw exception;
+            log.warn("MySQL 已持久化但 Redis 热状态更新失败, docId={}, revision={}", docId, revision, exception);
+        }
+        if (key != null && persistence == null) {
+            inMemoryReceipts.put(key, new DocumentPersistence.Receipt(revision, request.requestHash()));
+        }
     }
 
     private CommitResult notifyCommitted(long docId, CommitResult result, Consumer<CommitResult> afterCommit) {
@@ -471,5 +465,8 @@ public class DocRevService {
 
     private record OperationKey(long docId, long userId, String clientId, String opId) {
     }
+
+    private record EditRequest(long docId, long baseRevision, Long userId, OperationKey key, String requestHash,
+                               boolean exactBase) { }
 
 }

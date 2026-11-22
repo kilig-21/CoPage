@@ -1,17 +1,17 @@
 package com.school.collab.document;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.school.collab.collab.service.DocRevService;
 import com.school.collab.collab.store.CollabDocumentSnapshot;
+import com.school.collab.ot.DeltaJson;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @Component
@@ -25,6 +25,7 @@ public class HistoryMaintenance {
     private final int maxSnapshots;
     private final long maxBytes;
     private final Set<Long> protectedIds;
+    private final AtomicBoolean running = new AtomicBoolean();
     private long cursor;
 
     public HistoryMaintenance(HistoryRepository history, DocRevService revisions, ObjectMapper mapper,
@@ -45,8 +46,16 @@ public class HistoryMaintenance {
     }
 
     @Scheduled(initialDelay = 60000, fixedDelayString = "${collab.history.maintenance-interval-ms:3600000}")
-    public synchronized void maintain() {
-        if (!enabled) return;
+    public void maintain() {
+        if (!enabled || !running.compareAndSet(false, true)) return;
+        try {
+            maintainBatch();
+        } finally {
+            running.set(false);
+        }
+    }
+
+    private void maintainBatch() {
         for(long id:history.expiredDeletedCandidates(days)) {
             if(protectedIds.contains(id)) continue;
             try { revisions.maintenanceLock(id,()->{history.compactDeleted(id,days);return null;}); }
@@ -61,9 +70,7 @@ public class HistoryMaintenance {
                 revisions.inspect(id, current -> {
                     // 先裁能从连续日志重建的快照，避免只因快照副本占用配额就推进历史起点。
                     int trimmed = history.trimPeriodicSnapshots(id, maxSnapshots);
-                    int size;
-                    try { size = mapper.writeValueAsString(current.content()).getBytes(StandardCharsets.UTF_8).length; }
-                    catch (JsonProcessingException ex) { throw new IllegalStateException(ex); }
+                    int size = DeltaJson.utf8Bytes(mapper, current.content());
                     long floor = history.retentionFloor(id, current.revision(), days, maxOperations, maxBytes, size);
                     if (floor > history.floor(id)) {
                         var baseline = history.contentAt(id, floor, new CollabDocumentSnapshot(current.revision(), current.content()));
@@ -81,9 +88,7 @@ public class HistoryMaintenance {
 
     public RetentionView preview(long docId) {
         return revisions.inspect(docId, current -> {
-            int bytes;
-            try { bytes = mapper.writeValueAsString(current.content()).getBytes(StandardCharsets.UTF_8).length; }
-            catch (JsonProcessingException ex) { throw new IllegalStateException(ex); }
+            int bytes = DeltaJson.utf8Bytes(mapper, current.content());
             long minimum = history.floor(docId);
             long proposed = isProtected(docId) ? minimum
                     : history.retentionFloor(docId,current.revision(),days,maxOperations,maxBytes,bytes);

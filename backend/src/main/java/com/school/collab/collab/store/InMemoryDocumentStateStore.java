@@ -55,11 +55,16 @@ public final class InMemoryDocumentStateStore implements DocumentStateStore {
     @Override
     public void save(long docId, CollabDocumentSnapshot snapshot, VersionedOperation operation, int historyLimit) {
         State state = stateFor(docId);
-        state.content = snapshot.content().copy();
-        state.revision = snapshot.revision();
-        state.history.addLast(new VersionedOperation(operation.revision(), operation.operation().copy()));
-        while (state.history.size() > historyLimit) {
-            state.history.removeFirst();
+        state.lock.lock();
+        try {
+            state.content = snapshot.content().copy();
+            state.revision = snapshot.revision();
+            state.history.addLast(new VersionedOperation(operation.revision(), operation.operation().copy()));
+            while (state.history.size() > historyLimit) {
+                state.history.removeFirst();
+            }
+        } finally {
+            state.lock.unlock();
         }
     }
 

@@ -44,7 +44,7 @@ class SearchIndexTest {
         });
         server.start();
         index = new SearchIndex(mock(DocumentRepository.class), mapper,
-                "http://127.0.0.1:" + server.getAddress().getPort());
+                new ElasticsearchTransport(mapper, "http://127.0.0.1:" + server.getAddress().getPort()));
     }
 
     @AfterEach

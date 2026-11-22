@@ -1,8 +1,8 @@
 package com.school.collab.collab.presence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.school.collab.collab.ws.CollabEventBus;
+import com.school.collab.collab.ws.CollabMessages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -29,11 +29,7 @@ public class PresenceExpiryBroadcaster {
         try {
             for (Long docId : presence.documentsWithExpiredPresence()) {
                 if (!presence.pruneExpired(docId)) continue;
-                ObjectNode payload = mapper.createObjectNode()
-                        .put("type", "presence")
-                        .put("docId", docId);
-                payload.set("users", mapper.valueToTree(presence.users(docId)));
-                eventBus.publish(docId, "", payload);
+                eventBus.publish(docId, "", CollabMessages.presence(mapper, docId, presence.users(docId)));
             }
         } catch (RuntimeException exception) {
             log.warn("在线用户过期巡检失败，下轮重试", exception);

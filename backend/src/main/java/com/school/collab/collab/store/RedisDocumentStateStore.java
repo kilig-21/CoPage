@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.school.collab.collab.lock.RedisDocLock;
 import com.school.collab.ot.Delta;
+import com.school.collab.ot.DeltaJson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -137,7 +138,7 @@ public class RedisDocumentStateStore implements DocumentStateStore {
     public void save(long docId, CollabDocumentSnapshot snapshot,
                      VersionedOperation operation, int historyLimit) {
         var result = redis.execute(SAVE, List.of(contentKey(docId), revisionKey(docId), historyKey(docId), RedisDocLock.keyFor(docId)),
-                lock.tokenFor(docId), Long.toString(snapshot.revision()), write(snapshot.content()), write(operation),
+                lock.tokenFor(docId), Long.toString(snapshot.revision()), writeDelta(snapshot.content()), writeOperation(operation),
                 Integer.toString(historyLimit), Long.toString(ttl.toMillis()));
         if (Long.valueOf(-1).equals(result)) {
             var archive = quarantineAndReset(docId, snapshot);
@@ -150,7 +151,7 @@ public class RedisDocumentStateStore implements DocumentStateStore {
         String archive = "collab:doc:quarantine:" + docId + ":" + UUID.randomUUID();
         var result = redis.execute(QUARANTINE, List.of(contentKey(docId), revisionKey(docId), historyKey(docId), RedisDocLock.keyFor(docId),
                         archive + ":content", archive + ":revision", archive + ":ops"),
-                lock.tokenFor(docId), Long.toString(durable.revision()), write(durable.content()), Long.toString(ttl.toMillis()));
+                lock.tokenFor(docId), Long.toString(durable.revision()), writeDelta(durable.content()), Long.toString(ttl.toMillis()));
         return Long.valueOf(1).equals(result) ? archive : null;
     }
 
@@ -181,13 +182,14 @@ public class RedisDocumentStateStore implements DocumentStateStore {
     //<================================ 方法提取 ======================================>
 
     private Delta readDelta(String json) {
+        Delta delta;
         try {
-            Delta delta = objectMapper.readValue(json, Delta.class);
-            if (delta == null) throw new CorruptCacheException("热正文为空");
-            return delta;
-        } catch (JsonProcessingException exception) {
+            delta = DeltaJson.read(objectMapper, json, "热正文无法解析");
+        } catch (IllegalStateException exception) {
             throw new CorruptCacheException("热正文无法解析");
         }
+        if (delta == null) throw new CorruptCacheException("热正文为空");
+        return delta;
     }
 
     private VersionedOperation readVersioned(String json) {
@@ -200,7 +202,11 @@ public class RedisDocumentStateStore implements DocumentStateStore {
         }
     }
 
-    private String write(Object value) {
+    private String writeDelta(Delta value) {
+        return DeltaJson.write(objectMapper, value, "无法序列化协同状态");
+    }
+
+    private String writeOperation(VersionedOperation value) {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException exception) {

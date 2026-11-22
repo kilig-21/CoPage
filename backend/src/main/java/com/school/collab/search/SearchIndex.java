@@ -5,18 +5,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.school.collab.document.DocumentRepository;
+import com.school.collab.ot.DeltaJson;
+import com.school.collab.search.ElasticsearchTransport.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,17 +29,14 @@ public class SearchIndex {
 
     private final DocumentRepository documents;
     private final ObjectMapper mapper;
-    private final HttpClient http = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(3)).build();
-    private final String endpoint;
+    private final ElasticsearchTransport transport;
     private volatile boolean ready;
     private long pendingAfter;
 
-    public SearchIndex(DocumentRepository documents, ObjectMapper mapper,
-                       @Value("${spring.elasticsearch.uris}") String endpoint) {
+    public SearchIndex(DocumentRepository documents, ObjectMapper mapper, ElasticsearchTransport transport) {
         this.documents = documents;
         this.mapper = mapper;
-        this.endpoint = endpoint.replaceAll("/+$", "");
+        this.transport = transport;
     }
 
     /** Called after a document transaction commits. The index acknowledgement must commit separately. */
@@ -58,10 +52,10 @@ public class SearchIndex {
         // 用无正文的删除标记保留外部版本，迟到的旧写入不能让删除的文档重新出现。
         ObjectNode source = mapper.createObjectNode().put("id", row.id()).put("deleted", row.deleted());
         if (!row.deleted()) {
-            source.put("title", row.title()).put("body", plainText(mapper, row.content()))
+            source.put("title", row.title()).put("body", DeltaJson.plainText(mapper, row.content()))
                     .put("revision", row.revision());
         }
-        Response response = send("PUT", DOC_PATH + docId + "?version_type=external&version="
+        Response response = transport.send("PUT", DOC_PATH + docId + "?version_type=external&version="
                 + row.searchVersion() + (refresh ? "&refresh=wait_for" : ""), source);
         if (!successfulWrite(response) && !versionConflict(response)) fail(response);
         documents.indexed(docId, row.searchVersion());
@@ -80,9 +74,9 @@ public class SearchIndex {
         ArrayNode ids = bool.putObject("filter").putObject("ids").putArray("values");
         visibleIds.forEach(id -> ids.add(String.valueOf(id)));
         bool.putObject("must_not").putObject("term").put("deleted", true);
-        Response response = send("POST", "/" + INDEX + "/_search", body);
-        if (response.status != 200) fail(response);
-        JsonNode hits = response.body.path("hits");
+        Response response = transport.send("POST", "/" + INDEX + "/_search", body);
+        if (response.status() != 200) fail(response);
+        JsonNode hits = response.body().path("hits");
         long total = hits.path("total").path("value").asLong();
         List<Long> idsFound = new ArrayList<>();
         for (JsonNode hit : hits.path("hits")) {
@@ -117,9 +111,9 @@ public class SearchIndex {
     }
 
     private int advanceRebuild() {
-        Response checkpoint = send("GET", CHECKPOINT_PATH, null);
-        if (checkpoint.status != 200 && checkpoint.status != 404) fail(checkpoint);
-        JsonNode position = checkpoint.body.path("_source");
+        Response checkpoint = transport.send("GET", CHECKPOINT_PATH, null);
+        if (checkpoint.status() != 200 && checkpoint.status() != 404) fail(checkpoint);
+        JsonNode position = checkpoint.body().path("_source");
         if (position.path("complete").asBoolean()) return 0;
 
         long cursor = position.path("after").asLong();
@@ -128,36 +122,21 @@ public class SearchIndex {
 
         long after = ids.isEmpty() ? cursor : ids.getLast();
         ObjectNode next = mapper.createObjectNode().put("after", after).put("complete", ids.size() < BATCH_SIZE);
-        String condition = checkpoint.status == 404 ? "?op_type=create" : "?if_seq_no="
-                + checkpoint.body.path("_seq_no").asLong() + "&if_primary_term=" + checkpoint.body.path("_primary_term").asLong();
-        Response saved = send("PUT", CHECKPOINT_PATH + condition, next);
+        String condition = checkpoint.status() == 404 ? "?op_type=create" : "?if_seq_no="
+                + checkpoint.body().path("_seq_no").asLong() + "&if_primary_term=" + checkpoint.body().path("_primary_term").asLong();
+        Response saved = transport.send("PUT", CHECKPOINT_PATH + condition, next);
         if (!successfulWrite(saved) && !versionConflict(saved)) fail(saved);
         return ids.size();
     }
 
-    static String plainText(ObjectMapper mapper, String deltaJson) {
-        if (deltaJson == null) return "";
-        try {
-            JsonNode root = mapper.readTree(deltaJson);
-            StringBuilder text = new StringBuilder();
-            for (JsonNode op : root.path("ops")) {
-                JsonNode insert = op.path("insert");
-                if (insert.isTextual()) text.append(insert.asText());
-            }
-            return text.toString();
-        } catch (Exception exception) {
-            throw new IllegalStateException("文档 Delta 内容无法索引", exception);
-        }
-    }
-
     private synchronized void ensureIndex() {
         if (ready) return;
-        Response existing = send("HEAD", "/" + INDEX, null);
-        if (existing.status == 200) {
+        Response existing = transport.send("HEAD", "/" + INDEX, null);
+        if (existing.status() == 200) {
             ready = true;
             return;
         }
-        if (existing.status != 404) fail(existing);
+        if (existing.status() != 404) fail(existing);
         ObjectNode mapping = mapper.createObjectNode();
         ObjectNode properties = mapping.putObject("mappings").putObject("properties");
         properties.putObject("id").put("type", "long");
@@ -165,45 +144,24 @@ public class SearchIndex {
         properties.putObject("body").put("type", "text");
         properties.putObject("revision").put("type", "long");
         properties.putObject("deleted").put("type", "boolean");
-        Response created = send("PUT", "/" + INDEX, mapping);
-        if (created.status != 200 && !(created.status == 400 &&
+        Response created = transport.send("PUT", "/" + INDEX, mapping);
+        if (created.status() != 200 && !(created.status() == 400 &&
                 "resource_already_exists_exception".equals(
-                        created.body.path("error").path("type").asText()))) fail(created);
+                        created.body().path("error").path("type").asText()))) fail(created);
         ready = true;
     }
 
-    private Response send(String method, String path, JsonNode body) {
-        try {
-            HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(endpoint + path))
-                    .timeout(Duration.ofSeconds(8));
-            if (body == null) {
-                request.method(method, HttpRequest.BodyPublishers.noBody());
-            } else {
-                request.header("Content-Type", "application/json")
-                        .method(method, HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)));
-            }
-            HttpResponse<String> response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
-            JsonNode parsed = response.body().isBlank() ? mapper.nullNode() : mapper.readTree(response.body());
-            return new Response(response.statusCode(), parsed);
-        } catch (Exception exception) {
-            throw new IllegalStateException("Elasticsearch 请求失败", exception);
-        }
-    }
-
     private static void fail(Response response) {
-        throw new IllegalStateException("Elasticsearch 响应错误: HTTP " + response.status
-                + " " + response.body.path("error").path("type").asText());
+        throw new IllegalStateException("Elasticsearch 响应错误: HTTP " + response.status()
+                + " " + response.body().path("error").path("type").asText());
     }
 
     private static boolean successfulWrite(Response response) {
-        return response.status == 200 || response.status == 201;
+        return response.status() == 200 || response.status() == 201;
     }
 
     private static boolean versionConflict(Response response) {
-        return response.status == 409 && "version_conflict_engine_exception".equals(response.body.path("error").path("type").asText());
-    }
-
-    private record Response(int status, JsonNode body) {
+        return response.status() == 409 && "version_conflict_engine_exception".equals(response.body().path("error").path("type").asText());
     }
 
     public record SearchPage(long total, List<Long> ids) {

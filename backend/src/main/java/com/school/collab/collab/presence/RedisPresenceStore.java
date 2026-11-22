@@ -70,7 +70,6 @@ public class RedisPresenceStore {
     private static final DefaultRedisScript<List> DUE = new DefaultRedisScript<>(NOW + """
             return redis.call('zrangebyscore', KEYS[1], '-inf', now, 'LIMIT', 0, 128)
             """, List.class);
-    private static final String[] COLORS = {"#2563eb", "#db2777", "#059669", "#d97706", "#7c3aed"};
 
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
@@ -117,7 +116,7 @@ public class RedisPresenceStore {
             if (raw == null) continue;
             PresenceEntry entry = read(raw.toString());
             unique.putIfAbsent(entry.userId(), new PresenceUser(
-                    entry.userId(), entry.nickname(), COLORS[Math.floorMod(entry.userId(), COLORS.length)]));
+                    entry.userId(), entry.nickname(), PresenceColor.forUser(entry.userId())));
         }
         return List.copyOf(unique.values());
     }

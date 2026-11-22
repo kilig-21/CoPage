@@ -1,6 +1,7 @@
 package com.school.collab.search;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.school.collab.ot.DeltaJson;
 import com.school.collab.common.UserContext;
 import com.school.collab.document.DocumentRepository;
 import com.school.collab.document.DocumentRepository.DocumentRow;
@@ -195,7 +196,7 @@ class SearchServiceTest {
         String delta = "{\"ops\":[{\"insert\":\"正文\"},"
                 + "{\"insert\":{\"image\":\"https://secret.example/a.png\"}},"
                 + "{\"insert\":\"\\n\"}]}";
-        assertEquals("正文\n", SearchIndex.plainText(new ObjectMapper(), delta));
+        assertEquals("正文\n", DeltaJson.plainText(new ObjectMapper(), delta));
     }
 
     @Test

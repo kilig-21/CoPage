@@ -36,7 +36,7 @@ class SearchRepairTest {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/collab_documents_v2", call -> reply(call, 200, ""));
         server.start();
-        index = new SearchIndex(documents, mapper, "http://127.0.0.1:" + server.getAddress().getPort());
+        index = new SearchIndex(documents, mapper, new ElasticsearchTransport(mapper, "http://127.0.0.1:" + server.getAddress().getPort()));
     }
 
     @AfterEach

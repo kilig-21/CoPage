@@ -1,11 +1,11 @@
 package com.school.collab.document;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.school.collab.collab.CollabException;
 import com.school.collab.collab.persist.DocumentPersistence;
 import com.school.collab.collab.store.CollabDocumentSnapshot;
 import com.school.collab.ot.Delta;
+import com.school.collab.ot.DeltaJson;
 import com.school.collab.ot.DeltaApply;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -216,13 +216,11 @@ public class HistoryRepository {
     }
 
     private Delta decode(String json) {
-        try { return mapper.readValue(json, Delta.class); }
-        catch (JsonProcessingException ex) { throw new IllegalStateException("历史版本内容损坏", ex); }
+        return DeltaJson.read(mapper, json, "历史版本内容损坏");
     }
 
     private String encode(Delta content) {
-        try { return mapper.writeValueAsString(content); }
-        catch (JsonProcessingException ex) { throw new IllegalStateException("历史版本无法保存", ex); }
+        return DeltaJson.write(mapper, content, "历史版本无法保存");
     }
 
     public record VersionView(long revision, String savedAt, String author, String name) { }

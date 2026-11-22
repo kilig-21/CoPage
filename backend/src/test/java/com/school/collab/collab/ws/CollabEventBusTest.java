@@ -27,7 +27,8 @@ class CollabEventBusTest {
     private final WsSender sender = mock(WsSender.class);
     private final DocumentService documents = mock(DocumentService.class);
     private final AccountSessions accounts = mock(AccountSessions.class);
-    private final CollabEventBus bus = new CollabEventBus(redis, objectMapper, registry, sender, documents, accounts);
+    private final CollabEventBus bus = new CollabEventBus(redis, objectMapper,
+            new CollabEventDelivery(objectMapper, registry, sender, documents, accounts));
     @BeforeEach void validSessions() { when(accounts.isCurrent(anyLong(), anyLong(), anyString())).thenReturn(true); }
 
     @Test
