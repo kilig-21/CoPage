@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { documentHref } from '../navigation/documents'
 import { usePageSession } from '../auth/PageSessionContext'
 import createDocument from '../api/createDocument'
+import { useCreationTrackingWarning } from '../components/useCreationTrackingWarning'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import WorkspacePageHeading from '../components/WorkspacePageHeading'
 import DocumentPreview from '../components/DocumentPreview'
@@ -12,6 +13,7 @@ import { templateCategories as categories } from '../templates/categories'
 
 const SIZE = 20
 export default function PersonalTemplates() {
+  const warnTracking = useCreationTrackingWarning()
   const pageSession = usePageSession()
   const request = pageSession.request
   const [params, setParams] = useSearchParams()
@@ -119,7 +121,11 @@ export default function PersonalTemplates() {
     setBusy(true); setError(''); setNotice('')
     try {
       const result = await action(controller.signal)
-      if (!controller.signal.aborted) { instance.current = null; onSuccess(result.data) }
+      if (!controller.signal.aborted) {
+        if (kind === 'instance') warnTracking(result)
+        instance.current = null
+        onSuccess(result.data)
+      }
     } catch (failure) {
       if (!controller.signal.aborted) {
         const rejected = [400, 401, 403, 404].includes(failure?.code)

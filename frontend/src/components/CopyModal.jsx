@@ -5,8 +5,10 @@ import createDocument from '../api/createDocument'
 import { confirmCopy } from '../api/copyDocuments'
 import { sameCopyIdentity } from '../api/usePendingCopies'
 import { usePageSession } from '../auth/PageSessionContext'
+import { useCreationTrackingWarning } from './useCreationTrackingWarning'
 
 export default function CopyModal({ doc, onClose, onCreated, canCopy = () => true }) {
+  const warnTracking = useCreationTrackingWarning()
   const pageSession = usePageSession()
   const navigate = useNavigate()
   const [title, setTitle] = useState('')
@@ -66,6 +68,7 @@ export default function CopyModal({ doc, onClose, onCreated, canCopy = () => tru
       if (!current()) return
       result = await result.confirmTracking()
       if (!current()) return
+      warnTracking(result)
       accepted = true
       setConfirmed(result.data); setUncertain(false)
       prepared.current = null

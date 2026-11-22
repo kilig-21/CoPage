@@ -1,4 +1,3 @@
-import { message } from 'antd'
 import request from './request'
 import { createProjectDocumentCreator } from './projectDocumentCreation'
 import { bindRequestIdentity, readPageIdentity, samePageIdentity } from '../auth/pageSession.js'
@@ -25,9 +24,6 @@ function options(config) {
 function accepted(result) {
   const notify = value => {
     notifyProjectDocuments()
-    if (value.creationTrackingWarning) {
-      try { message.warning(value.creationTrackingWarning, 10) } catch { /* 提示失败不改变已确认结果。 */ }
-    }
     return value
   }
   return typeof result.confirmTracking === 'function'

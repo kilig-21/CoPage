@@ -1,4 +1,3 @@
-import { message } from 'antd'
 import request from './request'
 import { createGroupCreator } from './groupCreation'
 
@@ -22,15 +21,12 @@ function options(config) {
     isCurrent: () => localStorage.getItem('collab-user') === account && localStorage.getItem('collab-token') === token && request.defaults.baseURL === service }
 }
 function accepted(result) {
-  const warn = value => {
+  const notify = value => {
     notifyGroupCreations()
-    if (value.creationTrackingWarning) {
-      try { message.warning(value.creationTrackingWarning, 10) } catch { /* 提示失败不能改变已确认结果。 */ }
-    }
     return value
   }
   return typeof result.confirmTracking === 'function'
-    ? { ...result, confirmTracking: () => warn(result.confirmTracking()) } : warn(result)
+    ? { ...result, confirmTracking: () => notify(result.confirmTracking()) } : notify(result)
 }
 export async function createGroup(body, config = {}) {
   try {

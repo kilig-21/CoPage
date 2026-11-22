@@ -1,4 +1,3 @@
-import { message } from 'antd'
 import request from './request'
 import { createPersistentDocumentCreator } from './persistentDocumentCreation'
 import { createCopy } from './copyDocuments'
@@ -33,13 +32,12 @@ export function notifyDocumentCreations() {
   try { window.dispatchEvent(new Event('copage-document-creations-changed')) } catch { /* 刷新仍可读取原记录。 */ }
 }
 function accepted(result) {
-  const warn = response => {
+  const notify = response => {
     notifyDocumentCreations()
-    if (response.creationTrackingWarning) { try { message.warning(response.creationTrackingWarning, 10) } catch { /* 不改变已确认结果。 */ } }
     return response
   }
   return typeof result.confirmTracking === 'function'
-    ? { ...result, confirmTracking: async () => warn(await result.confirmTracking()) } : warn(result)
+    ? { ...result, confirmTracking: async () => notify(await result.confirmTracking()) } : notify(result)
 }
 export function listPendingDocumentCreations(config) { return creator.listPending(options(config)) }
 export async function confirmDocumentCreation(record, config) {

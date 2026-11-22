@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { expireSession } from '../auth/session'
+import { normalizeRequestError } from './requestError.js'
 
 const request = axios.create({
   baseURL: `${(import.meta.env.VITE_BACKEND_HTTP_ORIGIN ?? '').replace(/\/$/, '')}/api`,
@@ -21,13 +22,13 @@ request.interceptors.request.use((config) => {
 request.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    if (error.response?.status === 401 && !error.config?.url?.startsWith('/auth/')) {
+    if (error?.response?.status === 401 && !error.config?.url?.startsWith('/auth/')) {
       try {
         expireSession(localStorage, error.config?.copageSessionToken,
           detail => window.dispatchEvent(new CustomEvent('copage-auth-expired', { detail })))
       } catch { /* 无法读取当前身份时保留原401，不清未知账号或草稿。 */ }
     }
-    return Promise.reject(error.response?.data ?? error)
+    throw normalizeRequestError(error)
   },
 )
 

@@ -3,8 +3,10 @@ import { Alert, Button, Card, List, Space, Typography } from 'antd'
 import { confirmCopy } from '../api/copyDocuments'
 import usePendingCopies, { sameCopyIdentity } from '../api/usePendingCopies'
 import { usePageSession } from '../auth/PageSessionContext'
+import { useCreationTrackingWarning } from './useCreationTrackingWarning'
 
 export default function PendingCopies({ onCreated }) {
+  const warnTracking = useCreationTrackingWarning()
   const pageSession = usePageSession()
   const pending = usePendingCopies()
   const [error, setError] = useState(''), [busy, setBusy] = useState(false)
@@ -27,6 +29,7 @@ export default function PendingCopies({ onCreated }) {
       if (!current()) return
       response = await response.confirmTracking()
       if (!current()) return
+      warnTracking(response)
       next.accepted = true
       onCreated(response.data)
     } catch (failure) {

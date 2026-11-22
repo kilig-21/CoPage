@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Input, Modal, Typography } from 'antd'
 import { createGroup, confirmGroupCreation } from '../api/createGroup'
 import { groupCreationIdentity, sameGroupCreationIdentity } from '../api/usePendingGroupCreations'
+import { useCreationTrackingWarning } from './useCreationTrackingWarning'
 
 export default function CreateGroupModal({ onClose, onCreated, onBusyChange, expectedIdentity, assertSession }) {
+  const warnTracking = useCreationTrackingWarning()
   const [name, setName] = useState(''), [description, setDescription] = useState('')
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [pending, setPending] = useState(null), [confirmed, setConfirmed] = useState(null)
@@ -37,6 +39,7 @@ export default function CreateGroupModal({ onClose, onCreated, onBusyChange, exp
       if (!current()) return
       checkSession(controller.signal)
       response = response.confirmTracking(); accepted = true
+      warnTracking(response)
       prepared.current = null; setPending(null); setConfirmed(response.data)
       onCreated(response.data)
     } catch (failure) {

@@ -11,6 +11,7 @@ import WorkspaceHeader from '../components/WorkspaceHeader'
 import AccountDraftsDrawer from '../components/AccountDraftsDrawer'
 import DocumentLifecycleFeedback from '../components/DocumentLifecycleFeedback'
 import useDocumentLifecycle from '../api/useDocumentLifecycle'
+import { requestFailureMessage } from '../api/requestError'
 import '../styles/workbench.css'
 
 export default function Home() {
@@ -40,8 +41,7 @@ export default function Home() {
       if (controller.signal.aborted) return
       setData(data)
     }).catch(failure => {
-      if (!controller.signal.aborted) setError([400, 401, 403, 404].includes(failure?.code)
-        ? failure.message : '文档概览暂时无法加载，请检查网络后重试。')
+      if (!controller.signal.aborted) setError(requestFailureMessage(failure, '文档概览暂时无法加载，请重试。'))
     }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [refresh])
@@ -51,8 +51,7 @@ export default function Home() {
     request.get('/account/me', { signal: controller.signal }).then(({ data }) => {
       if (!controller.signal.aborted) setProfile(parseAccountProfile(data))
     }).catch(failure => {
-      if (!controller.signal.aborted) setProfileError(failure?.reason === 'ACCOUNT_PROFILE_RESPONSE' ? failure.message : [400, 401, 403, 404].includes(failure?.code)
-        ? failure.message : '账号资料暂时无法加载，可单独重试。')
+      if (!controller.signal.aborted) setProfileError(requestFailureMessage(failure, '账号资料暂时无法加载，可单独重试。'))
     }).finally(() => { if (!controller.signal.aborted) setProfileLoading(false) })
     return () => controller.abort()
   }, [profileRefresh])

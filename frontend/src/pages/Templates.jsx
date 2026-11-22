@@ -5,12 +5,14 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { documentHref } from '../navigation/documents'
 import { usePageSession } from '../auth/PageSessionContext'
 import createDocument from '../api/createDocument'
+import { useCreationTrackingWarning } from '../components/useCreationTrackingWarning'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import WorkspacePageHeading from '../components/WorkspacePageHeading'
 import DocumentPreview from '../components/DocumentPreview'
 
 import { templateCategories as categories } from '../templates/categories'
 export default function Templates() {
+  const warnTracking = useCreationTrackingWarning()
   const pageSession = usePageSession()
   const request = pageSession.request
   const navigate = useNavigate()
@@ -70,7 +72,11 @@ export default function Templates() {
     try {
       const response = await createDocument('/doc', { title: target.title, templateId: target.templateId },
         { signal: controller.signal, expectedIdentity: creationIdentity.current })
-      if (!controller.signal.aborted) { attempted.current = null; navigate(documentHref(response.data.id, sourcePath)) }
+      if (!controller.signal.aborted) {
+        warnTracking(response)
+        attempted.current = null
+        navigate(documentHref(response.data.id, sourcePath))
+      }
     } catch (ex) {
       if (!controller.signal.aborted) {
         const rejected = [400, 401, 403, 404].includes(ex?.code)

@@ -4,8 +4,10 @@ import { confirmProjectDocument, projectDocumentIdentity, sameProjectDocumentIde
 import usePendingProjectDocuments from '../api/usePendingProjectDocuments'
 import { subscribeProjectDocumentEvents } from '../api/projectDocumentEvents'
 import { usePageSession } from '../auth/PageSessionContext'
+import { useCreationTrackingWarning } from './useCreationTrackingWarning'
 
 export default function PendingProjectDocuments({ contextKey, disabled, onBusyChange, onCreated }) {
+  const warnTracking = useCreationTrackingWarning()
   const pageSession = usePageSession()
   const pending = usePendingProjectDocuments()
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
@@ -31,7 +33,9 @@ export default function PendingProjectDocuments({ contextKey, disabled, onBusyCh
     try {
       let response = await confirmProjectDocument(record, pageSession.options({ signal: next.controller.signal, deferCleanup: true }))
       if (!current()) return
-      response = response.confirmTracking(); next.accepted = true; onCreated(response.data)
+      response = response.confirmTracking(); next.accepted = true
+      warnTracking(response)
+      onCreated(response.data)
     } catch (failure) {
       if (current()) setError(next.accepted ? '原文档已确认，请从我的文档打开。'
         : ([400, 401, 403, 404].includes(failure?.code) && typeof failure.message === 'string' && failure.message

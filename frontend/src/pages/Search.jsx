@@ -5,6 +5,7 @@ import ListEmptyState from '../components/ListEmptyState'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import { usePageRequest } from '../auth/PageSessionContext'
+import { requestFailureMessage } from '../api/requestError'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import SearchExcerpt from '../components/SearchExcerpt'
 import WorkspacePageHeading from '../components/WorkspacePageHeading'
@@ -67,8 +68,7 @@ export default function Search() {
           setRead({ key: readKey, status: 'success', list: data.list, total: data.total })
         })
         .catch((failure) => {
-          if (current()) setRead({ key: readKey, status: 'error', error: [400, 401, 403, 404].includes(failure?.code)
-            ? failure.message || '搜索请求未获准，请核对当前账号与关键词。' : '搜索暂时无法加载，请检查网络后重试。' })
+          if (current()) setRead({ key: readKey, status: 'error', error: requestFailureMessage(failure, '搜索暂时无法加载，请重试。') })
         })
         .finally(() => { if (current()) activeRequest.current = null })
     }

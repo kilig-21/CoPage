@@ -3,8 +3,10 @@ import { Alert, Button, Input, Modal, Select, Typography } from 'antd'
 import { usePageSession } from '../auth/PageSessionContext'
 import { createProjectDocument, confirmProjectDocument, sameProjectDocumentIdentity } from '../api/projectDocuments'
 import DocumentPreview from './DocumentPreview'
+import { useCreationTrackingWarning } from './useCreationTrackingWarning'
 
 export default function CreateProjectDocumentModal({ project, contextKey, onClose, onCreated, onBusyChange }) {
+  const warnTracking = useCreationTrackingWarning()
   const pageSession = usePageSession()
   const request = pageSession.request
   const [title, setTitle] = useState('未命名文档'), [templateId, setTemplateId] = useState(null)
@@ -51,6 +53,7 @@ export default function CreateProjectDocumentModal({ project, contextKey, onClos
         : await createProjectDocument({ projectId: project.id, projectName: project.name, title: title.trim(), templateId }, config)
       if (!current()) return
       response = response.confirmTracking(); accepted = true
+      warnTracking(response)
       prepared.current = null; setPending(null); setConfirmed(response.data); onCreated(response.data)
     } catch (failure) {
       if (current()) setError(accepted ? '文档已确认，请从我的文档打开原文档。' : prepared.current

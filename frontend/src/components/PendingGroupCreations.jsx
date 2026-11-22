@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, List, Space, Typography } from 'antd'
 import { confirmGroupCreation } from '../api/createGroup'
 import usePendingGroupCreations, { groupCreationIdentity, sameGroupCreationIdentity } from '../api/usePendingGroupCreations'
+import { useCreationTrackingWarning } from './useCreationTrackingWarning'
 
 export default function PendingGroupCreations({ onCreated, onBusyChange, contextKey, disabled, expectedIdentity, assertSession }) {
+  const warnTracking = useCreationTrackingWarning()
   const pending = usePendingGroupCreations({ expectedIdentity, assertSession })
   const [error, setError] = useState(''), [busy, setBusy] = useState(false)
   const alive = useRef(false), attempt = useRef(null)
@@ -28,6 +30,7 @@ export default function PendingGroupCreations({ onCreated, onBusyChange, context
       if (!current()) return
       assertSession?.(next.controller.signal)
       response = response.confirmTracking(); next.accepted = true
+      warnTracking(response)
       onCreated(response.data)
     } catch (failure) {
       if (current()) setError(next.accepted ? '小组已确认，请从我的小组查看原小组。'

@@ -3,8 +3,10 @@ import { Alert, Button, Input, Modal, Typography } from 'antd'
 import createDocument, { sameDocumentCreationIdentity } from '../api/createDocument'
 import { usePageSession } from '../auth/PageSessionContext'
 import { createDocumentImporter } from '../api/documentImport'
+import { useCreationTrackingWarning } from './useCreationTrackingWarning'
 
 export default function ImportModal({ onClose, onCreated, onReview, scopeKey, expectedIdentity }) {
+  const warnTracking = useCreationTrackingWarning()
   const pageSession = usePageSession()
   const request = pageSession.request
   const [file, setFile] = useState(null)
@@ -56,7 +58,10 @@ export default function ImportModal({ onClose, onCreated, onReview, scopeKey, ex
     let created = null
     try {
       const result = await importer.current.submit({ file, title }, { signal: controller.signal })
-      if (alive.current && !controller.signal.aborted && scope.current === originalScope.current) created = result.data.id
+      if (alive.current && !controller.signal.aborted && scope.current === originalScope.current) {
+        warnTracking(result)
+        created = result.data.id
+      }
     } catch (ex) {
       if (alive.current && !controller.signal.aborted && scope.current === originalScope.current) setError(importer.current.getSnapshot().status === 'uncertain'
         ? ''

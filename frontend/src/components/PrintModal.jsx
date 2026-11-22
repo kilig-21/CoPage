@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, Button, Checkbox, Modal, Space, Spin, Typography } from 'antd'
 import { usePageRequest } from '../auth/PageSessionContext'
 import { confirmPrintAccess, parsePrintSnapshot } from '../api/printSnapshot'
+import { requestFailureMessage } from '../api/requestError'
 import DocumentPreview from './DocumentPreview'
 import { IMAGE_PENDING } from '../editor/privateImages'
 
@@ -53,7 +54,7 @@ export default function PrintModal({ docId, canPrint, onClose }) {
         if (!canPrintRef.current()) throw new Error('连接或编辑状态已变化，请等待同步后刷新预览')
         setSnapshot(parsePrintSnapshot(response, docId))
       })
-      .catch(ex => { if (!controller.signal.aborted) setError(ex.message || '打印预览读取失败，请重试') })
+      .catch(ex => { if (!controller.signal.aborted) setError(requestFailureMessage(ex, '打印预览读取失败，请重试')) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [docId, attempt])
@@ -101,7 +102,7 @@ export default function PrintModal({ docId, canPrint, onClose }) {
       try { document.title = snapshot.title + ' · CoPage'; window.print() }
       finally { document.title = oldTitle }
     } catch (ex) {
-      if (!controller.signal.aborted) setError(ex.message || '无法打开打印，请重试')
+      if (!controller.signal.aborted) setError(requestFailureMessage(ex, '无法打开打印，请重试'))
     } finally {
       if (!controller.signal.aborted) setPrinting(false)
       if (permissionCheck.current === controller) permissionCheck.current = null

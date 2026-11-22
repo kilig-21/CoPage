@@ -75,6 +75,63 @@ test('login, logout, and protected route redirect', async ({ page, request }) =>
   await expect(page).toHaveURL(/\/login(?:\?|$)/)
 })
 
+test('login surfaces Chinese messages for bad credentials, offline, timeout, and HTTP errors', async ({ page, context, request }) => {
+  const account = await createAccount(request)
+  const endpoint = `${backend}/api/auth/login`
+  const loginButton = page.getByRole('button', { name: /^登\s*录$/ })
+  await page.goto('/login')
+  await page.getByLabel('用户名').fill(account.username)
+  await page.getByLabel('密码', { exact: true }).fill('Incorrect fixture password')
+  await loginButton.click()
+  await expect(page.getByText('用户名或密码错误', { exact: true })).toBeVisible()
+
+  await context.setOffline(true)
+  try {
+    await loginButton.click()
+    await expect(page.getByText('无法连接服务，请检查网络后重试。', { exact: true })).toBeVisible()
+  } finally {
+    await context.setOffline(false)
+  }
+
+  await page.route(endpoint, () => { /* Keep the browser request open until Axios times out. */ })
+  await loginButton.click()
+  await expect(page.getByText('请求超时，请稍后重试。', { exact: true })).toBeVisible({ timeout: 17_000 })
+  await page.unroute(endpoint)
+
+  const failures = [
+    [403, '当前账号没有权限执行此操作。'], [404, '资源不存在或已被删除。'],
+    [409, '数据已发生变化或正在处理，请刷新后重试。'], [429, '操作过于频繁，请稍后重试。'],
+    [500, '服务器处理失败，请稍后重试。'], [503, '服务暂不可用，请稍后重试。'],
+  ]
+  for (const [status, expected] of failures) {
+    await page.route(endpoint, route => route.fulfill({ status, contentType: 'text/html',
+      headers: { 'access-control-allow-origin': new URL(page.url()).origin }, body: 'gateway error' }), { times: 1 })
+    await loginButton.click()
+    await expect(page.getByText(expected, { exact: true })).toBeVisible()
+  }
+  await login(page, account)
+})
+
+test('a failed document creation uses one toast with the configured Ant Design theme', async ({ page, request }) => {
+  const contextWarnings = []
+  page.on('console', message => {
+    if (/static function.*context/i.test(message.text())) contextWarnings.push(message.text())
+  })
+  await login(page, await createAccount(request))
+  await page.getByRole('link', { name: '我的文档' }).click()
+  await page.route(`${backend}/api/doc`, route => route.fulfill({ status: 503, contentType: 'application/json',
+    headers: { 'access-control-allow-origin': new URL(page.url()).origin }, json: { code: 503, message: '服务暂不可用，请稍后重试。' } }), { times: 1 })
+  await page.getByRole('button', { name: /新建文档$/ }).click()
+  const toast = page.locator('.ant-message-error')
+  await expect(toast).toHaveCount(1)
+  await expect(toast).toContainText('服务暂不可用，请稍后重试。 创建结果未确认。')
+  await expect(toast.locator('.anticon')).toHaveCSS('color', 'rgb(180, 35, 24)')
+  expect(contextWarnings).toEqual([])
+  await page.getByRole('button', { name: /新建文档$/ }).click()
+  await expect(page).toHaveURL(/\/docs\/\d+(\?|$)/)
+  await expect(saved(page)).toHaveText('所有修改已保存')
+})
+
 test('create, approximate composition in Quill, and reload the saved document', async ({ page, request }) => {
   await login(page, await createAccount(request))
   await createDocument(page)

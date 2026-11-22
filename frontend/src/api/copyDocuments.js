@@ -1,4 +1,3 @@
-import { message } from 'antd'
 import request from './request'
 import { createCopyCreator } from './copyCreation'
 import { bindRequestIdentity, readPageIdentity, samePageIdentity } from '../auth/pageSession.js'
@@ -21,11 +20,6 @@ export function notifyCopyChanges() {
   try { window.dispatchEvent(new Event('copage-copy-creations-changed')) }
   catch { /* 通知失败不改变已确认的创建结果；刷新仍可重新读取。 */ }
 }
-function warnTracking(result) {
-  if (!result.creationTrackingWarning) return
-  try { message.warning(result.creationTrackingWarning, 10) }
-  catch { /* 提示属于辅助展示，不能覆盖已确认结果。 */ }
-}
 function prepared(config) {
   return options({ ...config, onPrepared: async summary => {
     notifyCopyChanges()
@@ -38,12 +32,10 @@ function accepted(result) {
     return { ...result, confirmTracking: async () => {
       const response = await confirm()
       notifyCopyChanges()
-      warnTracking(response)
       return response
     } }
   }
   notifyCopyChanges()
-  warnTracking(result)
   return result
 }
 export async function createCopy(sourceId, body, config = {}) {

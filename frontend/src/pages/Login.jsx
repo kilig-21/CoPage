@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Form, Input, Typography } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
 import request from '../api/request'
+import { requestFailureMessage } from '../api/requestError'
 import LazyUserGuide from '../components/LazyUserGuide'
 import PasswordInput from '../components/PasswordInput'
 import { captureLoginIdentity, safeReturnPath, saveSession } from '../auth/session'
@@ -54,8 +55,8 @@ export default function Login() {
       if (!controller.signal.aborted) {
         if (registering && !isDefinitiveRegistrationRejection(error)) {
           setRegistrationUncertain(true)
-          setError('注册结果未确认，账号可能已经创建。请先用填写的账号尝试登录；若无法登录，再检查账号和密码或重新注册。')
-        } else setError(error?.message || '请求失败，请稍后重试')
+          setError([requestFailureMessage(error, ''), '注册结果未确认，账号可能已经创建。请先用填写的账号尝试登录；若无法登录，再检查账号和密码或重新注册。'].filter(Boolean).join(' '))
+        } else setError(requestFailureMessage(error))
       }
     } finally {
       if (requestControllerRef.current === controller) requestControllerRef.current = null

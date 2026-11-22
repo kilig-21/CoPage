@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { CloseCircleOutlined, FileTextOutlined, PlusOutlined, MoreOutlined } from '@ant-design/icons'
-import { Alert, Button, Card, Dropdown, Input, Layout, List, Pagination, Popconfirm, Radio, Space, Tag, Typography, message } from 'antd'
+import { Alert, App, Button, Card, Dropdown, Input, Layout, List, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
 import ListEmptyState from '../components/ListEmptyState'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import { usePageSession } from '../auth/PageSessionContext'
 import createDocumentRequest from '../api/createDocument'
+import { requestFailureMessage } from '../api/requestError'
 import useDocumentLifecycle from '../api/useDocumentLifecycle'
 import DocumentLifecycleFeedback from '../components/DocumentLifecycleFeedback'
 import WorkspaceHeader from '../components/WorkspaceHeader'
@@ -17,10 +18,13 @@ import CopyModal from '../components/CopyModal'
 import RenameModal from '../components/RenameModal'
 import PendingCopies from '../components/PendingCopies'
 import PendingDocumentCreations from '../components/PendingDocumentCreations'
+import { useCreationTrackingWarning } from '../components/useCreationTrackingWarning'
 
 const PAGE_SIZE = 20
 
 export default function DocList() {
+  const { message } = App.useApp()
+  const warnTracking = useCreationTrackingWarning()
   const pageSession = usePageSession()
   const request = pageSession.request
   const [managing, setManaging] = useState(null)
@@ -78,7 +82,7 @@ export default function DocList() {
         setLoadedFrom(listKey)
       })
       .catch((error) => {
-        if (!controller.signal.aborted) { setDocs([]); setTotal(0); setLoadError(error?.message || '文档列表加载失败') }
+        if (!controller.signal.aborted) { setDocs([]); setTotal(0); setLoadError(requestFailureMessage(error, '文档列表加载失败')) }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false)
@@ -94,9 +98,14 @@ export default function DocList() {
     try {
       const response = await createDocumentRequest('/doc', { title: '未命名文档' }, { signal: controller.signal, expectedIdentity: creationIdentity.current })
       if (controller.signal.aborted) return
+      warnTracking(response)
       navigate(documentHref(response.data.id, sourcePath))
     } catch (error) {
-      if (!controller.signal.aborted) message.error(error?.code === 400 ? error.message : '创建结果未确认，可以重试本次创建，也可先刷新列表核对；相同请求不会重复创建文档。')
+      if (!controller.signal.aborted) {
+        const retry = '创建结果未确认。可以重试本次创建，或先刷新列表核对。相同请求不会重复创建文档。'
+        const detail = requestFailureMessage(error, '')
+        message.error(error?.code === 400 && detail ? detail : [detail, retry].filter(Boolean).join(' '))
+      }
     } finally {
       if (createController.current === controller) createController.current = null
       if (!controller.signal.aborted) setCreating(false)

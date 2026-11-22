@@ -4,6 +4,7 @@ import 'quill/dist/quill.snow.css'
 import CollabSocket from '../ws/CollabSocket'
 import CollabClient from '../ws/CollabClient'
 import { usePageSession } from '../auth/PageSessionContext'
+import { requestFailureMessage } from '../api/requestError'
 import { createReconnectSessionCheck, expireSession } from '../auth/session'
 import { IMAGE_ACCEPT, createImageInsertion, finishImageInsertion, imageValidationError, uploadEditorImage } from './imageUpload'
 import RemoteCursorLayer from './RemoteCursorLayer'
@@ -285,7 +286,7 @@ export default function useQuillCollab(docId) {
         quill.setSelection(insertionEnd, 0, 'silent')
         setError(notice)
       } catch (uploadError) {
-        if (active && !controller.signal.aborted) setError(uploadError?.message || '图片上传失败')
+        if (active && !controller.signal.aborted) setError(requestFailureMessage(uploadError, '图片上传失败'))
       } finally {
         uploading = false
         updateSaveStatus()
@@ -732,7 +733,7 @@ export default function useQuillCollab(docId) {
           ? '当前账号无法打开这篇文档。请核对登录账号，或请分享者确认逐篇授权后重试。'
           : loadError?.code === 404
             ? '这篇文档暂时无法打开，可能已被删除。请返回核对，文档所有者可到回收站查看。'
-            : loadError?.message || '文档加载失败'
+            : requestFailureMessage(loadError, '文档加载失败')
         setConnection('加载失败')
         lastSaveStatus = '未能加载文档'
         setSaveStatus(lastSaveStatus)
