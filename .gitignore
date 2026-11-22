@@ -8,6 +8,8 @@ backend/.mvn-cache/
 frontend/node_modules/
 frontend/dist/
 frontend/.npm-cache/
+frontend/test-results/
+frontend/playwright-report/
 
 # IDE / OS
 .idea/

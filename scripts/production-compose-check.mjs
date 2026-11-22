@@ -84,7 +84,8 @@ const sessionRevocationSmoke = process.argv.includes('--session-revocation-smoke
 const privateImageSmoke = process.argv.includes('--private-image-smoke')
 const redisRetentionSmoke = process.argv.includes('--redis-retention-smoke')
 const frontendErrorSmoke = process.argv.includes('--frontend-error-smoke')
-const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke || authLimitSmoke || healthProbeSmoke || resourcesSmoke || configGuardSmoke || sessionRevocationSmoke || privateImageSmoke || redisRetentionSmoke || frontendErrorSmoke
+const browserSmoke = process.argv.includes('--browser-smoke')
+const fullSmoke = process.argv.includes('--full-smoke') || recoverySmoke || proxySmoke || expirySmoke || renamePermissionSmoke || editPermissionSmoke || historyRestoreSmoke || historyRecoverySmoke || retentionMaintenanceSmoke || searchRepairSmoke || authLimitSmoke || healthProbeSmoke || resourcesSmoke || configGuardSmoke || sessionRevocationSmoke || privateImageSmoke || redisRetentionSmoke || frontendErrorSmoke || browserSmoke
 const runtimeImages = process.argv.filter(value => value.startsWith('--runtime-image='))
 assert.ok(runtimeImages.length <= 1, '预构建运行时镜像只能指定一次')
 const runtimeImage = runtimeImages[0]?.slice('--runtime-image='.length)
@@ -104,9 +105,16 @@ if (runtimeImages.length) {
 if (process.argv.includes('--smoke') || fullSmoke) {
   // 随机项目名只属于本次验收，不触及开发或实际生产项目的数据卷。
   const project = 'copage-prod-qa-' + randomBytes(6).toString('hex')
+  const browser = browserSmoke ? await (await import('../frontend/scripts/isolate-browser-smoke.mjs')).isolateBrowserSmoke() : null
+  if (browser) {
+    const override = join(browser.directory, 'local-backend.yml')
+    writeFileSync(override, `services:\n  backend:\n    environment:\n      COPAGE_CONFIG_MODE: local\n      SPRING_PROFILES_ACTIVE: default\n`)
+    base.push('-f', override)
+  }
   const qa = [...base, '-p', project]
   // 动态分配回环端口，防止覆盖已有本机服务。
   const qaEnv = { ...env, PROD_BACKEND_PORT: '0', PROD_MINIO_PORT: '0' }
+  if (browser) Object.assign(qaEnv, { PROD_FRONTEND_ORIGIN: browser.origin, PROD_MINIO_PUBLIC_ENDPOINT: 'http://127.0.0.1:1' })
   if (privateImageSmoke) qaEnv.IMAGE_UPLOAD_COUNT_LIMIT = '2'
   if (redisRetentionSmoke) qaEnv.DOCUMENT_CACHE_TTL_SECONDS = '12'
   if (frontendErrorSmoke) qaEnv.FRONTEND_ERROR_REPORT_LIMIT_PER_MINUTE = '2'
@@ -195,7 +203,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       assert.equal(smoke.status, 0, smoke.stderr)
       console.log(smoke.stdout.trim())
       assert.equal(sql("SELECT COUNT(*) FROM user WHERE username IN ('testA','testB');").stdout.trim(), '0')
-      console.log('PASS: 两个 prod 后端均就绪，独立注册账号跨实例协同通过，未创建演示账号')
+      console.log(`PASS: 两个 ${browser ? '本地隔离' : 'prod'} 后端均就绪，独立注册账号跨实例协同通过，未创建演示账号`)
       if (renamePermissionSmoke) {
         await runDocumentRenamePermissionCheck({ docker, source: qaDocker, sql, ports, username, password, cwd, env: qaEnv })
       }
@@ -266,6 +274,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
         const { runFrontendErrorCheck } = await import('./frontend-error-smoke.mjs')
         await runFrontendErrorCheck({ ports, source: qaDocker, env: qaEnv })
       }
+      if (browser) await browser.run({ backendPort: ports[0], project })
     } else {
       // 在临时库单独应用开发种子，核对拆分后本地演示仍可初始化。
       sql(readFileSync(new URL('../backend/src/main/resources/db/demo-users.sql', import.meta.url), 'utf8'), true)
@@ -281,13 +290,17 @@ if (process.argv.includes('--smoke') || fullSmoke) {
     console.error(`隔离验收失败的后端诊断已保留：${diagnostics}`)
     throw error
   } finally {
-    const ids = qaDocker(['ps', '-aq']).stdout.trim().split(/\s+/).filter(Boolean)
-    for (const id of ids) {
-      const label = docker(['inspect', '--format', '{{index .Config.Labels "com.docker.compose.project"}}', id]).stdout.trim()
-      assert.equal(label, project, '清理前必须确认测试容器项目归属')
+    try {
+      const ids = qaDocker(['ps', '-aq']).stdout.trim().split(/\s+/).filter(Boolean)
+      for (const id of ids) {
+        const label = docker(['inspect', '--format', '{{index .Config.Labels "com.docker.compose.project"}}', id]).stdout.trim()
+        assert.equal(label, project, '清理前必须确认测试容器项目归属')
+      }
+      qaDocker(['down', '--volumes', '--remove-orphans'])
+      console.log('临时验收容器、网络和数据卷已清理')
+    } finally {
+      if (runtimeOverride) { unlinkSync(runtimeOverride); rmdirSync(runtimeDirectory) }
+      if (browser) await browser.close()
     }
-    qaDocker(['down', '--volumes', '--remove-orphans'])
-    if (runtimeOverride) { unlinkSync(runtimeOverride); rmdirSync(runtimeDirectory) }
-    console.log('临时验收容器、网络和数据卷已清理')
   }
 }
