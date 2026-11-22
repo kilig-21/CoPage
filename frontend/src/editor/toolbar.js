@@ -1,6 +1,9 @@
+export const EDITOR_FORMAT_TOOLBAR_ID = 'editor-format-toolbar'
+
 export function configureEditorToolbar(quill) {
   const toolbar = quill.getModule('toolbar').container
   const history = quill.getModule('history')
+  toolbar.id = EDITOR_FORMAT_TOOLBAR_ID
   toolbar.setAttribute('aria-label', '正文格式与编辑')
   const labels = {
     undo: ['撤销自己的编辑', '撤销自己的编辑（Ctrl/⌘+Z）'],

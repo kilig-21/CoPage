@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowLeftOutlined, CloudOutlined, MoreOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, CloudOutlined, DownOutlined, FontSizeOutlined, MoreOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons'
 import { Alert, Avatar, Button, Dropdown, Layout, Modal, Popover, Space, Tag, Tooltip, Typography } from 'antd'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { documentHref, documentReturn } from '../navigation/documents'
 import useQuillCollab from '../editor/useQuillCollab'
 import useEditorStickyOffsets from '../editor/useEditorStickyOffsets'
+import { EDITOR_FORMAT_TOOLBAR_ID } from '../editor/toolbar'
 import CollaboratorModal from '../components/CollaboratorModal'
 import HistoryDrawer from '../components/HistoryDrawer'
 import ExportModal from '../components/ExportModal'
@@ -51,6 +52,7 @@ export default function Editor() {
   const [showImages, setShowImages] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(false)
+  const [expandedFormatDoc, setExpandedFormatDoc] = useState(null)
   const [titleOpen, setTitleOpen] = useState(false)
   const [findFocusEpoch, setFindFocusEpoch] = useState(0)
   const [draftDownloadNotice, setDraftDownloadNotice] = useState('')
@@ -61,6 +63,7 @@ export default function Editor() {
     if (showFind) revealDocumentMatch()
   }, [showFind, findFocusEpoch, revealDocumentMatch])
   const isConnected = connection === '已连接'
+  const formatExpanded = expandedFormatDoc === docId
   managementScope.current = { docId, isOwner, permission }
   templateScope.current = { docId, permission, routeKey: location.key }
   const displayTitle = title || '协同文档 #' + id
@@ -258,7 +261,16 @@ export default function Editor() {
           focusEpoch={findFocusEpoch} onQuery={queryDocument} onNext={nextDocumentMatch}
           onReplace={replaceDocumentMatch} onClose={closeFind} />}
         <section className="editor-canvas">
-          <div ref={editorHostRef} className="editor-host" aria-label="协同编辑器" />
+          <div className="editor-writing-column" data-format-available={permission === 2} data-format-expanded={formatExpanded}>
+            {permission === 2 && <Button type="text" className="editor-format-toggle" icon={<FontSizeOutlined aria-hidden="true" />}
+              aria-expanded={formatExpanded} aria-controls={EDITOR_FORMAT_TOOLBAR_ID}
+              onClick={() => setExpandedFormatDoc(formatExpanded ? null : docId)}>
+              格式工具 <DownOutlined className="editor-format-chevron" aria-hidden="true" />
+            </Button>}
+            <div className="editor-format-content">
+              <div ref={editorHostRef} className="editor-host" aria-label="协同编辑器" />
+            </div>
+          </div>
         </section>
       </main>
       {showGuide && <LazyUserGuide initialSection="save" triggerRef={toolsButtonRef} onClose={() => setShowGuide(false)} />}
