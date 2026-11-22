@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { CloseCircleOutlined, FileTextOutlined, PlusOutlined, MoreOutlined } from '@ant-design/icons'
 import { Alert, App, Button, Card, Dropdown, Input, Layout, List, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
 import ListEmptyState from '../components/ListEmptyState'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
-import { usePageSession } from '../auth/PageSessionContext'
-import createDocumentRequest from '../api/createDocument'
+import { usePageRequest } from '../auth/PageSessionContext'
+import useBlankDocumentCreation from '../api/useBlankDocumentCreation'
 import { requestFailureMessage } from '../api/requestError'
 import useDocumentLifecycle from '../api/useDocumentLifecycle'
 import DocumentLifecycleFeedback from '../components/DocumentLifecycleFeedback'
@@ -18,21 +18,18 @@ import CopyModal from '../components/CopyModal'
 import RenameModal from '../components/RenameModal'
 import PendingCopies from '../components/PendingCopies'
 import PendingDocumentCreations from '../components/PendingDocumentCreations'
-import { useCreationTrackingWarning } from '../components/useCreationTrackingWarning'
 
 const PAGE_SIZE = 20
 
 export default function DocList() {
   const { message } = App.useApp()
-  const warnTracking = useCreationTrackingWarning()
-  const pageSession = usePageSession()
-  const request = pageSession.request
+  const request = usePageRequest()
+  const { creating, createBlankDocument, openCreatedDocument, creationIdentity } = useBlankDocumentCreation()
   const [managing, setManaging] = useState(null)
   const [copying, setCopying] = useState(null)
   const navigate = useNavigate()
   const location = useLocation()
   const sourcePath = location.pathname + location.search + location.hash
-  const creationIdentity = useRef(pageSession.identity)
   const [docs, setDocs] = useState([])
   const [total, setTotal] = useState(0)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -52,8 +49,6 @@ export default function DocList() {
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(null)
   const [loadError, setLoadError] = useState('')
-  const [creating, setCreating] = useState(false)
-  const createController = useRef(null)
   const [importing, setImporting] = useState(false)
   const [savingTemplate, setSavingTemplate] = useState(null)
   const [templatePendingName, setTemplatePendingName] = useState(null)
@@ -64,8 +59,6 @@ export default function DocList() {
 
   useEffect(() => {
     setCopying(null); setImporting(false); setSavingTemplate(null)
-    createController.current?.abort(); createController.current = null; setCreating(false)
-    return () => createController.current?.abort()
   }, [location.key])
 
   useEffect(() => {
@@ -91,28 +84,6 @@ export default function DocList() {
     return () => controller.abort()
   }, [page, keyword, scope, listKey, request, setPage])
 
-  async function createDocument() {
-    if (createController.current) return
-    const controller = new AbortController()
-    createController.current = controller
-    setCreating(true)
-    try {
-      const response = await createDocumentRequest('/doc', { title: '未命名文档' }, { signal: controller.signal, expectedIdentity: creationIdentity.current })
-      if (controller.signal.aborted) return
-      warnTracking(response)
-      navigate(documentHref(response.data.id, sourcePath))
-    } catch (error) {
-      if (!controller.signal.aborted) {
-        const retry = '创建结果未确认。可以重试本次创建，或先刷新列表核对。相同请求不会重复创建文档。'
-        const detail = requestFailureMessage(error, '')
-        message.error(error?.code === 400 && detail ? detail : [detail, retry].filter(Boolean).join(' '))
-      }
-    } finally {
-      if (createController.current === controller) createController.current = null
-      if (!controller.signal.aborted) setCreating(false)
-    }
-  }
-
   return (
     <Layout className="app-shell">
       <WorkspaceHeader title="我的文档" />
@@ -122,12 +93,11 @@ export default function DocList() {
             <Button disabled={loading || deletion.busy} onClick={() => setRefresh(value => value + 1)}>刷新文档列表</Button>
             <Button onClick={() => setImporting(true)}>导入文档</Button>
             <Button onClick={() => navigate('/templates')}>从模板新建</Button>
-            <Button type="primary" icon={<PlusOutlined />} loading={creating} onClick={createDocument}>新建文档</Button>
+            <Button type="primary" icon={<PlusOutlined />} loading={creating} onClick={createBlankDocument}>新建文档</Button>
           </Space>
         </WorkspacePageHeading>
         <PendingCopies onCreated={data => navigate(documentHref(data.id, sourcePath))} />
-        <PendingDocumentCreations expectedIdentity={creationIdentity.current} disabled={creating}
-          onCreated={data => navigate(documentHref(data.id, sourcePath))} />
+        <PendingDocumentCreations expectedIdentity={creationIdentity} disabled={creating} onCreated={openCreatedDocument} />
         <Space wrap style={{ marginBottom: 16 }}>
           <Radio.Group aria-label="文档分类" value={scope} disabled={deletion.busy} onChange={event => applyScope(event.target.value)}
             options={[{ label: '全部', value: 'all' }, { label: '我创建', value: 'owned' }, { label: '与我协作', value: 'shared' }]} />
@@ -181,7 +151,7 @@ export default function DocList() {
       {copying && <CopyModal doc={copying} onClose={() => setCopying(null)}
         onCreated={data => { message.success('已创建服务端版本 ' + data.sourceRevision + ' 的副本'); navigate(documentHref(data.id, sourcePath)) }} />}
       {managing && <CollaboratorModal doc={managing} onClose={() => setManaging(null)} />}
-      {importing && <ImportModal scopeKey={location.key} expectedIdentity={creationIdentity.current} onClose={() => setImporting(false)} onCreated={id => navigate(documentHref(id, sourcePath))}
+      {importing && <ImportModal scopeKey={location.key} expectedIdentity={creationIdentity} onClose={() => setImporting(false)} onCreated={id => navigate(documentHref(id, sourcePath))}
         onReview={title => { setImporting(false); setSearchParams({ scope: 'owned', ...(title ? { keyword: title } : {}) }); setRefresh(value => value + 1) }} />}
       {editing && <RenameModal doc={editing} onClose={() => setEditing(null)}
         onSaved={() => setRefresh(value => value + 1)} />}

@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Layout, List, Space, Tag, Typography } from 'antd'
-import ListEmptyState from '../components/ListEmptyState'
-import { ArrowRightOutlined, FileTextOutlined } from '@ant-design/icons'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Alert, Button, Layout, Skeleton, Typography } from 'antd'
+import { ArrowRightOutlined, FileTextOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import { Link, useLocation } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import { usePageRequest } from '../auth/PageSessionContext'
 import { parseAccountProfile } from '../auth/accountProfile'
@@ -10,6 +9,8 @@ import WorkspaceOverview from '../components/WorkspaceOverview'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import AccountDraftsDrawer from '../components/AccountDraftsDrawer'
 import DocumentLifecycleFeedback from '../components/DocumentLifecycleFeedback'
+import PendingDocumentCreations from '../components/PendingDocumentCreations'
+import useBlankDocumentCreation from '../api/useBlankDocumentCreation'
 import useDocumentLifecycle from '../api/useDocumentLifecycle'
 import { requestFailureMessage } from '../api/requestError'
 import '../styles/workbench.css'
@@ -17,8 +18,8 @@ import '../styles/workbench.css'
 export default function Home() {
   const request = usePageRequest()
   const location = useLocation()
-  const navigate = useNavigate()
   const sourcePath = location.pathname + location.search + location.hash
+  const { creating, createBlankDocument, openCreatedDocument, creationIdentity } = useBlankDocumentCreation()
   const [data, setData] = useState(null)
   const [profile, setProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(true)
@@ -58,52 +59,59 @@ export default function Home() {
   return <Layout className="app-shell">
     <WorkspaceHeader title="工作台" />
     <main id="workspace-main" tabIndex={-1} className="content-wrap workbench">
-      <div className="page-heading cp-workbench-heading"><div className="cp-workbench-intro">
-        <Typography.Text className="cp-workbench-kicker">{profile ? <>你好，<span className="cp-workbench-account-name">{profile.nickname?.trim() || profile.username}</span></> : '你的资料与协作'}</Typography.Text>
-        <Typography.Title level={1}>{profile ? '欢迎回来' : '你的协作工作台'}</Typography.Title>
-        <Typography.Paragraph type="secondary">接着写下想法，或从一份模板开始新的工作。</Typography.Paragraph>
-      </div><Space wrap className="cp-workbench-actions">
-        <Button size="large" onClick={() => navigate('/docs')}>管理文档</Button>
-        <Button size="large" type="primary" icon={<ArrowRightOutlined aria-hidden="true" />} iconPosition="end" onClick={() => navigate('/templates')}>从模板开始</Button>
-      </Space></div>
+      <header className="cp-workbench-heading">
+        <Typography.Title level={1}>工作台</Typography.Title>
+        {profile && <p className="cp-workbench-greeting">你好，{profile.nickname?.trim() || profile.username}</p>}
+        <div className="cp-workbench-actions">
+          <Button size="large" type="primary" icon={<PlusOutlined aria-hidden="true" />}
+            loading={creating} onClick={createBlankDocument}>新建文档</Button>
+          <Link to="/search" className="cp-workbench-action"><SearchOutlined aria-hidden="true" />搜索文档</Link>
+          <Link to="/templates" className="cp-workbench-action">从模板开始<ArrowRightOutlined aria-hidden="true" /></Link>
+        </div>
+      </header>
       {profileError && <Alert type="warning" showIcon message={profileError}
         action={<Button disabled={profileLoading} onClick={() => setProfileRefresh(value => value + 1)}>重试账号资料</Button>} />}
-      {error && <Alert type="error" showIcon message={error}
-        action={<Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>重试文档概览</Button>} />}
+      <PendingDocumentCreations expectedIdentity={creationIdentity} disabled={creating} onCreated={openCreatedDocument} />
       <DocumentLifecycleFeedback lifecycle={lifecycle} returnTo={sourcePath} />
-      <Card title={<div className="cp-workbench-section-title"><Typography.Title level={2}>继续工作</Typography.Title>
-        <Typography.Text type="secondary">最近更新的资料，继续查看或编辑。</Typography.Text></div>}
-        className="workbench-recent workbench-documents cp-recent-documents" loading={loading}
-        extra={<Space wrap><Button type="text" disabled={loading} onClick={() => setRefresh(value => value + 1)}>刷新文档概览</Button>
-          <Link to="/docs">查看全部</Link></Space>}>
-        {data && <><div className="cp-document-counts" aria-label="文档概览">
+      <section className="workbench-documents" aria-labelledby="workbench-recent-title">
+        <div className="cp-workbench-section-title">
+          <Typography.Title level={2} id="workbench-recent-title">最近文档</Typography.Title>
+          <Link to="/docs">全部文档<ArrowRightOutlined aria-hidden="true" /></Link>
+        </div>
+        {loading && <div className="cp-workbench-recent-status" role="status">
+          <span className="cp-workbench-sr-only">正在加载最近文档</span>
+          <Skeleton title={false} paragraph={{ rows: 2 }} />
+        </div>}
+        {error && <Alert type="error" showIcon message={error}
+          action={<Button onClick={() => setRefresh(value => value + 1)}>重试文档概览</Button>} />}
+        {data?.recent.length > 0 && <ul className="cp-recent-list">
+          {data.recent.map(doc => <li key={doc.id}>
+            <Link className="cp-recent-link" to={documentHref(doc.id, sourcePath)}>
+              <FileTextOutlined className="cp-recent-document-icon" aria-hidden="true" />
+              <span className="cp-recent-document-text">
+                <strong>{doc.title}</strong>
+                <span className="cp-recent-document-meta">
+                  <span>{doc.isOwner ? '我创建的' : doc.permission === 2 ? '可编辑' : '只读'}</span>
+                  <span>{typeof doc.ownerName === 'string' && doc.ownerName.trim() ? doc.ownerName
+                    : Number.isSafeInteger(doc.ownerId) && doc.ownerId > 0 ? '用户 #' + doc.ownerId : '所有者暂不可用'}</span>
+                  <span>更新于 {doc.updateTime}</span>
+                </span>
+              </span>
+              <ArrowRightOutlined className="cp-recent-arrow" aria-hidden="true" />
+            </Link>
+          </li>)}
+        </ul>}
+        {data?.recent.length === 0 && <p className="cp-workbench-empty">新建一篇文档，或请同伴与你共享文档。</p>}
+        {data && <div className="cp-document-counts" aria-label="文档概览">
           <Link to="/docs?scope=owned"><span>我创建的文档</span><strong>{data.ownedCount}</strong></Link>
           <Link to="/docs?scope=shared"><span>与我协作的文档</span><strong>{data.sharedCount}</strong></Link>
-        </div><List rowKey="id" dataSource={data.recent}
-          locale={{ emptyText: <ListEmptyState description="还没有文档，先从模板创建一篇或请同伴添加你为协作者" /> }}
-          renderItem={doc => <List.Item>
-            <List.Item.Meta avatar={<FileTextOutlined className="cp-recent-document-icon" />}
-              title={<Link to={documentHref(doc.id, sourcePath)}>{doc.title}</Link>}
-              description={<Space wrap className="cp-recent-document-meta"><Tag>{doc.isOwner ? '所有者' : doc.permission === 2 ? '可编辑' : '只读'}</Tag>
-                <span>{typeof doc.ownerName === 'string' && doc.ownerName.trim() ? doc.ownerName
-                  : Number.isSafeInteger(doc.ownerId) && doc.ownerId > 0 ? '用户 #' + doc.ownerId : '所有者暂不可用'} · 更新于 {doc.updateTime}</span></Space>} />
-            <Link className="cp-document-open" to={documentHref(doc.id, sourcePath)}>打开 <ArrowRightOutlined /></Link>
-          </List.Item>} /></>}
-        {!loading && !data && <Typography.Paragraph>恢复连接后重试，即可查看当前可访问的资料。</Typography.Paragraph>}
-      </Card>
+        </div>}
+      </section>
       <div className="cp-workbench-secondary">
         <WorkspaceOverview />
         <aside className="cp-workbench-tools" aria-label="资料工具">
-          <section className="cp-workbench-tool"><Typography.Title level={3}>从一份框架开始</Typography.Title>
-            <Typography.Paragraph type="secondary">挑选六种内置模板，或复用自己的私人模板，预览后创建独立文档。</Typography.Paragraph>
-            <Space wrap><Link to="/templates">挑选内置模板 <ArrowRightOutlined /></Link><Link to="/templates?source=personal">我的模板</Link></Space>
-          </section>
-          <section className="cp-workbench-tool"><Typography.Title level={3}>找到需要的资料</Typography.Title>
-            <Typography.Paragraph type="secondary">按标题和正文，检索你有权限访问的文档。</Typography.Paragraph>
-            <Link to="/search">搜索文档 <ArrowRightOutlined /></Link>
-          </section>
-          <section className="cp-workbench-tool"><Typography.Title level={3}>保存在此浏览器的草稿</Typography.Title>
-            <Typography.Paragraph type="secondary">找回当前账号的本地编辑记录，下载副本或回到文档继续处理。</Typography.Paragraph>
+          <section className="cp-workbench-tool"><Typography.Title level={3}>本地草稿</Typography.Title>
+            <Typography.Paragraph type="secondary">继续处理保存在这个浏览器里的草稿，或下载副本。</Typography.Paragraph>
             <Button ref={draftsButton} onClick={() => setShowDrafts(true)}>查看本地草稿</Button>
           </section>
         </aside>
