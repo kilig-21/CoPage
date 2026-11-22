@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
@@ -37,6 +38,7 @@ public class RedisDocLock {
     private final StringRedisTemplate redis;
     private final Duration ttl;
     private final long renewIntervalMillis;
+    private final ThreadLocal<Lease> held = new ThreadLocal<>();
 
     @Autowired
     public RedisDocLock(StringRedisTemplate redis) {
@@ -54,7 +56,7 @@ public class RedisDocLock {
     }
 
     public <T> T withLock(long docId, Supplier<T> action) {
-        String key = "collab:doc:lock:" + docId;
+        String key = keyFor(docId);
         String token = UUID.randomUUID().toString();
         long deadline = System.nanoTime() + WAIT_TIMEOUT.toNanos();
         while (!Boolean.TRUE.equals(redis.opsForValue().setIfAbsent(key, token, ttl))) {
@@ -62,7 +64,7 @@ public class RedisDocLock {
                 throw new CollabException(40901, "文档忙，请稍后重试");
             }
             try {
-                Thread.sleep(RETRY_DELAY_MILLIS);
+                Thread.sleep(RETRY_DELAY_MILLIS + ThreadLocalRandom.current().nextLong(6));
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
                 throw new CollabException(40901, "等待文档锁被中断");
@@ -70,6 +72,8 @@ public class RedisDocLock {
         }
         AtomicBoolean finished = new AtomicBoolean();
         AtomicBoolean lost = new AtomicBoolean();
+        Lease previous = held.get();
+        held.set(new Lease(docId, token));
         Thread watchdog = null;
         try {
             watchdog = Thread.ofVirtual().name("redis-doc-lock-renew-" + docId).start(() -> {
@@ -106,6 +110,8 @@ public class RedisDocLock {
             }
             return result;
         } finally {
+            if (previous == null) held.remove();
+            else held.set(previous);
             finished.set(true);
             if (watchdog != null) {
                 watchdog.interrupt();
@@ -119,8 +125,20 @@ public class RedisDocLock {
         }
     }
 
+    public static String keyFor(long docId) {
+        return "collab:doc:lock:" + docId;
+    }
+
+    public String tokenFor(long docId) {
+        Lease lease = held.get();
+        if (lease == null || lease.docId() != docId) throw new IllegalStateException("未持有该文档的 Redis 租约");
+        return lease.token();
+    }
+
     private boolean renew(String key, String token) {
         return Long.valueOf(1L).equals(redis.execute(
                 RENEW_SCRIPT, List.of(key), token, String.valueOf(ttl.toMillis())));
     }
+
+    private record Lease(long docId, String token) { }
 }

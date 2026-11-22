@@ -43,6 +43,15 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 20
+      redis:
+        image: redis:7.4.1-alpine
+        ports:
+          - 6379/tcp
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -57,6 +66,7 @@ jobs:
         env:
           COPAGE_MIGRATION_TEST_MYSQL: 127.0.0.1:${{ job.services.mysql.ports[3306] }}
           COPAGE_MIGRATION_TEST_PASSWORD: copage-ci-only-109
+          COPAGE_REDIS_CACHE_TEST_PORT: ${{ job.services.redis.ports[6379] }}
         run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml verify
 
   frontend:

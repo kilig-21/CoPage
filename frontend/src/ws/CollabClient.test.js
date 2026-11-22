@@ -266,7 +266,7 @@ test('跳号确认触发追赶并保留未确认编辑', () => {
   assert.equal(editor.client.revision, 0)
   assert.ok(editor.client.pending)
   assert.deepEqual(editor.document.ops, [{ insert: 'A\n' }])
-  assert.equal(editor.sent.at(-1).type, 'join')
+  assert.equal(editor.sent.at(-1).type, 'history_request')
   assert.equal(editor.sent.at(-1).pendingOpId, editor.client.pending.opId)
   editor.client.close()
 })
@@ -298,17 +298,100 @@ test('消息跳号和延迟重复 op 不会直接推进版本或重复应用', (
   editor.client.close()
 })
 
-test('心跳发现静默漏广播后重新同步，无未确认编辑时可加载快照', () => {
+test('心跳发现静默漏广播后用历史增量修复，无须重新加入', () => {
+  const editor = harness('quiet')
+  editor.client.receive({ type: 'pong', docId: 1, revision: 2 })
+  const first = editor.sent.at(-1)
+  assert.equal(first.type, 'history_request')
+  assert.equal(first.afterRevision, 0)
+  assert.equal(first.throughRevision, 2)
+  // 更新跨过固定页边界时只观察 revision，下一次追赶接着当前版本。
+  editor.client.receive({ type: 'op', docId: 1, revision: 3, op: new Delta().insert('Z') })
+  editor.client.receive({ type: 'history_page', docId: 1, syncId: first.syncId, fromRevision: 0, toRevision: 2,
+    revision: 2, history: [{ revision: 1, op: new Delta().insert('X') }, { revision: 2, op: new Delta().insert('Y') }] })
+  const second = editor.sent.at(-1)
+  assert.equal(second.type, 'history_request')
+  assert.equal(second.afterRevision, 2)
+  assert.equal(second.throughRevision, 3)
+  editor.client.receive({ type: 'history_page', docId: 1, syncId: second.syncId, fromRevision: 2, toRevision: 3,
+    revision: 3, history: [{ revision: 3, op: new Delta().insert('Z') }] })
+  assert.equal(editor.client.state, 'ready')
+  assert.equal(editor.client.revision, 3)
+  assert.deepEqual(editor.document.ops, [{ insert: 'ZYX\n' }])
+  assert.ok(editor.sent.every(message => message.type !== 'join'))
+  editor.client.close()
+})
+
+test('在同一连接增量追赶时按收据跳过已提交的本地操作并保留缓冲', () => {
+  const editor = harness('live-edit')
+  editor.local(new Delta().insert('A'))
+  editor.local(new Delta().retain(1).insert('B'))
+  const original = editor.client.pending.opId
+  editor.ack(2)
+  const first = editor.sent.at(-1)
+  assert.equal(first.pendingOpId, original)
+  assert.equal(first.pendingBaseRevision, 0)
+  editor.client.receive({ type: 'history_page', docId: 1, syncId: first.syncId, fromRevision: 0, toRevision: 1,
+    revision: 2, pendingCommittedRevision: 2, history: [{ revision: 1, op: new Delta().insert('X') }] })
+  assert.equal(editor.sent.at(-1).pendingOpId, undefined)
+  assert.deepEqual(editor.document.ops, [{ insert: 'AB\n' }])
+  editor.client.receive({ type: 'history_page', docId: 1, syncId: first.syncId, fromRevision: 1, toRevision: 2,
+    revision: 2, history: [{ revision: 2, op: new Delta().retain(1).insert('A') }] })
+  assert.deepEqual(editor.document.ops, [{ insert: 'XAB\n' }])
+  assert.notEqual(editor.client.pending.opId, original)
+  assert.equal(editor.sent.at(-1).baseRevision, 2)
+  assert.equal(editor.sent.filter(message => message.opId === original).length, 1)
+  editor.ack(3)
+  assert.equal(editor.client.hasUnconfirmedChanges(), false)
+  editor.client.close()
+})
+
+test('增量历史已裁剪时回退到同连接的快照，过期的追赶响应被忽略', () => {
   const editor = harness('one')
   editor.client.receive({ type: 'pong', docId: 1, revision: 2 })
+  const incremental = editor.client.syncId
+  editor.client.receive({ type: 'error', syncId: incremental, code: 40903, message: '已裁剪' })
+  assert.equal(editor.sent.at(-1).type, 'join')
   const syncId = editor.client.syncId
-  editor.client.receive({ type: 'sync', docId: 1, syncId: 'stale', revision: 99,
+  editor.client.receive({ type: 'error', syncId: incremental, code: 500, message: '已过期' })
+  editor.client.receive({ type: 'sync', docId: 1, syncId: incremental, revision: 99,
     content: new Delta().insert('wrong\n') })
   assert.equal(editor.client.revision, 0)
   editor.client.receive({ type: 'sync', docId: 1, syncId, revision: 2,
     historyComplete: false, content: new Delta().insert('XY\n') })
   assert.equal(editor.client.revision, 2)
   assert.deepEqual(editor.document.ops, [{ insert: 'XY\n' }])
+  editor.client.close()
+})
+
+test('缺少兼容收据时只回退一次并保留本地修改', () => {
+  const editor = harness('legacy-server')
+  editor.local(new Delta().insert('A'))
+  const opId = editor.client.pending.opId
+  editor.client.receive({ type: 'pong', docId: 1, revision: 1 })
+  editor.client.receive({ type: 'history_page', docId: 1, syncId: editor.client.syncId, fromRevision: 0, toRevision: 1,
+    revision: 1, history: [{ revision: 1, op: new Delta().insert('server') }] })
+  assert.equal(editor.sent.at(-1).type, 'join')
+  assert.equal(editor.sent.at(-1).pendingOpId, opId)
+  editor.client.receive({ type: 'sync', docId: 1, syncId: editor.client.syncId, fromRevision: 0, revision: 1,
+    content: new Delta().insert('server\n'), historyComplete: false, history: [] })
+  assert.equal(editor.client.state, 'blocked')
+  assert.deepEqual(editor.document.ops, [{ insert: 'A\n' }])
+  editor.client.close()
+})
+
+test('反复同步失败会停止自动重试并保留当前正文', () => {
+  const editor = harness('failure')
+  editor.local(new Delta().insert('A'))
+  editor.client.join()
+  const syncId = editor.client.syncId
+  for (let attempt = 0; attempt < 4; attempt++) {
+    editor.client.receive({ type: 'error', code: 500, message: '暂不可用', syncId })
+  }
+  assert.equal(editor.client.state, 'blocked')
+  assert.equal(editor.client.busyRetryTimer, null)
+  assert.deepEqual(editor.document.ops, [{ insert: 'A\n' }])
+  assert.ok(editor.client.exportDraft(editor.document))
   editor.client.close()
 })
 

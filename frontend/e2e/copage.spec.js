@@ -198,6 +198,78 @@ test('two accounts converge and recover a draft after losing the connection', as
   }
 })
 
+test('revision gaps and a missed final broadcast catch up on the same socket', async ({ page, browser, request }) => {
+  const owner = await createAccount(request)
+  const member = await createAccount(request)
+  const ownerJoins = []
+  await page.routeWebSocket('**/ws/collab', route => {
+    const server = route.connectToServer()
+    route.onMessage(frame => {
+      if (JSON.parse(frame).type === 'join') ownerJoins.push(true)
+      server.send(frame)
+    })
+  })
+  await login(page, owner)
+  const docId = await createDocument(page)
+  await grantEditor(page, request, docId, member.username)
+  const peerContext = await browser.newContext({ baseURL: new URL(page.url()).origin })
+  const dropped = []
+  const requests = []
+  const heartbeat = []
+  let peerSockets = 0
+  try {
+    const peer = await peerContext.newPage()
+    const secondary = process.env.COPAGE_E2E_SECONDARY_BACKEND_ORIGIN
+    const browserOrigin = new URL(page.url()).origin
+    const primarySocket = backend.replace('http:', 'ws:')
+    const secondarySocket = secondary.replace('http:', 'ws:')
+    // Keep the shared HTTP origin and send only the peer's WebSocket to backend B.
+    await peer.route(url => url.origin === browserOrigin && url.pathname.endsWith('.js'), async route => {
+      const response = await route.fetch()
+      const source = await response.text()
+      if (source.includes(primarySocket)) await route.fulfill({ response, body: source.replaceAll(primarySocket, secondarySocket) })
+      else await route.fulfill({ response })
+    })
+    await peer.routeWebSocket('**/ws/collab', route => {
+      peerSockets++
+      expect(new URL(route.url()).host).toBe(new URL(secondary).host)
+      const server = route.connectToServer()
+      route.onMessage(frame => {
+        requests.push(JSON.parse(frame))
+        server.send(frame)
+      })
+      server.onMessage(frame => {
+        const message = JSON.parse(frame)
+        if (message.type === 'op' && [1, 3].includes(message.revision)) dropped.push(message.revision)
+        else {
+          if (message.type === 'pong') heartbeat.push(message.revision)
+          route.send(frame)
+        }
+      })
+    })
+    await login(peer, member)
+    await peer.goto(`/docs/${docId}`)
+    await expect(saved(peer)).toHaveText('所有修改已保存')
+
+    await append(page, 'one ')
+    await expect.poll(() => dropped).toContain(1)
+    await append(page, 'two ')
+    await expect(editor(peer)).toHaveText('one two')
+    expect(requests.some(message => message.type === 'history_request' && message.afterRevision === 0 && message.throughRevision === 2)).toBe(true)
+
+    await append(page, 'final')
+    await expect.poll(() => dropped).toEqual([1, 3])
+    await expect(editor(peer)).toHaveText('one two final', { timeout: 26_000 })
+    expect(heartbeat).toContain(3)
+    expect(requests.some(message => message.type === 'history_request' && message.afterRevision === 2 && message.throughRevision === 3)).toBe(true)
+    expect(requests.filter(message => message.type === 'join')).toHaveLength(1)
+    expect(ownerJoins).toHaveLength(1)
+    expect(peerSockets).toBe(1)
+  } finally {
+    await peerContext.close()
+  }
+})
+
 test('history preview restores the old text as a new revision', async ({ page, request }) => {
   await login(page, await createAccount(request))
   await createDocument(page)

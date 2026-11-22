@@ -13,6 +13,20 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class DocHistoryPageTest {
+    @Test void livePageAuthenticatesThePendingReceiptWithinItsFixedBoundary() {
+        var service = new DocRevService();
+        var original = new Delta().insert("local");
+        service.commit(1, 0, new Delta().insert("remote"));
+        service.commit(1, 0, original, 7L, "client", "local-1", ignored -> {});
+        var pending = new DocRevService.PendingOperation("local-1", 0, original);
+
+        assertNull(service.historyPage(1, 0, 1, 7, "client", pending).pendingCommittedRevision());
+        assertEquals(2L, service.historyPage(1, 0, 2, 7, "client", pending).pendingCommittedRevision());
+        assertNull(service.historyPage(1, 0, 2, 99, "client", pending).pendingCommittedRevision());
+        assertEquals(40904, assertThrows(CollabException.class, () -> service.historyPage(1, 0, 2, 7, "client",
+                new DocRevService.PendingOperation("local-1", 0, new Delta().insert("different")))).getCode());
+    }
+
     @Test void pagedCatchupReadsOnlyFixedBoundaryAndRejectsTrimmedBases() {
         var persistence = mock(DocumentPersistence.class);
         when(persistence.snapshot(1)).thenReturn(new CollabDocumentSnapshot(3005,new Delta().insert("正文\n")));

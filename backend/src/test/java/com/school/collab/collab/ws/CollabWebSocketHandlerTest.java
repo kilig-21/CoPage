@@ -111,23 +111,26 @@ class CollabWebSocketHandlerTest {
     }
 
     @Test
-    void joinRegistersAndSendsCatchupInsideTheServiceCallback() throws Exception {
+    void joinOnlyRegistersLocalSubscriptionInsideTheServiceCallback() throws Exception {
         WebSocketSession session = session();
         when(session.getAttributes()).thenReturn(Map.of(
                 WsHandshakeInterceptor.USER_ID, 2L, WsHandshakeInterceptor.NICKNAME, "testB", WsHandshakeInterceptor.TOKEN_EXPIRES_AT, Long.MAX_VALUE, WsHandshakeInterceptor.SESSION_KEY, "session-key"));
         WsSessionRegistry.SessionInfo info = new WsSessionRegistry.SessionInfo(
                 "session-1", session, 5L, "test-client", 2L, "testB");
         when(registry.register(session, 5L, "test-client", 2L, "testB")).thenReturn(info);
+        when(registry.current(session)).thenReturn(null, info, info);
+        when(session.isOpen()).thenReturn(true);
         doAnswer(invocation -> {
-            verifyNoInteractions(registry);
+            verify(registry, never()).register(any(), anyLong(), anyString(), anyLong(), anyString());
             DocRevService.PendingOperation pending = invocation.getArgument(4);
             assertEquals("op-1", pending.opId());
             Consumer<DocRevService.JoinState> callback = invocation.getArgument(5);
-            callback.accept(new DocRevService.JoinState(1, new Delta().insert("X\n"), true,
-                    List.of(new VersionedOperation(1, new Delta().insert("X"))), 1L));
+            var state = new DocRevService.JoinState(1, new Delta().insert("X\n"), true,
+                    List.of(new VersionedOperation(1, new Delta().insert("X"))), 1L);
+            callback.accept(state);
             verify(registry).register(session, 5L, "test-client", 2L, "testB");
-            verify(sender).send(eq(session), any());
-            return null;
+            verifyNoInteractions(sender, eventBus, presence);
+            return state;
         }).when(revisions).joinState(eq(5L), eq(0L), eq(2L), eq("test-client"), any(), any());
 
         handler.handleTextMessage(session, new TextMessage("""
@@ -144,6 +147,25 @@ class CollabWebSocketHandlerTest {
         assertEquals(true, sync.path("historyComplete").asBoolean());
         assertEquals(1, sync.path("pendingCommittedRevision").asLong());
         assertEquals("X", sync.path("history").get(0).path("op").path("ops").get(0).path("insert").asText());
+    }
+
+    @Test
+    void failedHistoryPageIsCorrelatedAndPendingReceiptUsesAuthenticatedIdentity() throws Exception {
+        var session = session();
+        when(registry.require(session)).thenReturn(new WsSessionRegistry.SessionInfo(
+                "session-1", session, 5L, "test-client", 2L, "testB"));
+        when(revisions.historyPage(eq(5L), eq(0L), eq(1L), eq(2L), eq("test-client"), any()))
+                .thenThrow(new com.school.collab.collab.CollabException(40903, "追赶历史缺失"));
+
+        handler.handleTextMessage(session, new TextMessage("""
+                {"type":"history_request","docId":5,"afterRevision":0,"throughRevision":1,"syncId":"request-1",
+                 "pendingOpId":"op-1","pendingBaseRevision":0,"pendingOp":{"ops":[{"insert":"X"}]}}
+                """));
+
+        verify(sender).send(eq(session), argThat(reply -> reply.path("code").asInt() == 40903
+                && reply.path("syncId").asText().equals("request-1")));
+        verify(revisions).historyPage(eq(5L), eq(0L), eq(1L), eq(2L), eq("test-client"),
+                argThat(pending -> pending.opId().equals("op-1")));
     }
 
     @Test

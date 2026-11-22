@@ -288,7 +288,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
         const { runFrontendErrorCheck } = await import('./frontend-error-smoke.mjs')
         await runFrontendErrorCheck({ ports, source: qaDocker, env: qaEnv })
       }
-      if (browser) await browser.run({ backendPort: ports[0], project })
+      if (browser) await browser.run({ backendPort: ports[0], secondaryPort: ports[1], project })
     } else {
       // 在临时库单独应用开发种子，核对拆分后本地演示仍可初始化。
       sql(readFileSync(new URL('../backend/src/main/resources/db/demo-users.sql', import.meta.url), 'utf8'), true)

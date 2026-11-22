@@ -23,9 +23,13 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -203,10 +207,34 @@ class DocRevServiceTest {
         DocRevService service = new DocRevService(store, persistence);
         assertEquals(1, service.snapshot(7).revision());
         verify(persistence).snapshot(7);
+        verify(persistence).validateSize(any(Delta.class), any(Delta.class));
         verify(persistence).persist(eq(7L), eq(0L),
                 org.mockito.ArgumentMatchers.argThat(value -> "旧历史\n".equals(text(value))),
                 org.mockito.ArgumentMatchers.argThat(value -> value.getOps().equals(operation.getOps())), eq(null));
         verifyNoMoreInteractions(persistence);
+    }
+
+    @Test
+    void incompleteRedisOnlyHistoryIsQuarantinedBeforeAnyMysqlMutation() {
+        var persistence = mock(DocumentPersistence.class);
+        var store = spy(new InMemoryDocumentStateStore());
+        var durable = new CollabDocumentSnapshot(1, new Delta().insert("DB\n"));
+        when(persistence.snapshot(7)).thenReturn(durable);
+        store.withDocumentLock(7, () -> {
+            store.save(7, new CollabDocumentSnapshot(2, new Delta().insert("prefix DB\n")),
+                    new VersionedOperation(2, new Delta().insert("prefix ")), 2000);
+            store.save(7, new CollabDocumentSnapshot(4, new Delta().insert("cached copy\n")),
+                    new VersionedOperation(4, new Delta().insert("gap")), 2000);
+            return null;
+        });
+        var service = new DocRevService(store, persistence);
+
+        var recovered = service.snapshot(7);
+
+        assertEquals(1, recovered.revision());
+        assertEquals("DB\n", text(recovered.content()));
+        verify(store).quarantineAndReset(7, durable);
+        verify(persistence, never()).persist(anyLong(), anyLong(), any(), any(), isNull());
     }
 
     @Test

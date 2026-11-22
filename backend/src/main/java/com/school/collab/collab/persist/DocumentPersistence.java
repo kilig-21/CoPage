@@ -100,7 +100,9 @@ public class DocumentPersistence {
         }, docId, after, through, limit, docId, HISTORY_PAGE_BYTES, after + 1, MAX_OPERATION_BYTES);
     }
 
-    public record OperationBatch(List<VersionedOperation> operations, long bytes) { }
+    public record OperationBatch(List<VersionedOperation> operations, long bytes) {
+        public boolean fitsInlineHistory() { return bytes <= HISTORY_PAGE_BYTES; }
+    }
 
     public boolean operationExists(long docId, long revision) {
         Integer count = jdbc.queryForObject(

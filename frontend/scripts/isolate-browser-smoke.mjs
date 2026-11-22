@@ -33,13 +33,14 @@ export async function isolateBrowserSmoke() {
   return {
     origin,
     directory,
-    async run({ backendPort, project }) {
+    async run({ backendPort, secondaryPort, project }) {
       const env = { ...process.env,
         VITE_BACKEND_HTTP_ORIGIN: `http://127.0.0.1:${backendPort}`,
         VITE_BACKEND_WS_ORIGIN: `ws://127.0.0.1:${backendPort}`,
         VITE_FRONTEND_ERROR_REPORTING_ENABLED: 'false',
         COPAGE_E2E_FRONTEND_ORIGIN: origin,
         COPAGE_E2E_BACKEND_ORIGIN: `http://127.0.0.1:${backendPort}`,
+        COPAGE_E2E_SECONDARY_BACKEND_ORIGIN: `http://127.0.0.1:${secondaryPort}`,
         COPAGE_E2E_PROJECT: project,
       }
       const build = spawnSync(process.execPath,

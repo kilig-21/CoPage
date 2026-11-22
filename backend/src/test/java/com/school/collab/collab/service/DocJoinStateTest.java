@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -47,9 +46,9 @@ class DocJoinStateTest {
     void incompleteHistoryIsExplicitAndDoesNotExposePartialReplay() {
         DocumentPersistence persistence = mock(DocumentPersistence.class);
         when(persistence.snapshot(1)).thenReturn(new CollabDocumentSnapshot(3, new Delta().insert("ABC\n")));
-        when(persistence.operationsPage(1, 0, 3, 256)).thenReturn(List.of(
+        when(persistence.operationsBatch(1, 0, 3, 256)).thenReturn(new DocumentPersistence.OperationBatch(List.of(
                 new VersionedOperation(1, new Delta().insert("A")),
-                new VersionedOperation(3, new Delta().insert("C"))));
+                new VersionedOperation(3, new Delta().insert("C"))), 48));
         var state = join(new DocRevService(new InMemoryDocumentStateStore(), persistence), 0, null);
 
         assertFalse(state.historyComplete());
@@ -65,15 +64,15 @@ class DocJoinStateTest {
 
         assertFalse(state.historyComplete());
         assertTrue(state.historyPaged());
-        verify(persistence, never()).operationsPage(anyLong(), anyLong(), anyLong(), anyInt());
+        verify(persistence, never()).operationsBatch(anyLong(), anyLong(), anyLong(), anyInt());
     }
 
     @Test
     void joinUsesPagedCatchupWhenFirstPageContainsOnlyAPrefix() {
         DocumentPersistence persistence = mock(DocumentPersistence.class);
         when(persistence.snapshot(1)).thenReturn(new CollabDocumentSnapshot(3, new Delta().insert("ABC\n")));
-        when(persistence.operationsPage(1, 0, 3, 256)).thenReturn(List.of(
-                new VersionedOperation(1, new Delta().insert("A"))));
+        when(persistence.operationsBatch(1, 0, 3, 256)).thenReturn(new DocumentPersistence.OperationBatch(List.of(
+                new VersionedOperation(1, new Delta().insert("A"))), 24));
         var state = join(new DocRevService(new InMemoryDocumentStateStore(), persistence), 0, null);
 
         assertFalse(state.historyComplete());
@@ -82,7 +81,21 @@ class DocJoinStateTest {
     }
 
     @Test
-    void concurrentCommitCannotPassRegistrationAndSyncCallback() throws Exception {
+    void oneLargeOperationThatFitsIndividualPageIsNotEmbeddedInJoin() {
+        DocumentPersistence persistence = mock(DocumentPersistence.class);
+        when(persistence.snapshot(1)).thenReturn(new CollabDocumentSnapshot(1, new Delta().insert("ABC\n")));
+        when(persistence.operationsBatch(1, 0, 1, 256)).thenReturn(new DocumentPersistence.OperationBatch(List.of(
+                new VersionedOperation(1, new Delta().insert("A"))), 1024 * 1024L + 1));
+
+        var state = join(new DocRevService(new InMemoryDocumentStateStore(), persistence), 0, null);
+
+        assertTrue(state.historyPaged());
+        assertFalse(state.historyComplete());
+        assertTrue(state.history().isEmpty());
+    }
+
+    @Test
+    void concurrentCommitCannotPassLocalSubscriptionRegistration() throws Exception {
         DocRevService service = new DocRevService();
         CountDownLatch joining = new CountDownLatch(1);
         CountDownLatch releaseSync = new CountDownLatch(1);
@@ -111,11 +124,30 @@ class DocJoinStateTest {
         }
     }
 
+    @Test
+    void slowOperationAckCannotHoldTheDocumentLock() throws Exception {
+        DocRevService service = new DocRevService();
+        var sending = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var first = executor.submit(() -> service.commit(1, 0, new Delta().insert("A"), result -> {
+                sending.countDown();
+                await(release);
+            }));
+            try {
+                assertTrue(sending.await(5, TimeUnit.SECONDS));
+                var second = executor.submit(() -> service.commit(1, 1, new Delta().retain(1).insert("B")));
+                assertEquals(2, second.get(2, TimeUnit.SECONDS).revision());
+            } finally {
+                release.countDown();
+            }
+            assertEquals(1, first.get(5, TimeUnit.SECONDS).revision());
+        }
+    }
+
     private static DocRevService.JoinState join(DocRevService service, long revision,
                                                 DocRevService.PendingOperation pending) {
-        AtomicReference<DocRevService.JoinState> result = new AtomicReference<>();
-        service.joinState(1, revision, 7, "client", pending, result::set);
-        return result.get();
+        return service.joinState(1, revision, 7, "client", pending, ignored -> {});
     }
 
     private static void await(CountDownLatch latch) {

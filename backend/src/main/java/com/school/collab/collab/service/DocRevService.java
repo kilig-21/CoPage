@@ -6,6 +6,7 @@ import com.school.collab.collab.persist.DocPersistenceQueue;
 import com.school.collab.collab.persist.OperationFingerprint;
 import com.school.collab.collab.store.CollabDocumentSnapshot;
 import com.school.collab.collab.store.DocumentStateStore;
+import com.school.collab.collab.store.DocumentStateStore.CorruptCacheException;
 import com.school.collab.collab.store.InMemoryDocumentStateStore;
 import com.school.collab.collab.store.VersionedOperation;
 import com.school.collab.ot.Delta;
@@ -17,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -38,6 +40,7 @@ public class DocRevService {
     private static final long REBASE_MAX_BYTES = 16 * 1024 * 1024;
     private static final int REBASE_PAGE_SIZE = 32;
     private static final int HISTORY_PAGE_SIZE = 256;
+    private static final int LEGACY_PAGE_SIZE = 4;
 
     private final DocumentStateStore store;
     private final DocumentPersistence persistence;
@@ -75,33 +78,17 @@ public class DocRevService {
         return persistence == null ? store.snapshot(docId).revision() : persistence.currentRevision(docId);
     }
 
-    /** 在同一把文档锁内读取追赶边界并注册、同步会话，防止快照与订阅之间漏操作。 */
-    public void joinState(long docId, long lastRevision, long userId, String clientId,
-                          PendingOperation pending, Consumer<JoinState> onJoined) {
+    /** 追赶边界与本机订阅注册共用文档锁。调用方在返回后发送报文。 */
+    public JoinState joinState(long docId, long lastRevision, long userId, String clientId,
+                               PendingOperation pending, Consumer<JoinState> registerLocally) {
         validateDocId(docId);
         if (lastRevision < 0) {
             throw new CollabException(400, "lastRevision 不能小于 0");
         }
-        if (pending != null && (pending.baseRevision() < 0 || pending.operation() == null
-                || pending.operation().getOps().isEmpty())) {
-            throw new CollabException(400, "待确认操作不完整");
-        }
-        store.withDocumentLock(docId, () -> {
+        return store.withDocumentLock(docId, () -> {
             CollabDocumentSnapshot snapshot = persistence == null
                     ? store.snapshot(docId) : reconcileLegacy(docId);
-            Long committedRevision = null;
-            if (pending != null) {
-                DocumentPersistence.Receipt receipt = persistence == null
-                        ? inMemoryReceipts.get(new OperationKey(docId, userId, clientId, pending.opId()))
-                        : persistence.receipt(docId, userId, clientId, pending.opId());
-                if (receipt != null) {
-                    if (!OperationFingerprint.of(pending.baseRevision(), pending.operation())
-                            .equals(receipt.requestHash())) {
-                        throw new CollabException(40904, "opId 已用于其他操作，保留本地编辑并停止重放");
-                    }
-                    committedRevision = receipt.revision();
-                }
-            }
+            Long committedRevision = pendingReceipt(docId, userId, clientId, pending, snapshot.revision());
             boolean complete = lastRevision <= snapshot.revision()
                     && snapshot.revision() - lastRevision <= HISTORY_LIMIT;
             long minimum = persistence == null ? store.minimumAvailableBaseRevision(docId) : persistence.minimumRevision(docId);
@@ -110,10 +97,12 @@ public class DocRevService {
                     && snapshot.revision() - lastRevision > HISTORY_LIMIT;
             List<VersionedOperation> history = List.of();
             if (complete && lastRevision < snapshot.revision()) {
+                var batch = persistence == null ? null
+                        : persistence.operationsBatch(docId, lastRevision, snapshot.revision(), HISTORY_PAGE_SIZE);
                 history = persistence == null
                         ? store.operationsAfter(docId, lastRevision).stream()
                             .filter(entry -> entry.revision() <= snapshot.revision()).toList()
-                        : persistence.operationsPage(docId, lastRevision, snapshot.revision(), HISTORY_PAGE_SIZE);
+                        : batch.operations();
                 long expected = lastRevision;
                 for (VersionedOperation entry : history) {
                     if (entry.revision() != ++expected) {
@@ -121,21 +110,40 @@ public class DocRevService {
                         break;
                     }
                 }
-                paged = persistence != null && complete && expected > lastRevision
-                        && expected < snapshot.revision();
-                complete = complete && expected == snapshot.revision();
+                paged = batch != null && complete && expected > lastRevision
+                        && (expected < snapshot.revision() || !batch.fitsInlineHistory());
+                complete = complete && expected == snapshot.revision() && !paged;
             }
             if (!complete) {
                 history = List.of();
             }
-            onJoined.accept(new JoinState(snapshot.revision(), snapshot.content(), complete,
-                    history, committedRevision, paged));
-            return null;
+            var state = new JoinState(snapshot.revision(), snapshot.content(), complete, history, committedRevision, paged);
+            registerLocally.accept(state);
+            return state;
         });
+    }
+
+    private Long pendingReceipt(long docId, long userId, String clientId, PendingOperation pending, long through) {
+        if (pending == null) return null;
+        if (pending.baseRevision() < 0 || pending.operation() == null || pending.operation().getOps().isEmpty()) {
+            throw new CollabException(400, "待确认操作不完整");
+        }
+        DocumentPersistence.Receipt receipt = persistence == null
+                ? inMemoryReceipts.get(new OperationKey(docId, userId, clientId, pending.opId()))
+                : persistence.receipt(docId, userId, clientId, pending.opId());
+        if (receipt == null) return null;
+        if (!OperationFingerprint.of(pending.baseRevision(), pending.operation()).equals(receipt.requestHash())) {
+            throw new CollabException(40904, "opId 已用于其他操作，保留本地编辑并停止重放");
+        }
+        return receipt.revision() <= through ? receipt.revision() : null;
     }
 
     /** 固定 throughRevision，每页有界读取；前后页之间可提交新版本但不会改变追赶边界。 */
     public HistoryPage historyPage(long docId, long after, long through) {
+        return historyPage(docId, after, through, 0, null, null);
+    }
+
+    public HistoryPage historyPage(long docId, long after, long through, long userId, String clientId, PendingOperation pending) {
         if (after < 0 || through < after) throw new CollabException(400, "追赶版本范围无效");
         return inspect(docId, current -> {
             if (through > current.revision()) throw new CollabException(40902, "追赶版本超前");
@@ -147,7 +155,7 @@ public class DocRevService {
             long expected = after;
             for (var op : history) if (op.revision() != ++expected) throw new CollabException(40903, "追赶历史有缺口");
             if (after < through && history.isEmpty()) throw new CollabException(40903, "追赶历史缺失");
-            return new HistoryPage(after, expected, through, history);
+            return new HistoryPage(after, expected, through, history, pendingReceipt(docId, userId, clientId, pending, through));
         });
     }
 
@@ -159,7 +167,7 @@ public class DocRevService {
     }
 
     /**
-     * afterCommit 在文档锁释放前执行，供跨实例广播保证发布顺序与 revision 顺序一致。
+     * 通知在文档锁释放后执行。接收方按持久化 revision 追赶乱序或遗漏的广播。
      */
     public CommitResult commit(
             long docId, long baseRevision, Delta operation, Consumer<CommitResult> afterCommit
@@ -190,8 +198,9 @@ public class DocRevService {
 
         validateDocId(docId);
         String requestHash = opId == null ? null : OperationFingerprint.of(baseRevision, operation);
-        return store.withDocumentLock(docId, () -> commitLocked(docId, baseRevision,
-                ignored -> operation, userId, clientId, opId, requestHash, false, afterCommit));
+        var committed = store.withDocumentLock(docId, () -> commitLocked(docId, baseRevision,
+                ignored -> operation, userId, clientId, opId, requestHash, false));
+        return notifyCommitted(docId, committed, afterCommit);
     }
 
     /** 历史恢复也是新操作；版本变化时拒绝覆盖，重复请求只返回原收据。 */
@@ -205,7 +214,7 @@ public class DocRevService {
         }
         String hash = OperationFingerprint.of(expectedRevision,
                 new Delta().insert("restore:" + targetRevision));
-        return store.withDocumentLock(docId, () -> commitLocked(docId, expectedRevision,
+        var committed = store.withDocumentLock(docId, () -> commitLocked(docId, expectedRevision,
                 current -> {
                     try {
                         Delta restored = target.get();
@@ -219,7 +228,8 @@ public class DocRevService {
                              | DeltaDiff.OperationSizeLimitException failure) {
                         throw new CollabException(400, failure.getMessage());
                     }
-                }, userId, "history-api", requestId, hash, true, afterCommit));
+                }, userId, "history-api", requestId, hash, true));
+        return notifyCommitted(docId, committed, afterCommit);
     }
 
     /** 读历史、分页追赶和维护共用提交锁，避免读取或清理跨过一次提交。 */
@@ -238,8 +248,7 @@ public class DocRevService {
 
     private CommitResult commitLocked(long docId, long baseRevision,
             Function<CollabDocumentSnapshot, Delta> operationFactory, Long userId,
-            String clientId, String opId, String requestHash, boolean strict,
-            Consumer<CommitResult> afterCommit) {
+            String clientId, String opId, String requestHash, boolean strict) {
             OperationKey key = opId == null ? null : new OperationKey(docId, userId, clientId, opId);
             if (key != null) {
                 DocumentPersistence.Receipt prior = persistence == null
@@ -302,18 +311,20 @@ public class DocRevService {
             if (key != null && persistence == null) {
                 inMemoryReceipts.put(key, new DocumentPersistence.Receipt(revision, requestHash));
             }
-            CommitResult result = new CommitResult(revision, transformed.copy());
-            afterCommit.accept(result);
-            if (queue != null) {
-                try {
-                    queue.publishCommitted(docId, revision);
-                } catch (RuntimeException exception) {
-                    // 操作已在 MySQL 提交；巡检会补快照，不能要求客户端重发。
-                    log.warn("操作已持久化但 RabbitMQ 通知失败, docId={}, revision={}",
-                            docId, revision, exception);
-                }
+            return new CommitResult(revision, transformed.copy());
+    }
+
+    private CommitResult notifyCommitted(long docId, CommitResult result, Consumer<CommitResult> afterCommit) {
+        if (!result.applied()) return result;
+        if (queue != null) {
+            try {
+                queue.publishCommitted(docId, result.revision());
+            } catch (RuntimeException exception) {
+                log.warn("操作已持久化但 RabbitMQ 通知失败, docId={}, revision={}", docId, result.revision(), exception);
             }
-            return result;
+        }
+        afterCommit.accept(result);
+        return result;
     }
 
     private Delta rebase(long docId, long after, long through, Delta transformed) {
@@ -347,24 +358,30 @@ public class DocRevService {
         return new CollabException(40903, "待变换的历史超出安全范围，请重新同步文档，未确认内容仍可保留");
     }
 
-    /** 升级前仅写 Redis 的文档逐条补进 MySQL；缺失历史时绝不静默覆盖。 */
+    /** 只有能完整重建且与热正文一致的旧链才写入 MySQL。 */
     private CollabDocumentSnapshot reconcileLegacy(long docId) {
         CollabDocumentSnapshot durable = persistence.snapshot(docId);
-        CollabDocumentSnapshot hot = store.snapshot(docId);
-        if (hot.revision() <= durable.revision()) {
-            expireDurableLegacyState(docId, hot.revision());
+        List<VersionedOperation> missing;
+        try {
+            var hot = store.snapshot(docId);
+            if (hot.revision() <= durable.revision()) {
+                if (hot.revision() == durable.revision() && hot.revision() > 0 &&
+                        !hot.content().getOps().equals(durable.content().getOps())) {
+                    throw new CorruptCacheException("相同版本正文不一致");
+                }
+                expireDurableLegacyState(docId, hot.revision());
+                return durable;
+            }
+            missing = legacyChain(docId, durable, hot);
+        } catch (CorruptCacheException failure) {
+            quarantineLegacy(docId, durable, failure.getMessage());
+            return durable;
+        } catch (RuntimeException unavailable) {
+            log.warn("Redis 热状态读取失败，暂用 MySQL, docId={}, revision={}, reason={}",
+                    docId, durable.revision(), unavailable.getClass().getSimpleName());
             return durable;
         }
-        var missing = store.operationsAfter(docId, durable.revision());
-        long expected = durable.revision() + 1;
-        for (VersionedOperation entry : missing) {
-            if (entry.revision() != expected++) {
-                throw new IllegalStateException("Redis 文档历史有缺口，拒绝覆盖未持久化内容: docId=" + docId);
-            }
-        }
-        if (expected - 1 != hot.revision()) {
-            throw new IllegalStateException("Redis 文档历史不完整，拒绝覆盖未持久化内容: docId=" + docId);
-        }
+
         long revision = durable.revision();
         Delta content = durable.content();
         for (VersionedOperation entry : missing) {
@@ -374,6 +391,45 @@ public class DocRevService {
         }
         expireDurableLegacyState(docId, revision);
         return new CollabDocumentSnapshot(revision, content);
+    }
+
+    private List<VersionedOperation> legacyChain(long docId, CollabDocumentSnapshot durable, CollabDocumentSnapshot hot) {
+        if (hot.revision() - durable.revision() > HISTORY_LIMIT) throw new CorruptCacheException("旧历史超出保留窗口");
+        var missing = new ArrayList<VersionedOperation>();
+        long revision = durable.revision();
+        long bytes = 0;
+        Delta content = durable.content();
+        while (revision < hot.revision()) {
+            var batch = store.legacyOperationsAfter(docId, revision, LEGACY_PAGE_SIZE);
+            bytes += batch.bytes();
+            if (bytes > REBASE_MAX_BYTES || batch.operations().isEmpty()) throw new CorruptCacheException("旧历史不完整或超限");
+            for (var entry : batch.operations()) {
+                if (entry.revision() != revision + 1 || entry.revision() > hot.revision()) {
+                    throw new CorruptCacheException("旧历史有版本缺口");
+                }
+                try {
+                    content = DeltaApply.apply(content, entry.operation());
+                    persistence.validateSize(content, entry.operation());
+                } catch (RuntimeException invalidOperation) {
+                    throw new CorruptCacheException("旧操作无法安全应用");
+                }
+                missing.add(entry);
+                revision++;
+            }
+        }
+        if (!content.getOps().equals(hot.content().getOps())) throw new CorruptCacheException("旧历史无法重建热正文");
+        return missing;
+    }
+
+    private void quarantineLegacy(long docId, CollabDocumentSnapshot durable, String reason) {
+        try {
+            String archive = store.quarantineAndReset(docId, durable);
+            log.warn("Redis 热状态降级至 MySQL, docId={}, revision={}, reason={}, archive={}",
+                    docId, durable.revision(), reason, archive);
+        } catch (RuntimeException unavailable) {
+            log.warn("Redis 热状态暂未重建，继续使用 MySQL, docId={}, revision={}, reason={}",
+                    docId, durable.revision(), unavailable.getClass().getSimpleName());
+        }
     }
 
     private void expireDurableLegacyState(long docId, long revision) {
@@ -404,7 +460,8 @@ public class DocRevService {
         }
     }
 
-    public record HistoryPage(long fromRevision, long toRevision, long revision, List<VersionedOperation> history) { }
+    public record HistoryPage(long fromRevision, long toRevision, long revision,
+                              List<VersionedOperation> history, Long pendingCommittedRevision) { }
 
     public record CommitResult(long revision, Delta operation, boolean applied) {
         public CommitResult(long revision, Delta operation) {

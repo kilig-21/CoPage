@@ -17,9 +17,22 @@ public interface DocumentStateStore {
 
     List<VersionedOperation> operationsAfter(long docId, long revision);
 
+    default LegacyBatch legacyOperationsAfter(long docId, long revision, int limit) {
+        return new LegacyBatch(operationsAfter(docId, revision).stream().limit(limit).toList(), 0);
+    }
+
     void save(long docId, CollabDocumentSnapshot snapshot, VersionedOperation operation, int historyLimit);
 
     default void expireDurableLegacyState(long docId, long hotRevision) { }
 
+    /** Preserve possible Redis-only data before rebuilding the hot keys from MySQL. */
+    default String quarantineAndReset(long docId, CollabDocumentSnapshot durable) { return null; }
+
     <T> T withDocumentLock(long docId, Supplier<T> action);
+
+    record LegacyBatch(List<VersionedOperation> operations, long bytes) { }
+
+    final class CorruptCacheException extends IllegalStateException {
+        public CorruptCacheException(String message) { super(message); }
+    }
 }
