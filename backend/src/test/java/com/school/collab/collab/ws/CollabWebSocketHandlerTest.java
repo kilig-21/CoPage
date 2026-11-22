@@ -95,6 +95,21 @@ class CollabWebSocketHandlerTest {
     }
 
     @Test
+    void objectRetainIsRejectedWithCode400BeforePersistence() throws Exception {
+        var session = session();
+        when(registry.require(session)).thenReturn(new WsSessionRegistry.SessionInfo(
+                "session-1", session, 5L, "test-client", 2L, "testB"));
+        when(documents.permissionFor(5L, 2L)).thenReturn(2);
+        handler.handleTextMessage(session, new TextMessage("""
+                {"type":"op","docId":5,"clientId":"test-client","baseRevision":0,
+                 "op":{"ops":[{"retain":{"image":{"alt":"new"}}}]}}
+                """));
+        verify(sender).send(eq(session), argThat(reply -> reply.path("type").asText().equals("error")
+                && reply.path("code").asInt() == 400));
+        verifyNoInteractions(revisions, eventBus);
+    }
+
+    @Test
     void unsupportedPendingOperationCannotEnterReconnectRecovery() throws Exception {
         WebSocketSession session = session();
         when(session.getAttributes()).thenReturn(Map.of(

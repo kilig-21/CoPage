@@ -148,6 +148,39 @@ test('create, approximate composition in Quill, and reload the saved document', 
   await expect(editor(page)).toContainText('Saved text 中文组合输入样例')
 })
 
+test('object retain is rejected on the wire without advancing document revision', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  const docId = await createDocument(page)
+  const wsUrl = backend.replace(/^http/, 'ws') + '/ws/collab'
+  const rejection = await page.evaluate(({ url, id }) => new Promise((resolve, reject) => {
+    const token = localStorage.getItem('collab-token')
+    const socket = new WebSocket(url, ['copage.v1', `bearer.${token}`])
+    const clientId = crypto.randomUUID()
+    const timer = setTimeout(() => { socket.close(); reject(new Error('No collaboration reply')) }, 8000)
+    socket.onopen = () => socket.send(JSON.stringify({ type: 'join', docId: id, clientId, lastRevision: 0, syncId: 'qa-object-retain' }))
+    socket.onmessage = event => {
+      const message = JSON.parse(event.data)
+      if (message.type === 'sync') {
+        socket.send(JSON.stringify({ type: 'op', docId: id, clientId, baseRevision: 0, opId: 'qa-object-retain',
+          op: { ops: [{ retain: { image: { alt: 'example' } } }] } }))
+      } else if (message.type === 'error' || message.type === 'ack') {
+        clearTimeout(timer)
+        socket.close()
+        resolve({ type: message.type, code: message.code })
+      }
+    }
+  }), { url: wsUrl, id: docId })
+  expect(rejection).toEqual({ type: 'error', code: 400 })
+  const current = await page.evaluate(async origin => {
+    const token = localStorage.getItem('collab-token')
+    const id = location.pathname.split('/').at(-1)
+    const reply = await fetch(`${origin}/api/doc/${id}`, { headers: { Authorization: `Bearer ${token}` } })
+    return (await reply.json()).data.revision
+  }, backend)
+  expect(current).toBe(0)
+  await append(page, 'Valid edit')
+})
+
 test('two accounts converge and recover a draft after losing the connection', async ({ page, browser, context, request }) => {
   const owner = await createAccount(request)
   const member = await createAccount(request)
