@@ -53,7 +53,7 @@ export default function Templates() {
       .catch(ex => { if (!controller.signal.aborted) setLoadError([400, 403, 404].includes(ex?.code) ? ex.message : '模板未能加载，请重试。') })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [refresh])
+  }, [refresh, request])
   const filtered = (templates || []).filter(template => (category === 'all' || template.category === category) &&
     (!keyword || (template.title + ' ' + template.description).toLocaleLowerCase().includes(keyword.toLocaleLowerCase())))
   const filter = (nextCategory, nextKeyword) => setParams({

@@ -53,7 +53,7 @@ export default function useProjectCreations(busy) {
         ? failure.message || '待确认创建暂时无法读取，原记录保留。' : identityError)
     }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [revision, busy])
+  }, [revision, busy, pageSession])
   function capturedOptions(config, onPrepared) {
     const captured = pageSession.assertCurrent()
     pageSession.options(config)

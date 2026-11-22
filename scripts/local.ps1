@@ -319,8 +319,10 @@ try {
     }
     if (-not (Get-RoleSnapshot 'frontend').ready) {
         $taskNode = Get-Tool 'node.exe'
-        $taskNodeVersion = (& $taskNode --version).Trim().TrimStart('v')
-        if ([version]$taskNodeVersion -lt [version]'22.12.0') { throw 'Node.js 需为22.12或更新版本，未更改已安装的工具。' }
+        $taskNodeVersion = [version]((& $taskNode --version).Trim().TrimStart('v'))
+        if ($taskNodeVersion -lt [version]'22.13.0' -or $taskNodeVersion.Major -eq 23) {
+            throw '请使用 Node.js 22.13+（22 系列）或 24+。'
+        }
         Write-Output '安装锁文件中的前端依赖并构建本地生产预览。'
         $taskNpmCache = Join-Path $taskRuntime 'npm-cache'
         $taskNodeModules = Join-Path $taskRoot 'frontend/node_modules'

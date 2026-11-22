@@ -89,6 +89,8 @@ jobs:
         run: npm ci --registry=https://registry.npmjs.org --no-audit --no-fund
       - name: Run frontend regression
         run: npm test
+      - name: Lint frontend and browser tests
+        run: npm run lint
       - name: Verify recovery channel diagnostics
         working-directory: .
         run: node --test scripts/recovery-channel.test.mjs scripts/smoke-join.test.mjs

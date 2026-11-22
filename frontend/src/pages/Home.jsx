@@ -44,7 +44,7 @@ export default function Home() {
       if (!controller.signal.aborted) setError(requestFailureMessage(failure, '文档概览暂时无法加载，请重试。'))
     }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [refresh])
+  }, [refresh, request])
   useEffect(() => {
     const controller = new AbortController()
     setProfileLoading(true); setProfileError(''); setProfile(null)
@@ -54,7 +54,7 @@ export default function Home() {
       if (!controller.signal.aborted) setProfileError(requestFailureMessage(failure, '账号资料暂时无法加载，可单独重试。'))
     }).finally(() => { if (!controller.signal.aborted) setProfileLoading(false) })
     return () => controller.abort()
-  }, [profileRefresh])
+  }, [profileRefresh, request])
   return <Layout className="app-shell">
     <WorkspaceHeader title="工作台" />
     <main id="workspace-main" tabIndex={-1} className="content-wrap workbench">

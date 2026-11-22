@@ -30,7 +30,7 @@ export default function CreateProjectDocumentModal({ project, contextKey, onClos
     }).catch(() => { if (!controller.signal.aborted) setTemplateError('内置模板暂时无法读取。可以先建空白文档，或重试模板。') })
       .finally(() => { if (!controller.signal.aborted) setLoadingTemplates(false) })
     return () => controller.abort()
-  }, [reload])
+  }, [reload, request])
   const selected = templates.find(row => row.id === templateId)
   function chooseTemplate(next) {
     if (!title.trim() || title === '未命名文档' || title === selected?.title) setTitle(templates.find(row => row.id === next)?.title || '未命名文档')

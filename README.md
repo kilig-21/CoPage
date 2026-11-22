@@ -18,7 +18,7 @@ CoPage 是面向课程小组和小型团队的富文本文档工作区。成员�
 
 ## 本地运行
 
-需要 JDK 21、Maven 3.9+、Node.js 22.12+ 和 Docker Compose。以下命令在仓库根目录执行，首次启动需要下载依赖。
+需要 JDK 21、Maven 3.9+、Node.js 22.13+（22 系列）或 24+，以及 Docker Compose。以下命令在仓库根目录执行，首次启动需要下载依赖。
 
 **Windows** 启动 Docker Desktop，然后双击 [启动CoPage.cmd](启动CoPage.cmd)。两个服务都显示可用后，打开 [http://localhost:5173](http://localhost:5173)。
 

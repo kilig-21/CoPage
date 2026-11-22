@@ -1,3 +1,12 @@
+import { isCollabServerMessage } from './protocol.js'
+
+const connectionLabels = { ready: '已连接', syncing: '正在恢复编辑', offline: '正在重连' }
+
+export function collabConnectionLabel(state, hasUnconfirmedChanges) {
+  if (state === 'blocked') return hasUnconfirmedChanges ? '本地内容已保留' : '已暂停'
+  return Object.hasOwn(connectionLabels, state) ? connectionLabels[state] : '协同状态待确认'
+}
+
 /**
  * 客户端 OT 状态机。
  * pending 是已发送未确认的操作；buffer 是 pending 期间继续输入积累的操作。
@@ -68,6 +77,7 @@ export default class CollabClient {
   }
 
   receive(message) {
+    if (!isCollabServerMessage(message)) return
     if (message.docId !== undefined && message.docId !== this.docId) return
     if (this.state === 'blocked' || this.state === 'offline') return
     if (this.state === 'syncing' && (message.type === 'op' || message.type === 'ack')) {
@@ -126,8 +136,6 @@ export default class CollabClient {
       case 'error':
         this.handleError(message)
         break
-      default:
-        this.onError?.(`未知协同消息：${message.type}`)
     }
   }
 

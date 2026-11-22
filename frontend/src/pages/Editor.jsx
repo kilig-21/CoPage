@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeftOutlined, CloudOutlined, MoreOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons'
 import { Alert, Avatar, Button, Dropdown, Layout, Modal, Popover, Space, Tag, Tooltip, Typography } from 'antd'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -160,12 +160,12 @@ export default function Editor() {
     document.title = permission > 0 && title ? `${title} · CoPage` : '文档 · CoPage'
   }, [title, permission])
   useEffect(() => setDraftDownloadNotice(''), [docId])
-  function openFind() {
+  const openFind = useCallback(() => {
     setToolsOpen(false)
     startDocumentFind()
     setShowFind(true)
     setFindFocusEpoch(value => value + 1)
-  }
+  }, [startDocumentFind])
   function closeFind() {
     closeDocumentFind()
     setShowFind(false)
@@ -181,7 +181,7 @@ export default function Editor() {
     }
     window.addEventListener('keydown', shortcut)
     return () => window.removeEventListener('keydown', shortcut)
-  }, [permission, recoveryDraft, renaming, sharing, managing, savingTemplate, showHistory, showExport, showPrint, showCopy, showGuide, showImages, startDocumentFind])
+  }, [permission, recoveryDraft, renaming, sharing, managing, savingTemplate, showHistory, showExport, showPrint, showCopy, showGuide, showImages, openFind])
   function saveRawDrafts() {
     try {
       downloadTextFile(draftRecordsJson(docId, unreadableDrafts), `原始草稿-${docId}.json`, 'application/json;charset=utf-8')

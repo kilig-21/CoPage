@@ -40,7 +40,7 @@ export default function CollaboratorModal({ doc, onClose, returnToShare = false 
       .catch((failure) => { if (active) { setMembers([]); setError(failure?.message || '成员列表加载失败') } })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false; controller.abort() }
-  }, [base, refresh])
+  }, [base, refresh, request])
 
   async function mutate(action, onSuccess) {
     if (mutation.current || !listReady) return

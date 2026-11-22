@@ -29,7 +29,7 @@ export default function ProjectDocumentsModal({ project, from, busy, uncertain, 
         ? failure.message : '可加入的文档未能加载，请重试。') })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [project.id, keyword, page, refresh])
+  }, [project.id, keyword, page, readKey, request])
   return <Modal open title="加入已有文档" className="project-document-picker-modal" width={720} onCancel={busy ? undefined : onClose}
     closable={!busy} maskClosable={!busy} keyboard={!busy} footer={[
       uncertain && <Button key="review" disabled={busy} onClick={onReview}>核对项目文档</Button>,

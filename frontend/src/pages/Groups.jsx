@@ -112,7 +112,7 @@ export default function Groups() {
       throw failure
     }
   }, [session])
-  const runSession = (signal, send) => Promise.resolve().then(() => {
+  const runSession = useCallback((signal, send) => Promise.resolve().then(() => {
     assertSession(signal)
     return session.value.run(signal, send)
   }).catch(failure => {
@@ -121,7 +121,7 @@ export default function Groups() {
       setSessionError(failure.message); setNotice('')
     }
     throw failure
-  })
+  }), [assertSession, session])
   const relogin = () => navigate('/login', { replace: true, state: { from: location.pathname + location.search } })
   useLayoutEffect(() => {
     if (!sessionError || creating || fields || !sessionFeedback.current || !feedbackAction.current?.isConnected) return
@@ -137,7 +137,7 @@ export default function Groups() {
   useEffect(() => {
     mutation.current?.abort(); mutation.current = null; setBusy(false); setFields(null); setCreating(false); updateCreationBusy(false)
     return () => mutation.current?.abort()
-  }, [location.key])
+  }, [location.key, updateCreationBusy])
   useEffect(() => setInput(keyword), [keyword])
   const choose = (id, nextPage = page, nextArchived = archived, nextKeyword = keyword) =>
     setParams({ ...(nextArchived ? { archived: 'true' } : {}), ...(nextKeyword ? { keyword: nextKeyword } : {}),
@@ -152,7 +152,7 @@ export default function Groups() {
     choose(data.archived ? 0 : data.id, 1, data.archived,
       data.archived && typeof data.name === 'string' ? data.name : '')
   }
-  function confirmRead(resource, epoch, target = 0) {
+  const confirmRead = useCallback((resource, epoch, target = 0) => {
     assertSession()
     const pending = unconfirmed.current
     if (!pending || pending.resource !== resource || pending.epoch !== epoch || epoch !== mutationEpoch.current ||
@@ -165,7 +165,7 @@ export default function Groups() {
       setParams(current => { const next = new URLSearchParams(current); next.delete('group'); return next }, { replace: true })
     }
     setNoticeType('info'); setNotice('已重新读取相关资料，请核对上次操作的实际结果。')
-  }
+  }, [assertSession, keyword, selected, setParams])
   function reviewOperation() {
     feedbackAction.current = document.activeElement
     try { assertSession() } catch { return }
@@ -208,7 +208,7 @@ export default function Groups() {
       }
     }).finally(() => { waiting.current.finishRead(read); if (!controller.signal.aborted) setLoading(false) })
     return () => { controller.abort(); waiting.current.cancelRead(read) }
-  }, [page, archived, keyword, selected, refresh, groupRefresh])
+  }, [page, archived, keyword, selected, refresh, groupRefresh, request, runSession, assertSession, confirmRead, setParams])
   useEffect(() => {
     const controller = new AbortController()
     const epoch = mutationEpoch.current
@@ -231,7 +231,8 @@ export default function Groups() {
         }
       }).finally(() => { waiting.current.finishRead(read); if (current()) setInboxLoading(false) })
     return () => { controller.abort(); waiting.current.cancelRead(read) }
-  }, [inboxPage, refresh, inboxRefresh])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- confirmRead 的筛选和路由参数只用于小组列表，邀请读取独立刷新。
+  }, [inboxPage, inboxKey, request, runSession, assertSession])
   useEffect(() => {
     const controller = new AbortController()
     const epoch = mutationEpoch.current
@@ -248,7 +249,8 @@ export default function Groups() {
       })
       .finally(() => { waiting.current.finishRead(read); if (!controller.signal.aborted) { setDetailLoading(false); setDetailTarget(selected) } })
     return () => { controller.abort(); waiting.current.cancelRead(read) }
-  }, [selected, archived, refresh, detailRefresh])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 原资料核对按所选 ID 和操作 epoch 判断，列表筛选不应打断详情读取。
+  }, [selected, archived, refresh, detailRefresh, request, runSession, assertSession])
   useEffect(() => {
     const pending = unconfirmed.current
     // 用户已离开原核对目标时，只取消尚未开始的意图；无关读取本身不能记作核对失败。

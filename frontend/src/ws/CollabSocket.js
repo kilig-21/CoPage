@@ -1,4 +1,4 @@
-import { collabProtocols } from './protocol.js'
+import { collabProtocols, isCollabServerMessage } from './protocol.js'
 
 /** 原生 WebSocket 包装：统一处理重连、消息 JSON 解析与显式关闭。 */
 export default class CollabSocket {
@@ -74,6 +74,7 @@ export default class CollabSocket {
       if (this.socket !== socket || !this.shouldReconnect || !this.hasCurrentIdentity()) return
       try {
         const message = JSON.parse(event.data)
+        if (!isCollabServerMessage(message)) return
         if (message.type === 'pong') {
           window.clearTimeout(this.pongTimer)
           this.pongTimer = null

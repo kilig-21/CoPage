@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal, Typography } from 'antd'
 import { usePageRequest } from '../auth/PageSessionContext'
 import { loadPrivateImages, privateImagePath } from '../editor/privateImages'
@@ -13,13 +13,13 @@ export default function DocumentImagesModal({ state, permission, onSave, onClose
   const feedbackRef = useRef(null)
   const previewRef = useRef(null)
   const request = usePageRequest()
-  function select(image) {
+  const select = useCallback(image => {
     setSelected(image ? { id: image.id, alt: image.alt } : null)
     setDescription(image?.alt ?? '')
     setError(''); setNotice('')
     if (selected?.id !== image?.id) setImageFailed(false)
-  }
-  useEffect(() => { if (!selected && state.images.length) select(state.images[0]) }, [state.images, selected])
+  }, [selected?.id])
+  useEffect(() => { if (!selected && state.images.length) select(state.images[0]) }, [state.images, selected, select])
   const image = state.images.find(item => item.id === selected?.id)
   const managed = image && privateImagePath(image.src)
   useEffect(() => {

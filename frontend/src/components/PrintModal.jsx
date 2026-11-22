@@ -57,7 +57,7 @@ export default function PrintModal({ docId, canPrint, onClose }) {
       .catch(ex => { if (!controller.signal.aborted) setError(requestFailureMessage(ex, '打印预览读取失败，请重试')) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [docId, attempt])
+  }, [docId, attempt, request])
   useEffect(() => {
     if (!snapshot || !sheet.current) return undefined
     const images = [...sheet.current.querySelectorAll('img')]

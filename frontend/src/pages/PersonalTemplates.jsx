@@ -76,7 +76,7 @@ export default function PersonalTemplates() {
       }).catch(failure => { if (!controller.signal.aborted) setLoadError([400, 403, 404].includes(failure?.code) ? failure.message : '个人模板未能加载，请重试。') })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [category, keyword, page, refresh])
+  }, [category, keyword, page, refresh, request, setParams])
   useEffect(() => {
     const controller = new AbortController()
     const session = selected?.session
@@ -101,7 +101,7 @@ export default function PersonalTemplates() {
         failure.message === '模板响应与当前选择不一致，请重新读取。' ? failure.message : '模板内容未能加载，请重新读取。') })
       .finally(() => { if (current()) setDetailLoading(false) })
     return () => { controller.abort(); if (detailRequest.current === controller) detailRequest.current = null }
-  }, [selected?.session, detailRefresh])
+  }, [selected?.session, detailRefresh, request])
   const currentDetail = selected?.session === selection.current && detail?.id === selected?.id ? detail : null
   const detailReady = Boolean(currentDetail && !detailLoading && !detailError)
   const currentEditing = editing?.session === selected?.session && editing?.templateId === selected?.id ? editing : null

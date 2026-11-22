@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Input, Layout, List, Pagination, Popconfirm, Space, Typography } from 'antd'
 import ListEmptyState from '../components/ListEmptyState'
 import { useLocation, useSearchParams } from 'react-router-dom'
@@ -18,7 +18,7 @@ export default function Trash() {
   const [input,setInput]=useState(keyword)
   const rawPage=Number(params.get('page')||1)
   const page=Number.isSafeInteger(rawPage)&&rawPage>0&&rawPage<=1000000?rawPage:1
-  const setPage=next=>setParams({...(keyword?{keyword}:{}),page:String(next)})
+  const setPage = useCallback(next => setParams({ ...(keyword ? { keyword } : {}), page: String(next) }), [keyword, setParams])
   const [docs,setDocs]=useState([])
   const [total,setTotal]=useState(0)
   const [refresh,setRefresh]=useState(0)
@@ -56,7 +56,7 @@ export default function Trash() {
         ? ex.message||'读取请求未获准，请核对当前账号。' : '回收站未能加载，请重试。')}})
       .finally(()=>{if(current())setLoading(false)})
     return ()=>controller.abort()
-  },[page,keyword,refresh])
+  }, [page, keyword, listKey, request, setPage])
   return <Layout className="app-shell">
     <WorkspaceHeader title="回收站" />
     <main id="workspace-main" tabIndex={-1} className="content-wrap">

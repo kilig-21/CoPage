@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import Delta from 'quill-delta'
-import CollabClient from './CollabClient.js'
+import CollabClient, { collabConnectionLabel } from './CollabClient.js'
+
+test('协同状态在已知和扩展值下都显示中文标签', () => {
+  assert.equal(collabConnectionLabel('ready'), '已连接')
+  assert.equal(collabConnectionLabel('blocked', true), '本地内容已保留')
+  assert.equal(collabConnectionLabel('blocked', false), '已暂停')
+  for (const unknown of ['revalidating', 'constructor', null, undefined]) {
+    assert.equal(collabConnectionLabel(unknown), '协同状态待确认')
+  }
+})
 
 test('超过2000条的分批历史保留pending和buffer，直到完整验证才更新编辑器', () => {
   const editor = harness('long-offline')

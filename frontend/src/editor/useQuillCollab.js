@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Quill from 'quill'
 import 'quill/dist/quill.snow.css'
 import CollabSocket from '../ws/CollabSocket'
-import CollabClient from '../ws/CollabClient'
+import CollabClient, { collabConnectionLabel } from '../ws/CollabClient'
 import { usePageSession } from '../auth/PageSessionContext'
 import { requestFailureMessage } from '../api/requestError'
 import { createReconnectSessionCheck, expireSession } from '../auth/session'
@@ -360,7 +360,7 @@ export default function useQuillCollab(docId) {
         synced = state === 'ready'
         if (!synced) abortImageUpload()
         updateEditable()
-        setConnection({ ready: '已连接', syncing: '正在恢复编辑', offline: '正在重连', blocked: client.hasUnconfirmedChanges() ? '本地内容已保留' : '已暂停' }[state])
+        setConnection(collabConnectionLabel(state, client.hasUnconfirmedChanges()))
         updateSaveStatus()
         if (state === 'ready') {
           refreshTitle()
@@ -797,7 +797,7 @@ export default function useQuillCollab(docId) {
       host.replaceChildren()
       quillRef.current = null
     }
-  }, [docId, loadAttempt])
+  }, [docId, loadAttempt, pageSession, request])
 
   return {
     editorHostRef, connection, users, error, title, permission, isOwner, recoveryDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, saveStatus, titleError,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePageSession } from '../auth/PageSessionContext'
 import { confirmDocumentDeletion, parseDocumentRestoration, parseDocumentState } from './documentLifecycle.js'
 import { createDocumentLifecycleStore, documentLifecycleKey, lockDocumentLifecycleRecord } from './documentLifecycleStore.js'
@@ -21,7 +21,7 @@ export default function useDocumentLifecycle({ operation, ready = false, onConfi
   const [error, setError] = useState('')
   const [notice, setNotice] = useState(null)
 
-  function sync() {
+  const sync = useCallback(() => {
     if (!session.current()) {
       setRecord(null)
       return
@@ -32,7 +32,7 @@ export default function useDocumentLifecycle({ operation, ready = false, onConfi
     } catch {
       setStorageFailed(true)
     }
-  }
+  }, [session, store])
 
   useEffect(() => {
     const changed = event => {
@@ -51,7 +51,7 @@ export default function useDocumentLifecycle({ operation, ready = false, onConfi
       window.removeEventListener('copage-auth-changed', changed)
       window.removeEventListener('copage-auth-expired', changed)
     }
-  }, [session, store])
+  }, [key, session, sync])
 
   async function execute(work, { id = null, checking = false } = {}) {
     if (attempt.current || !session.current()) return

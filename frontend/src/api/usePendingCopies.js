@@ -17,12 +17,13 @@ export default function usePendingCopies() {
   const [state, setState] = useState({ records: [], loading: true, error: '', identity: null })
   const generation = useRef(0)
   useEffect(() => {
-    const reload = () => { generation.current++; setState({ records: [], loading: true, error: '', identity: null }); setRefresh(value => value + 1) }
+    const invalidate = () => { generation.current++ }
+    const reload = () => { invalidate(); setState({ records: [], loading: true, error: '', identity: null }); setRefresh(value => value + 1) }
     window.addEventListener('storage', reload)
     window.addEventListener('copage-auth-changed', reload)
     window.addEventListener('copage-copy-creations-changed', reload)
     return () => {
-      generation.current++
+      invalidate()
       window.removeEventListener('storage', reload)
       window.removeEventListener('copage-auth-changed', reload)
       window.removeEventListener('copage-copy-creations-changed', reload)
@@ -41,7 +42,7 @@ export default function usePendingCopies() {
         error: sameCopyIdentity(identity) ? error?.message || '待确认副本暂时无法读取，原记录保留。' : '当前账号暂时无法核对，请恢复登录后再读取。', identity: null })
     })
     return () => controller.abort()
-  }, [refresh])
+  }, [refresh, pageSession])
   const readable = sameCopyIdentity(state.identity)
   return { records: readable ? state.records : [], loading: state.loading,
     error: state.error, identity: readable ? state.identity : null,

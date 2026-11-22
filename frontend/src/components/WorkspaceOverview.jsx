@@ -25,7 +25,7 @@ export default function WorkspaceOverview() {
         ? failure.message : '小组与项目概览暂时无法加载，请重试。') })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [refresh])
+  }, [refresh, request])
   return <Card title={<Typography.Title level={3}>小组与项目</Typography.Title>} className="workbench-recent cp-workspace-overview"
     extra={<Button type="text" disabled={loading} onClick={() => setRefresh(value => value + 1)}>刷新概览</Button>}
     loading={loading}>

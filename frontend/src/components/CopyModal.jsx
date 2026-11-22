@@ -33,7 +33,7 @@ export default function CopyModal({ doc, onClose, onCreated, canCopy = () => tru
       catch { setReady(Boolean(prepared.current)) }
     }, 200)
     return () => { alive.current = false; clearInterval(timer); inFlight.current?.abort() }
-  }, [])
+  }, [pageSession])
   useLayoutEffect(() => {
     if (error || !ready) {
       const body = feedback.current?.closest('.ant-modal-body')

@@ -58,6 +58,23 @@ test('WebSocket sends the bearer as a separate offered protocol and keeps the UR
   socket.close()
 })
 
+test('扩展消息和坏信封不改变编辑器状态，现有权限和心跳消息仍正常转交', t => {
+  const env = browser(t)
+  const messages = [], errors = []
+  const socket = new CollabSocket({ token: 'test', onMessage: message => messages.push(message), onError: error => errors.push(error) })
+  socket.connect()
+  const transport = env.Socket.instances[0]
+  transport.open()
+  for (const message of [null, ['op'], { type: 'future-event', docId: 1, permission: 0 },
+    { type: 'permission', docId: '1', permission: 0 }]) transport.onmessage({ data: JSON.stringify(message) })
+  const permission = { type: 'permission', docId: 1, permission: 2 }
+  const pong = { type: 'pong', docId: 1, revision: 2 }
+  for (const message of [permission, pong]) transport.onmessage({ data: JSON.stringify(message) })
+  assert.deepEqual(messages, [permission, pong])
+  assert.deepEqual(errors, [])
+  socket.close()
+})
+
 test('原页面身份失效后不能首次连接，也不靠联网事件重新绑定新账号', t => {
   const env=browser(t);let current=false,invalidated=0
   const socket=new CollabSocket({token:'A',isCurrent:()=>current,onIdentityChanged:()=>invalidated++})

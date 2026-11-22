@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Form, Input, Layout, Space, Spin, Typography } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { usePageRequest } from '../auth/PageSessionContext'
@@ -29,11 +29,11 @@ export default function Account() {
   const feedback = useRef(null)
   const nicknameAction = useRef(null)
   const passwordAction = useRef(null)
-  function accountSettings() {
+  const accountSettings = useCallback(() => {
     if (!settings.current) settings.current = createAccountSettings({ storage: localStorage,
       get: (...args) => request.get(...args), put: (...args) => request.put(...args), post: (...args) => request.post(...args) })
     return settings.current
-  }
+  }, [request])
   const relogin = () => navigate('/login', { replace: true, state: { sessionChanged: true, from: '/account' } })
   useEffect(() => {
     if (!error && !notice) return
@@ -68,7 +68,7 @@ export default function Account() {
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [refresh, nicknameForm])
+  }, [refresh, nicknameForm, accountSettings])
   async function saveNickname(values) {
     if (mutation.current || sessionBlocked) return
     const controller = new AbortController(); mutation.current = controller

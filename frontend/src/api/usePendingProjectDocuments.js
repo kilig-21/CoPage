@@ -9,10 +9,11 @@ export default function usePendingProjectDocuments() {
   const [state, setState] = useState({ records: [], loading: true, error: '', identity: null })
   const generation = useRef(0)
   useEffect(() => {
-    const reload = () => { generation.current++; setState({ records: [], loading: true, error: '', identity: null }); setRefresh(value => value + 1) }
+    const invalidate = () => { generation.current++ }
+    const reload = () => { invalidate(); setState({ records: [], loading: true, error: '', identity: null }); setRefresh(value => value + 1) }
     const unsubscribe = subscribeProjectDocumentEvents({ eventTarget: window, getStorage: () => localStorage,
       readIdentity: projectDocumentIdentity, onRecordsChanged: reload })
-    return () => { generation.current++; unsubscribe() }
+    return () => { invalidate(); unsubscribe() }
   }, [])
   useEffect(() => {
     const controller = new AbortController(), ticket = ++generation.current, identity = pageSession.identity
@@ -23,7 +24,7 @@ export default function usePendingProjectDocuments() {
         : { records: [], loading: false, error: '当前账号暂时无法核对，原创建记录保留。', identity: null })
     }).catch(failure => { if (current()) setState({ records: [], loading: false, error: failure?.message || '本地创建记录暂不可读，原记录保留。', identity: null }) })
     return () => controller.abort()
-  }, [refresh])
+  }, [refresh, pageSession])
   const readable = sameProjectDocumentIdentity(state.identity)
   return { ...state, records: readable ? state.records : [], identity: readable ? state.identity : null,
     refresh: () => setRefresh(value => value + 1) }

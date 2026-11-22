@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Drawer, Input, List, Modal, Space, Spin, Tag, Typography } from 'antd'
 import { usePageRequest } from '../auth/PageSessionContext'
 import DocumentPreview from './DocumentPreview'
@@ -38,6 +38,7 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
   const ownerRef = useRef(isOwner)
   ownerRef.current = isOwner
   const restoreOperation = useHistoryRestore(docId, isOwner, canRestore, () => load())
+  const { captureContext, isCurrent, config: restoreConfig } = restoreOperation
   const history = restoreOperation.isCurrent(historyContext.current) ? storedHistory : null
   const preview = restoreOperation.isCurrent(previewContext.current) ? storedPreview : null
   const retention = history ? storedRetention : null
@@ -64,15 +65,15 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
     return () => cancelAnimationFrame(frame)
   }, [restoreError, restoreNotice, restoreRequestId])
   const base = `/doc/${docId}/history`
-  const beginRequest = () => {
-    const context = restoreOperation.captureContext()
+  const beginRequest = useCallback(() => {
+    const context = captureContext()
     if (!context) return null
     const controller = new AbortController()
     controller.context = context
     requests.current.add(controller)
     return controller
-  }
-  const isLive = controller => alive.current && !controller.signal.aborted && restoreOperation.isCurrent(controller.context)
+  }, [captureContext])
+  const isLive = useCallback(controller => alive.current && !controller.signal.aborted && isCurrent(controller.context), [isCurrent])
   const beginMutation = () => {
     if (!alive.current || mutation.current || restoreOperation.snapshot().busy || !ownerRef.current) return null
     const controller = beginRequest()
@@ -88,20 +89,20 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
       if (alive.current) setBusy(false)
     }
   }
-  const load = async (before) => {
+  const load = useCallback(async before => {
     listRequest.current?.abort()
     const controller = beginRequest()
     if (!controller) return
     listRequest.current = controller
     setLoading(true)
     try {
-      const response = await request.get(base, { params: before == null ? {} : { beforeRevision: before }, ...restoreOperation.config(controller.context, controller.signal) })
+      const response = await request.get(base, { params: before == null ? {} : { beforeRevision: before }, ...restoreConfig(controller.context, controller.signal) })
       if (!isLive(controller)) return
       historyContext.current = controller.context
       setHistory(response.data)
       setVersions(old => before == null ? response.data.list : [...old, ...response.data.list])
       if (isOwner) {
-        const policy = await request.get(base + '/retention', restoreOperation.config(controller.context, controller.signal))
+        const policy = await request.get(base + '/retention', restoreConfig(controller.context, controller.signal))
         if (isLive(controller)) setRetention(policy.data)
       }
       if (isLive(controller)) setError('')
@@ -116,8 +117,10 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
         }
       }
     }
-  }
+  }, [base, request, restoreConfig, beginRequest, isLive, isOwner])
   useEffect(() => {
+    const activeRequests = requests.current
+    const invalidateSelection = () => { selectionRequest.current++ }
     alive.current = true
     historyContext.current = null; previewContext.current = null
     setHistory(null); setVersions([]); setSelected(null); setPreview(null); setPreviewLoading(false)
@@ -125,12 +128,12 @@ export default function HistoryDrawer({ docId, isOwner, canRestore, onClose }) {
     load()
     return () => {
       alive.current = false
-      selectionRequest.current++
-      for (const controller of requests.current) controller.abort()
-      requests.current.clear()
+      invalidateSelection()
+      for (const controller of activeRequests) controller.abort()
+      activeRequests.clear()
       listRequest.current = null; previewRequest.current = null; mutation.current = null
     }
-  }, [docId, restoreOperation.identityEpoch])
+  }, [docId, restoreOperation.identityEpoch, load])
   const choose = async (revision) => {
     previewRequest.current?.abort()
     const controller = beginRequest()

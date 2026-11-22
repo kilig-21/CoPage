@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, Card, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
 import ListEmptyState from '../components/ListEmptyState'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
@@ -90,6 +90,7 @@ export default function Projects() {
     setRefresh(value => value + 1)
     if (target.kind === 'add') setAdding(false)
   })
+  const cancelProjectOperation = operation.cancel
   const busy = operation.busy || documentBusy
   const uncertain = Boolean(operation.uncertain)
   const operationError = operation.error
@@ -104,11 +105,11 @@ export default function Projects() {
     const keepWork = automaticPageChange.current?.path === sourcePath && automaticPageChange.current?.target === routeTargetKey
     automaticPageChange.current = null
     // 自动纠正分页不改变所选项目，保留其表单、原目标和写等待。
-    if (keepWork) return () => { if (!automaticPageChange.current) operation.cancel() }
-    operation.cancel()
+    if (keepWork) return () => { if (!automaticPageChange.current) cancelProjectOperation() }
+    cancelProjectOperation()
     setFields(null); setAdding(false); setNewDocument(null); setDocumentBusy(false)
-    return () => { if (!automaticPageChange.current) operation.cancel() }
-  }, [location.key])
+    return () => { if (!automaticPageChange.current) cancelProjectOperation() }
+  }, [location.key, sourcePath, routeTargetKey, cancelProjectOperation])
   useEffect(() => setInput(keyword), [keyword])
   useEffect(() => setDocInput(docKeyword), [docKeyword])
   const navigate = changes => {
@@ -122,13 +123,13 @@ export default function Projects() {
     for (const key of Object.keys(next)) if (next[key] === null || next[key] === '') delete next[key]
     setParams(next)
   }
-  const correctPage = (current, name, value) => {
+  const correctPage = useCallback((current, name, value) => {
     const next = new URLSearchParams(current)
     next.set(name, String(value))
     // setSearchParams 的实际跳转只含查询参数，会清除原 hash。
     automaticPageChange.current = { path: location.pathname + '?' + next.toString(), target: routeTargetKey }
     return next
-  }
+  }, [location.pathname, routeTargetKey])
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true); setData(null); setError('')
@@ -141,7 +142,7 @@ export default function Projects() {
       ? failure.message : '项目列表未能加载，请刷新重试。') })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [scope, groupId, archived, keyword, page, refresh, listRefresh])
+  }, [scope, groupId, archived, keyword, page, listKey, request, correctPage, setParams])
   useEffect(() => {
     const controller = new AbortController()
     setContext(null); setContextError(''); setContextLoading(Boolean(groupId))
@@ -155,7 +156,7 @@ export default function Projects() {
         ? failure.message : '小组资料暂时无法加载，已读取的项目仍可继续查看；创建需先核对小组资料。') })
       .finally(() => { if (!controller.signal.aborted) setContextLoading(false) })
     return () => controller.abort()
-  }, [groupId, contextRefresh])
+  }, [groupId, contextKey, request])
   useEffect(() => {
     const controller = new AbortController()
     setDetail(null); setDetailError(''); setDetailErrorCode(null); setDetailLoading(Boolean(selected && !archived))
@@ -176,7 +177,7 @@ export default function Projects() {
       } })
       .finally(() => { if (!controller.signal.aborted) { setDetailLoading(false); setDetailSettledFrom(detailKey) } })
     return () => controller.abort()
-  }, [selected, archived, docPage, docKeyword, refresh, detailRefresh])
+  }, [selected, archived, docPage, docKeyword, detailKey, request, correctPage, setParams])
   const listed = dataFrom === listKey ? data : null
   const ready = Boolean(listed && !loading && !busy && !uncertain)
   const current = detailFrom === detailKey && detail?.id === selected ? detail : null

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Alert, Button, Drawer, List, Space, Spin, Tag, Typography } from 'antd'
 import ListEmptyState from './ListEmptyState'
 import { useNavigate } from 'react-router-dom'
@@ -23,12 +23,12 @@ export default function AccountDraftsDrawer({ onClose, sourcePath }) {
   const [records, setRecords] = useState(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  function isCurrent() {
+  const isCurrent = useCallback(() => {
     try { return Boolean(identity && localStorage.getItem('collab-token') === identity.token &&
       localStorage.getItem('collab-user') === identity.username) }
     catch { return false }
-  }
-  function showFailure(failure, action = 'read') {
+  }, [identity])
+  const showFailure = useCallback((failure, action = 'read') => {
     setNotice('')
     if (!isCurrent() || failure?.code === 'DRAFT_IDENTITY_CHANGED') {
       setRecords(null)
@@ -43,15 +43,15 @@ export default function AccountDraftsDrawer({ onClose, sourcePath }) {
       setError(action === 'download' ? '副本未能生成，请重试下载；原记录仍保存在此浏览器。'
         : '暂时无法读取本地草稿，请恢复本站存储后重试；原始记录保留。')
     }
-  }
-  function options() { return { storage: localStorage, username: identity?.username, Delta, isCurrent } }
-  function refresh() {
+  }, [isCurrent])
+  const options = useCallback(() => ({ storage: localStorage, username: identity?.username, Delta, isCurrent }), [identity, isCurrent])
+  const refresh = useCallback(() => {
     setRecords(null); setError(''); setNotice('')
     try {
       const next = enumerateAccountDrafts(options())
       setRecords(next.sort((a, b) => (b.savedAt ?? -1) - (a.savedAt ?? -1) || a.key.localeCompare(b.key)))
     } catch (failure) { showFailure(failure) }
-  }
+  }, [options, showFailure])
   useEffect(() => {
     refresh()
     const changed = event => {
@@ -61,7 +61,7 @@ export default function AccountDraftsDrawer({ onClose, sourcePath }) {
     window.addEventListener('storage', changed)
     window.addEventListener('copage-auth-changed', changed)
     return () => { window.removeEventListener('storage', changed); window.removeEventListener('copage-auth-changed', changed) }
-  }, [])
+  }, [refresh, isCurrent, showFailure])
   useEffect(() => {
     const escape = event => {
       if (event.key === 'Escape' && !event.isComposing) { event.preventDefault(); onClose() }

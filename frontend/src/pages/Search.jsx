@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeftOutlined, FileTextOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Input, Layout, List, Tag, Typography } from 'antd'
 import ListEmptyState from '../components/ListEmptyState'
@@ -36,16 +36,16 @@ export default function Search() {
   const results = ready ? currentRead.list : []
   const total = ready ? currentRead.total : 0
 
-  function discardRead() {
+  const discardRead = useCallback(() => {
     const old = activeRequest.current
     activeRequest.current = null
     old?.controller.abort()
     setRead(null)
-  }
-  function changePage(next, replace = false) {
+  }, [])
+  const changePage = useCallback((next, replace = false) => {
     discardRead()
     setParams({ q: query, page: String(next) }, { replace })
-  }
+  }, [discardRead, query, setParams])
 
   useEffect(() => { setInput(query) }, [query])
   useEffect(() => {
@@ -73,7 +73,7 @@ export default function Search() {
         .finally(() => { if (current()) activeRequest.current = null })
     }
     return () => { controller.abort(); if (activeRequest.current === attempt) activeRequest.current = null }
-  }, [query, page, retry])
+  }, [query, page, readKey, validQuery, changePage, request])
 
   function search(value) {
     const next = value.trim()

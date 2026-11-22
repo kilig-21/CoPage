@@ -17,10 +17,11 @@ export default function usePendingGroupCreations({ expectedIdentity, assertSessi
   const [state, setState] = useState({ records: [], loading: true, error: '', identity: null })
   const generation = useRef(0)
   useEffect(() => {
-    const reload = () => { generation.current++; setState({ records: [], loading: true, error: '', identity: null }); setRefresh(value => value + 1) }
+    const invalidate = () => { generation.current++ }
+    const reload = () => { invalidate(); setState({ records: [], loading: true, error: '', identity: null }); setRefresh(value => value + 1) }
     for (const event of ['storage', 'copage-auth-changed', 'copage-group-creations-changed']) window.addEventListener(event, reload)
     return () => {
-      generation.current++
+      invalidate()
       for (const event of ['storage', 'copage-auth-changed', 'copage-group-creations-changed']) window.removeEventListener(event, reload)
     }
   }, [])
@@ -40,7 +41,7 @@ export default function usePendingGroupCreations({ expectedIdentity, assertSessi
       if (current()) setState({ records: [], loading: false, error: error?.message || '小组创建记录暂时无法读取，原记录保留。', identity: null })
     })
     return () => controller.abort()
-  }, [refresh, expectedIdentity, assertSession])
+  }, [refresh, expectedIdentity, assertSession, pageSession])
   const readable = sameGroupCreationIdentity(state.identity) && (!expectedIdentity ||
     ['account', 'token', 'service'].every(key => state.identity?.[key] === expectedIdentity[key]))
   return { ...state, records: readable ? state.records : [], identity: readable ? state.identity : null,

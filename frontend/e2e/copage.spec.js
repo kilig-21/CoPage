@@ -234,6 +234,7 @@ test('revision gaps and a missed final broadcast catch up on the same socket', a
       peerSockets++
       expect(new URL(route.url()).host).toBe(new URL(secondary).host)
       const server = route.connectToServer()
+      let extensionSent = false
       route.onMessage(frame => {
         requests.push(JSON.parse(frame))
         server.send(frame)
@@ -244,6 +245,10 @@ test('revision gaps and a missed final broadcast catch up on the same socket', a
         else {
           if (message.type === 'pong') heartbeat.push(message.revision)
           route.send(frame)
+          if (message.type === 'sync' && !extensionSent) {
+            extensionSent = true
+            route.send(JSON.stringify({ type: 'future-editor-event', docId, permission: 0 }))
+          }
         }
       })
     })

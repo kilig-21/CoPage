@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { CloseCircleOutlined, FileTextOutlined, PlusOutlined, MoreOutlined } from '@ant-design/icons'
 import { Alert, App, Button, Card, Dropdown, Input, Layout, List, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
 import ListEmptyState from '../components/ListEmptyState'
@@ -43,7 +43,8 @@ export default function DocList() {
   const page = Number.isSafeInteger(rawPage) && rawPage > 0 && rawPage <= 1_000_000 ? rawPage : 1
   const [filter, setFilter] = useState(keyword)
   const scopeParams = scope === 'all' ? {} : { scope }
-  const setPage = next => setSearchParams({ ...scopeParams, ...(keyword ? { keyword } : {}), page: String(next) })
+  const setPage = useCallback(next => setSearchParams({ ...(scope === 'all' ? {} : { scope }),
+    ...(keyword ? { keyword } : {}), page: String(next) }), [scope, keyword, setSearchParams])
   useEffect(() => setFilter(keyword), [keyword])
   const applyFilter = value => setSearchParams({ ...scopeParams, ...(value.trim() ? { keyword: value.trim() } : {}) })
   const applyScope = next => setSearchParams({ ...(next === 'all' ? {} : { scope: next }), ...(keyword ? { keyword } : {}) })
@@ -88,7 +89,7 @@ export default function DocList() {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [page, keyword, scope, refresh])
+  }, [page, keyword, scope, listKey, request, setPage])
 
   async function createDocument() {
     if (createController.current) return
