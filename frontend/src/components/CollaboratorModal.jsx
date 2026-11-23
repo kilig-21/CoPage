@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Form, Input, List, Modal, Popconfirm, Select, Space, Typography } from 'antd'
 import ListEmptyState from './ListEmptyState'
+import { focusDialogControl, useDialogEscapeFallback } from './dialogFocus'
 import { usePageRequest } from '../auth/PageSessionContext'
 import { confirmCollaboratorUpdate, parseCollaboratorsReply } from '../api/collaborators'
 
@@ -20,16 +21,7 @@ export default function CollaboratorModal({ doc, onClose, returnToShare = false 
   const backButton = useRef(null)
   const base = '/doc/' + doc.id + '/collaborators'
 
-  useEffect(() => {
-    const closeFromPage = event => {
-      if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented || busy || mutation.current ||
-          event.target !== document.body || document.activeElement !== document.body) return
-      event.preventDefault()
-      onClose()
-    }
-    window.addEventListener('keydown', closeFromPage)
-    return () => window.removeEventListener('keydown', closeFromPage)
-  }, [busy, onClose])
+  useDialogEscapeFallback(onClose, () => !busy && !mutation.current)
 
   useEffect(() => {
     let active = true
@@ -70,7 +62,7 @@ export default function CollaboratorModal({ doc, onClose, returnToShare = false 
 
   return <Modal className="document-collaborators-modal" title={'协作者管理 · ' + doc.title} open
     transitionName={returnToShare ? '' : undefined} maskTransitionName={returnToShare ? '' : undefined}
-    afterOpenChange={open => { if (open && returnToShare) backButton.current?.focus({ preventScroll: true }) }}
+    afterOpenChange={open => { if (open && returnToShare) focusDialogControl(backButton.current) }}
     onCancel={() => { if (!busy) onClose() }} closable={!busy} maskClosable={!busy} keyboard={!busy}
     footer={<Button ref={backButton} disabled={busy} onClick={onClose}>{returnToShare ? '返回分享' : '关闭'}</Button>}>
     <Typography.Paragraph type="secondary">只有文档所有者可以管理成员。输入对方已注册的用户名；添加后把文档链接发给对方即可。</Typography.Paragraph>

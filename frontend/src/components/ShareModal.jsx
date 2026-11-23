@@ -1,11 +1,14 @@
 import { useRef, useState } from 'react'
 import { Alert, Button, Input, Modal, Space, Typography } from 'antd'
+import { focusDialogControl, useDialogEscapeFallback } from './dialogFocus'
 
 export default function ShareModal({ docId, isOwner, onManage, onClose, managementError = '' }) {
   const [copyState, setCopyState] = useState('idle')
   const linkInput = useRef(null)
   const copyButton = useRef(null)
   const link = new URL('/docs/' + docId, window.location.origin).href
+  useDialogEscapeFallback(onClose)
+
   async function copy() {
     try {
       await navigator.clipboard.writeText(link)
@@ -16,7 +19,7 @@ export default function ShareModal({ docId, isOwner, onManage, onClose, manageme
     }
   }
   return <Modal className="document-share-modal" open title="分享文档链接" transitionName="" maskTransitionName=""
-    afterOpenChange={open => { if (open) copyButton.current?.focus({ preventScroll: true }) }}
+    afterOpenChange={open => { if (open) focusDialogControl(copyButton.current) }}
     onCancel={onClose} footer={<Button onClick={onClose}>关闭</Button>}>
     <Typography.Paragraph>接收者需登录，并获得这篇文档的查看或编辑权限。</Typography.Paragraph>
     <Input ref={linkInput} aria-label="文档分享链接" readOnly value={link} onFocus={event => event.target.select()} />

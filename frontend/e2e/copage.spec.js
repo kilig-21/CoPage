@@ -118,6 +118,15 @@ test('share and collaborator dialogs keep keyboard focus at desktop and narrow w
     await page.keyboard.press('Escape')
     await expect(share).toBeHidden()
     await expect(shareButton).toBeFocused()
+
+    await shareButton.press('Enter')
+    const copy = share.getByRole('button', { name: '复制链接' })
+    await expect(copy).toBeFocused()
+    await copy.evaluate(button => button.blur())
+    await expect(page.locator('body')).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(share).toBeHidden()
+    await expect(shareButton).toBeFocused()
   }
 })
 
