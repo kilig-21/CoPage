@@ -226,6 +226,59 @@ test('name a new document from the editor title on desktop and narrow screens', 
   }
 })
 
+test('formatting a selection deep in a document keeps it in view at desktop and narrow widths', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  await createDocument(page)
+  const body = Array.from({ length: 48 }, (_, index) =>
+    `${index + 1} 记录志愿者接待、书目归还与场地整理。仅用于编辑验收。`).join('\n')
+  await editor(page).click()
+  await editor(page).evaluate((element, text) => document.execCommand('insertText', false, text), body)
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 850 })
+    const paragraph = editor(page).locator('p').filter({ hasText: width === 1280 ? /^47 / : /^48 / })
+    await expect(paragraph).toBeVisible()
+    await expect(saved(page)).toHaveText('所有修改已保存')
+    await paragraph.click()
+    await page.keyboard.press('End')
+    await page.keyboard.press('Shift+Home')
+    const selection = await page.evaluate(() => window.getSelection().toString())
+    expect(selection).toContain('验收')
+    const position = await page.evaluate(() => window.scrollY)
+    expect(position).toBeGreaterThan(300)
+    const controls = page.locator('.editor-format-controls')
+    await expect(controls).toBeInViewport()
+
+    const bold = page.getByRole('button', { name: '粗体' })
+    if (width === 320) {
+      const toggle = page.getByRole('button', { name: '格式工具' })
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+      await page.keyboard.press('Shift+Tab')
+      await expect(toggle).toBeFocused()
+      await page.keyboard.press('Enter')
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+      for (let step = 0; step < 8 && !await bold.evaluate(button => button === document.activeElement); step += 1) {
+        await page.keyboard.press('Tab')
+      }
+      await expect(bold).toBeFocused()
+      await page.keyboard.press('Enter')
+    } else {
+      await bold.click()
+    }
+
+    const formatted = paragraph.locator('strong')
+    await expect(formatted).toHaveText(selection)
+    await expect(formatted).toBeInViewport()
+    const controlsBounds = await controls.boundingBox()
+    const textBounds = await formatted.boundingBox()
+    expect(textBounds.y).toBeGreaterThan(controlsBounds.y + controlsBounds.height)
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThanOrEqual(position - 120)
+    await expect(saved(page)).toHaveText('所有修改已保存')
+    await page.reload()
+    await expect(formatted).toHaveText(selection)
+  }
+})
+
 test('returning from the editor reveals and focuses the same entry in a long document list', async ({ page, request }) => {
   await page.setViewportSize({ width: 320, height: 850 })
   await login(page, await createAccount(request))

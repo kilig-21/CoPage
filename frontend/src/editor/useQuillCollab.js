@@ -30,6 +30,7 @@ export default function useQuillCollab(docId) {
   const pageSession = usePageSession()
   const request = pageSession.request
   const editorHostRef = useRef(null)
+  const toolbarHostRef = useRef(null)
   const quillRef = useRef(null)
   const [connection, setConnection] = useState('未连接')
   const [users, setUsers] = useState([])
@@ -57,7 +58,8 @@ export default function useQuillCollab(docId) {
 
   useEffect(() => {
     const host = editorHostRef.current
-    if (!host) return undefined
+    const toolbarHost = toolbarHostRef.current
+    if (!host || !toolbarHost) return undefined
     let active = true
     let backupSent = false
     let draftTitle = ''
@@ -132,6 +134,8 @@ export default function useQuillCollab(docId) {
       },
     })
     host.appendChild(imageInput)
+    const toolbar = quill.getModule('toolbar').container
+    toolbarHost.appendChild(toolbar)
     quill.enable(false)
     const updateToolbar = configureEditorToolbar(quill)
     updateToolbar()
@@ -793,14 +797,14 @@ export default function useQuillCollab(docId) {
       imageDescriptions?.dispose()
       disposePrivateImages()
       documentImagesRef.current = null
-      quill.getModule('toolbar')?.container.remove()
+      toolbar.remove()
       host.replaceChildren()
       quillRef.current = null
     }
   }, [docId, loadAttempt, pageSession, request])
 
   return {
-    editorHostRef, connection, users, error, title, permission, isOwner, recoveryDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, saveStatus, titleError,
+    editorHostRef, toolbarHostRef, connection, users, error, title, permission, isOwner, recoveryDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, saveStatus, titleError,
     dismissSkippedDraftNotice: () => skippedDraftNoticeRef.current?.dismiss(),
     refreshTitle: () => refreshTitleRef.current?.(),
     retryLoad: () => { if (connection === '加载失败') setLoadAttempt(value => value + 1) },

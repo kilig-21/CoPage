@@ -59,7 +59,7 @@ export default function Editor() {
   const [titleOpen, setTitleOpen] = useState(false)
   const [findFocusEpoch, setFindFocusEpoch] = useState(0)
   const [draftDownloadNotice, setDraftDownloadNotice] = useState('')
-  const { editorHostRef, connection, users, error, title, permission, isOwner,
+  const { editorHostRef, toolbarHostRef, connection, users, error, title, permission, isOwner,
     saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, dismissSkippedDraftNotice, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor, revealDocumentMatch,
     documentImagesState, startDocumentImages, closeDocumentImages, saveDocumentImageDescription } = useQuillCollab(docId)
   useLayoutEffect(() => {
@@ -287,15 +287,17 @@ export default function Editor() {
           focusEpoch={findFocusEpoch} onQuery={queryDocument} onNext={nextDocumentMatch}
           onReplace={replaceDocumentMatch} onClose={closeFind} />}
         <section className="editor-canvas">
-          <div className="editor-writing-column" data-format-available={permission === 2} data-format-expanded={formatExpanded}>
-            {permission === 2 && <Button type="text" className="editor-format-toggle" icon={<FontSizeOutlined aria-hidden="true" />}
-              aria-expanded={formatExpanded} aria-controls={EDITOR_FORMAT_TOOLBAR_ID}
-              onClick={() => setExpandedFormatDoc(formatExpanded ? null : docId)}>
-              格式工具 <DownOutlined className="editor-format-chevron" aria-hidden="true" />
-            </Button>}
-            <div className="editor-format-content">
-              <div ref={editorHostRef} className="editor-host" aria-label="协同编辑器" />
+          <div className="editor-writing-column" data-format-available={permission === 2} data-format-expanded={formatExpanded} data-find-open={showFind}>
+            <div className="editor-format-controls">
+              {permission === 2 && <Button type="text" className="editor-format-toggle" icon={<FontSizeOutlined aria-hidden="true" />}
+                aria-expanded={formatExpanded} aria-controls={EDITOR_FORMAT_TOOLBAR_ID}
+                onMouseDown={event => event.preventDefault()}
+                onClick={() => setExpandedFormatDoc(formatExpanded ? null : docId)}>
+                格式工具 <DownOutlined className="editor-format-chevron" aria-hidden="true" />
+              </Button>}
+              <div ref={toolbarHostRef} />
             </div>
+            <div ref={editorHostRef} className="editor-host" aria-label="协同编辑器" />
           </div>
         </section>
       </main>
