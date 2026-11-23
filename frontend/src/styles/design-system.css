@@ -48,7 +48,11 @@ button[data-password-toggle]:disabled { cursor: not-allowed; }
 }
 .page-heading { gap: var(--cp-space-4) var(--cp-space-5); margin-bottom: var(--cp-space-6); }
 .page-heading-copy { flex: 1 1 360px; min-width: 0; }
-.page-heading-copy h1 { overflow-wrap: anywhere; }
+.page-heading-copy h1, .cp-workbench-heading h1 {
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  overflow-wrap: anywhere;
+}
 .page-heading-actions { display: flex; flex-wrap: wrap; gap: var(--cp-space-2); max-width: 100%; min-width: 0; }
 .page-heading-actions > .ant-space { max-width: 100%; }
 .page-heading .ant-typography-secondary { display: block; margin-top: var(--cp-space-2); line-height: var(--cp-leading-body); }
