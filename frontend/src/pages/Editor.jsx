@@ -73,6 +73,7 @@ export default function Editor() {
     if (showFind) revealDocumentMatch()
   }, [showFind, findFocusEpoch, revealDocumentMatch])
   const isConnected = connection === '已连接'
+  const visibleSaveStatus = permission === 1 ? '只读 · ' + saveStatus : saveStatus
   const loadFailed = connection === '加载失败'
   const awaitingDocument = permission === 0 && ['未连接', '加载中'].includes(connection)
   const writingFocusRequested = navigationType === 'PUSH' && location.state?.focusNewDocument === docId
@@ -281,7 +282,7 @@ export default function Editor() {
         <div className="editor-status-row" ref={statusRef} hidden={loadFailed}>
           <Space wrap className="editor-save-state">
             <Tag color={isConnected ? 'green' : 'gold'} icon={<CloudOutlined />}>{connection}</Tag>
-            <Typography.Text className="editor-save-status" role="status" aria-live="polite">{saveStatus}</Typography.Text>
+            <Typography.Text className="editor-save-status" role="status" aria-live="polite">{visibleSaveStatus}</Typography.Text>
           </Space>
           {currentPermissionDraft && <Button ref={permissionDraftButtonRef} className="editor-permission-draft-action" aria-haspopup="dialog"
             onClick={() => setOpenedPermissionDraft(currentPermissionDraft)}>备份草稿</Button>}
@@ -304,7 +305,6 @@ export default function Editor() {
         </section>}
         {titleError && <Alert className="editor-alert" type="warning" message={titleError}
           action={<Button onClick={refreshTitle}>重试标题</Button>} />}
-        {permission === 1 && (!showFind || !isConnected) && <Alert className="editor-alert" type="info" showIcon message="你拥有只读权限，不能修改此文档" />}
         {skippedDraftNotice && <Alert className="editor-alert editor-draft-notice" type="info" showIcon
           message="打开文档时发现其他标签的本地草稿，本页未接管"
           description="请回原标签或工作台的本地草稿核对。本页显示的保存状态仅针对本页编辑；关闭此提示不会删除草稿。"

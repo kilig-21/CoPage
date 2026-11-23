@@ -118,6 +118,11 @@ test('a denied shared document shows the active account and opens after permissi
       await expect(editor(peer)).toHaveText('Shared document content')
       await expect(editor(peer)).toHaveAttribute('aria-readonly', 'true')
       await expect(saved(peer)).toHaveText('只读 · 内容已同步')
+      await readerContext.setOffline(true)
+      await expect(saved(peer)).toHaveText('只读 · 等待同步')
+      await expect(editor(peer)).toHaveAttribute('aria-readonly', 'true')
+      await readerContext.setOffline(false)
+      await expect(saved(peer)).toHaveText('只读 · 内容已同步')
     }
   } finally {
     await readerContext.close()

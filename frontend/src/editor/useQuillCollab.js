@@ -206,7 +206,7 @@ export default function useQuillCollab(docId) {
         : uploading ? '正在上传图片'
         : composing ? '正在输入'
         : pending ? '正在保存…'
-        : canEdit ? '所有修改已保存' : '只读 · 内容已同步'
+        : canEdit ? '所有修改已保存' : '内容已同步'
       if (status !== lastSaveStatus) {
         lastSaveStatus = status
         setSaveStatus(status)
