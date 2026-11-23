@@ -721,7 +721,15 @@ export default function useQuillCollab(docId) {
               }
             },
             discard: () => {
-              localStorage.removeItem(stored.key)
+              if (!active || !pageSession.current()) throw new Error('登录状态已变化。请用原账号重新打开文档。')
+              let latest
+              try { latest = JSON.parse(localStorage.getItem(stored.key)) }
+              catch { throw new Error('无法核对这份本地草稿。请重新打开文档后重试。') }
+              if (JSON.stringify(latest) !== JSON.stringify(stored.draft)) {
+                throw new Error('这份本地草稿已变化。请重新打开文档，核对最新内容。')
+              }
+              try { localStorage.removeItem(stored.key) }
+              catch { throw new Error('浏览器未能删除这份草稿。请稍后重试。') }
               setRecoveryDraft(null)
               recoveryActionsRef.current = null
               draftReady = true
@@ -812,7 +820,10 @@ export default function useQuillCollab(docId) {
     refreshTitle: () => refreshTitleRef.current?.(),
     retryLoad: () => { if (connection === '加载失败') setLoadAttempt(value => value + 1) },
     recoverDraft: () => recoveryActionsRef.current?.recover(),
-    discardDraft: () => recoveryActionsRef.current?.discard(),
+    discardDraft: () => {
+      if (!recoveryActionsRef.current) throw new Error('这份草稿已变化。请重新打开文档后核对。')
+      recoveryActionsRef.current.discard()
+    },
     canRestoreHistory: () => Boolean(historyReadyRef.current?.()),
     canExportDocument: () => Boolean(exportReadyRef.current?.()),
     documentFindState,

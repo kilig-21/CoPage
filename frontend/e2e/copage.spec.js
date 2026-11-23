@@ -695,6 +695,12 @@ test('two accounts converge and recover a draft after losing the connection', as
     await localDrafts.getByRole('button', { name: '继续处理此文档' }).press('Enter')
     const choice = recovered.getByRole('dialog', { name: '发现未确认的本地编辑' })
     await expect(choice).toBeVisible()
+    const discard = choice.getByRole('button', { name: '丢弃本地草稿' })
+    await discard.press('Enter')
+    const confirmation = recovered.getByRole('dialog', { name: '丢弃这份本地草稿？' })
+    await expect(confirmation.getByRole('button', { name: '保留草稿' })).toBeFocused()
+    await recovered.keyboard.press('Escape')
+    await expect(discard).toBeFocused()
     await choice.getByRole('button', { name: '恢复草稿并同步' }).click()
     await expect(saved(recovered)).toHaveText('所有修改已保存')
     const expected = 'Owner edit Member edit Recovered edit'

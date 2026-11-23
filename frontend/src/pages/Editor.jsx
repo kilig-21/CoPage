@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeftOutlined, CloudOutlined, DownOutlined, EditOutlined, ExclamationCircleOutlined, FontSizeOutlined, LockOutlined, MoreOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons'
-import { Alert, Avatar, Button, Dropdown, Layout, Modal, Popover, Space, Tag, Tooltip, Typography } from 'antd'
+import { Alert, Avatar, Button, Dropdown, Layout, Popover, Space, Tag, Tooltip, Typography } from 'antd'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { documentHref, documentReturn } from '../navigation/documents'
 import useQuillCollab from '../editor/useQuillCollab'
@@ -17,6 +17,7 @@ import ShareModal from '../components/ShareModal'
 import { draftRecordsJson } from '../editor/draftRecords'
 import { downloadTextFile } from '../editor/downloadTextFile'
 import DraftBackupDownloads from '../components/DraftBackupDownloads'
+import DraftRecoveryModal from '../components/DraftRecoveryModal'
 import DocumentFindPanel from '../components/DocumentFindPanel'
 import DocumentImagesModal from '../components/DocumentImagesModal'
 import LazyUserGuide from '../components/LazyUserGuide'
@@ -356,17 +357,8 @@ export default function Editor() {
       {showPrint && permission > 0 && <PrintModal docId={docId}
         canPrint={() => permission > 0 && !recoveryDraft && canExportDocument()}
         onClose={() => setShowPrint(false)} />}
-      <Modal title="发现未确认的本地编辑" open={Boolean(recoveryDraft)} closable={false}
-        maskClosable={false} keyboard={false} onCancel={() => undefined}
-        footer={[
-          <Button key="discard" danger onClick={discardDraft}>丢弃本地草稿</Button>,
-          <Button key="later" onClick={returnToSource}>稍后处理</Button>,
-          <Button key="recover" type="primary" disabled={permission !== 2} onClick={recoverDraft}>恢复草稿并同步</Button>,
-        ]}>
-        <Typography.Paragraph>这份草稿可能包含服务端尚未确认的修改。恢复前不会自动重发，也不会覆盖本地草稿。</Typography.Paragraph>
-        {permission !== 2 && <Typography.Paragraph>当前没有编辑权限，暂时不能同步这份草稿。可以先下载副本或稍后处理，草稿会继续保留。</Typography.Paragraph>}
-        {recoveryDraft && <DraftBackupDownloads key={`${docId}:${recoveryDraft.savedAt}`} backup={recoveryDraft} />}
-      </Modal>
+      {recoveryDraft && <DraftRecoveryModal key={`${docId}:${recoveryDraft.savedAt}`} draft={recoveryDraft} editable={permission === 2}
+        onDiscard={discardDraft} onLater={returnToSource} onRecover={recoverDraft} />}
     </Layout>
   )
 }
