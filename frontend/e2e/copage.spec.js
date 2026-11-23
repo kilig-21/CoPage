@@ -932,6 +932,78 @@ test('trash removes a document from the list and restores the same document and 
   await expect(editor(page)).toHaveText('Recover me from trash')
 })
 
+test('print preview follows the active image node and recovers from a failed image read', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  const token = await page.evaluate(() => localStorage.getItem('collab-token'))
+  const headers = { Authorization: 'Bearer ' + token }
+  const checker = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAqklEQVR4nO3XsQlCQRAA0dnpxQosxXYMjezJEj72YgU2oJHBOXAvXDY4OFiYeT3vfHK+nT/Oj+vxV/sSJ3ESJ3ESJ3ESN6fLI3Hvjy/7+R+QOImTOImTOImb3QOLSZzESZzESZzEze6BxSRO4iRO4iRO4mb3wGISJ3ESJ3ESJ3Gze2AxiZM4iZM4iZO42T2wmMRJnMRJnMRJ3OweWEziJE7iJE7iXP2AX70Bq9JieVC1JQMAAAAASUVORK5CYII=',
+    'base64',
+  )
+  const upload = await request.post(`${backend}/api/upload/image`, {
+    headers, multipart: { file: { name: 'checker.png', mimeType: 'image/png', buffer: checker } },
+  })
+  expect(upload.status()).toBe(200)
+  const imageUrl = (await upload.json()).data.url
+  const source = {
+    format: 'copage', version: 1, title: 'Print image fixture',
+    content: { ops: [{ insert: 'Saved content\n' }, { insert: { image: imageUrl } }, { insert: '\n' }] },
+  }
+  const imported = await request.post(`${backend}/api/doc/import`, {
+    headers, multipart: {
+      file: { name: 'print.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) },
+    },
+  })
+  expect(imported.status()).toBe(200)
+  const documentId = (await imported.json()).data.id
+  const dialog = page.getByRole('dialog', { name: '打印 / 另存为 PDF' })
+  const image = dialog.locator('.document-print-sheet .ql-editor img')
+  const print = dialog.getByRole('button', { name: '打开打印窗口' })
+  const refresh = dialog.getByRole('button', { name: '刷新预览' })
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: width === 320 ? 640 : 850 })
+    await page.goto(`/docs/${documentId}`)
+    await expect(saved(page)).toHaveText('所有修改已保存')
+    await expect(editor(page).locator('img')).toHaveJSProperty('naturalWidth', 64)
+
+    let release
+    const held = new Promise(resolve => { release = resolve })
+    await page.route('**/api/images/**', async route => {
+      await held
+      await route.continue()
+    }, { times: 1 })
+    try {
+      await tool(page, '打印 / PDF')
+      await expect(dialog.getByText('正在加载打印图片…')).toBeVisible()
+      await expect(print).toBeDisabled()
+      // Preview initialization can replace an image after the print modal starts listening.
+      await image.evaluate(node => node.replaceWith(node.cloneNode(true)))
+    } finally {
+      release()
+    }
+    await expect(image).toHaveJSProperty('naturalWidth', 64)
+    await expect(print).toBeEnabled({ timeout: 4_000 })
+
+    await page.route('**/api/images/**', route => route.fulfill({
+      status: 503, json: { code: 503, message: '服务暂不可用' },
+    }), { times: 1 })
+    await refresh.press('Enter')
+    const missing = dialog.getByRole('alert').filter({ hasText: '1 张图片未能加载' })
+    await expect(missing).toBeVisible({ timeout: 4_000 })
+    await expect(print).toBeDisabled()
+    await missing.getByRole('checkbox').press('Space')
+    await expect(print).toBeEnabled()
+
+    await refresh.press('Enter')
+    await expect(image).toHaveJSProperty('naturalWidth', 64)
+    await expect(missing).toBeHidden()
+    await expect(print).toBeEnabled({ timeout: 4_000 })
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+  }
+})
+
 test('print preview, real export download, and import into a separate document', async ({ page, request }, testInfo) => {
   await login(page, await createAccount(request))
   const original = await createDocument(page)

@@ -59,29 +59,36 @@ export default function PrintModal({ docId, canPrint, onClose }) {
     return () => controller.abort()
   }, [docId, attempt, request])
   useEffect(() => {
-    if (!snapshot || !sheet.current) return undefined
-    const images = [...sheet.current.querySelectorAll('img')]
-    const pending = new Set(images.filter(image => !image.complete || image.hasAttribute(IMAGE_PENDING)))
-    let timer
-    const finish = () => {
-      if (pending.size) return
-      clearTimeout(timer)
-      setMissingImages(images.filter(image => !image.complete || !image.naturalWidth).length)
-      setAssetsReady(true)
+    const preview = sheet.current
+    if (!snapshot || !preview) return undefined
+    let expired = false
+    const refreshAssets = () => {
+      const content = preview.querySelector('.ql-editor')
+      if (!content) return
+      let pending = false
+      let missing = 0
+      for (const image of content.querySelectorAll('img')) {
+        const loading = !image.complete || image.hasAttribute(IMAGE_PENDING)
+        pending ||= loading
+        if (loading || !image.naturalWidth) missing++
+      }
+      const settled = !pending || expired
+      setMissingImages(settled ? missing : 0)
+      setAssetsReady(settled)
     }
-    const settled = event => { pending.delete(event.currentTarget); finish() }
-    images.forEach(image => {
-      image.addEventListener('load', settled)
-      image.addEventListener('error', settled)
-    })
-    timer = setTimeout(() => { pending.clear(); finish() }, 10_000)
-    finish()
+
+    // The preview can replace its image nodes while initializing. Read the live DOM on each notification.
+    const observer = new MutationObserver(refreshAssets)
+    observer.observe(preview, { childList: true, subtree: true, attributes: true, attributeFilter: [IMAGE_PENDING, 'src'] })
+    preview.addEventListener('load', refreshAssets, true)
+    preview.addEventListener('error', refreshAssets, true)
+    const timer = setTimeout(() => { expired = true; refreshAssets() }, 10_000)
+    refreshAssets()
     return () => {
       clearTimeout(timer)
-      images.forEach(image => {
-        image.removeEventListener('load', settled)
-        image.removeEventListener('error', settled)
-      })
+      observer.disconnect()
+      preview.removeEventListener('load', refreshAssets, true)
+      preview.removeEventListener('error', refreshAssets, true)
     }
   }, [snapshot])
 
