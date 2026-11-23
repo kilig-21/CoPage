@@ -8,6 +8,7 @@ import { usePageRequest } from '../auth/PageSessionContext'
 import { requestFailureMessage } from '../api/requestError'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import SearchExcerpt from '../components/SearchExcerpt'
+import { searchTitleParts } from '../search/snippet'
 import WorkspacePageHeading from '../components/WorkspacePageHeading'
 
 const PAGE_SIZE = 10
@@ -118,8 +119,10 @@ export default function Search() {
         {results.length > 0 && <List rowKey="id" dataSource={results}
           pagination={ready && total > PAGE_SIZE ? { current: page, pageSize: PAGE_SIZE, total: Math.min(total, 10000), showSizeChanger: false, responsive: true, showLessItems: true, onChange: (next) => changePage(next) } : false}
           renderItem={item => <List.Item className="search-result-item">
-            <h2 className="search-result-title"><Link to={documentHref(item.id, sourcePath)} data-document-id={item.id}>
-              <span>{item.title}</span><ArrowRightOutlined aria-hidden="true" />
+            <h2 className="search-result-title"><Link to={documentHref(item.id, sourcePath)} data-document-id={item.id} aria-label={item.title}>
+              <span className="search-result-title-text">{searchTitleParts(item.title, query).map((part, index) =>
+                part.highlighted ? <mark key={index}>{part.text}</mark> : part.text)}</span>
+              <ArrowRightOutlined aria-hidden="true" />
             </Link></h2>
             <SearchExcerpt snippet={item.snippet} title={item.title} />
             <div className="search-result-metadata">

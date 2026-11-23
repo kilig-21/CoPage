@@ -78,6 +78,11 @@ body { margin: 0; min-width: 0; }
   min-height: 44px; padding: 4px 0; color: var(--cp-ink); overflow-wrap: anywhere;
 }
 .search-result-title a:hover { color: var(--cp-accent); }
+.search-result-title-text {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  min-width: 0; overflow: hidden;
+}
+.search-result-title mark { color: inherit; background: var(--cp-accent-soft); }
 .search-result-title a .anticon { color: var(--cp-accent); flex: none; font-size: 14px; transition: transform 160ms ease; }
 .search-result-title a:hover .anticon { transform: translateX(3px); }
 .search-loading, .search-empty-hint { margin: 0; padding: 20px 0; border-top: 1px solid var(--cp-line); color: var(--cp-muted); }
