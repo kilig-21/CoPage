@@ -242,10 +242,19 @@ body { margin: 0; min-width: 0; }
   .history-drawer .ant-drawer-close { width: 44px; min-height: 44px; margin-inline-end: 8px; }
 }
 
-.document-find-panel { position: sticky; top: 12px; z-index: 3; margin-top: 16px; padding: 16px; background: #fff; border: 1px solid #e8ecf3; border-radius: 8px; }
-.document-find-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
-.document-find-row:first-child { justify-content: space-between; }
+.document-find-panel { position: sticky; top: 12px; z-index: 3; display: grid; gap: 8px; margin-top: 16px; padding: 12px 16px;
+  background: var(--cp-surface); border: 1px solid var(--cp-line); border-radius: var(--cp-radius-panel); }
+.document-find-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.document-find-main { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title actions" "query navigation";
+  align-items: center; gap: 8px; }
+.document-find-title { grid-area: title; }
+.document-find-query { grid-area: query; min-width: 0; }
+.document-find-actions { grid-area: actions; justify-self: end; }
 .document-find-field { flex: 1 1 260px; min-width: 0; }
+.document-find-navigation { grid-area: navigation; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.document-find-navigation .ant-btn { flex: none; }
+.document-find-count { flex: 1; }
+.document-find-replacement:not([hidden]) { display: grid; gap: 8px; padding-top: 8px; border-top: 1px solid var(--cp-line); }
 :root::highlight(copage-document-find-current) { background-color: #fde68a; color: #172033; }
 
 .document-print-sheet { margin-top: 20px; padding: 28px; border: 1px solid #e8ecf3; background: #fff; color: #172033; overflow-wrap: anywhere; max-height: 55vh; overflow-y: auto; }

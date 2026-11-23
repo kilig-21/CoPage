@@ -36,6 +36,7 @@ export default function Editor() {
   const statusRef = useRef(null)
   const toolsButtonRef = useRef(null)
   const shareButtonRef = useRef(null)
+  const findButtonRef = useRef(null)
   const titleButtonRef = useRef(null)
   useEditorStickyOffsets(topbarRef, statusRef)
   const [renameEntry, setRenameEntry] = useState(null)
@@ -191,7 +192,10 @@ export default function Editor() {
   function closeFind() {
     closeDocumentFind()
     setShowFind(false)
-    queueMicrotask(focusDocumentEditor)
+    queueMicrotask(() => {
+      if (permission === 2) focusDocumentEditor()
+      if (permission === 1 || document.activeElement === document.body) findButtonRef.current?.focus({ preventScroll: true })
+    })
   }
   useEffect(() => {
     const shortcut = event => {
@@ -236,7 +240,7 @@ export default function Editor() {
           </div>
         </div>
         <Space className="editor-actions" size={4}>
-          {permission > 0 && <Tooltip title="文档内查找（Ctrl/⌘+F）"><Button type="text" aria-label="文档内查找"
+          {permission > 0 && <Tooltip title="文档内查找（Ctrl/⌘+F）"><Button ref={findButtonRef} type="text" aria-label="文档内查找"
             icon={<SearchOutlined aria-hidden="true" />} onClick={openFind}><span className="editor-action-label">查找</span></Button></Tooltip>}
           {permission > 0 && <Tooltip title="分享链接"><Button ref={shareButtonRef} type="text" aria-label="分享链接" icon={<ShareAltOutlined aria-hidden="true" />}
             onClick={() => setSharing(true)}><span className="editor-action-label">分享</span></Button></Tooltip>}
@@ -263,7 +267,7 @@ export default function Editor() {
         </div>
         {titleError && <Alert className="editor-alert" type="warning" message={titleError}
           action={<Button onClick={refreshTitle}>重试标题</Button>} />}
-        {permission === 1 && <Alert className="editor-alert" type="info" showIcon message="你拥有只读权限，不能修改此文档" />}
+        {permission === 1 && (!showFind || !isConnected) && <Alert className="editor-alert" type="info" showIcon message="你拥有只读权限，不能修改此文档" />}
         {skippedDraftNotice && <Alert className="editor-alert editor-draft-notice" type="info" showIcon
           message="打开文档时发现其他标签的本地草稿，本页未接管"
           description="请回原标签或工作台的本地草稿核对。本页显示的保存状态仅针对本页编辑；关闭此提示不会删除草稿。"
@@ -285,7 +289,7 @@ export default function Editor() {
             <Button onClick={returnToSource}>稍后处理，{returnTarget.label}</Button></>} />}
         {showFind && permission > 0 && <DocumentFindPanel state={documentFindState} permission={permission}
           focusEpoch={findFocusEpoch} onQuery={queryDocument} onNext={nextDocumentMatch}
-          onReplace={replaceDocumentMatch} onClose={closeFind} />}
+          onReplace={replaceDocumentMatch} onReveal={revealDocumentMatch} onClose={closeFind} />}
         <section className="editor-canvas">
           <div className="editor-writing-column" data-format-available={permission === 2} data-format-expanded={formatExpanded} data-find-open={showFind}>
             <div className="editor-format-controls">

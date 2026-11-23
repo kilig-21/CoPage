@@ -377,6 +377,42 @@ test('the complete title opens in the viewport with reduced motion enabled', asy
   }
 })
 
+test('document find leaves room to read and opens replacement only when requested', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  await createDocument(page)
+  await append(page, '地点交接记录。另一个地点交接。')
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: width === 320 ? 480 : 850 })
+    await page.getByRole('button', { name: '文档内查找', exact: true }).press('Enter')
+    const find = page.getByRole('region', { name: '文档内查找与替换' })
+    const query = find.getByRole('textbox', { name: '查找本文文字' })
+    await expect(query).toBeFocused()
+    await query.fill('地点交接')
+    await expect(find.getByRole('status')).toHaveText('1 / 2')
+    const spaceBelow = await find.evaluate(element => window.innerHeight - element.getBoundingClientRect().bottom)
+    expect(spaceBelow).toBeGreaterThanOrEqual(200)
+    if (width === 320) {
+      await expect(find.getByRole('button', { name: '下一处' }).locator('.document-find-step-label')).toBeHidden()
+    }
+    await query.press('Enter')
+    await expect(find.getByRole('status')).toHaveText('2 / 2')
+    await query.press('Shift+Enter')
+    await expect(find.getByRole('status')).toHaveText('1 / 2')
+
+    const replacement = find.getByRole('textbox', { name: '替换为' })
+    await expect(replacement).toHaveCount(0)
+    await find.getByRole('button', { name: '替换', exact: true }).press('Enter')
+    await expect(replacement).toBeFocused()
+    await find.getByRole('button', { name: '收起替换', exact: true }).press('Enter')
+    await expect(replacement).toHaveCount(0)
+    await expect(query).toHaveValue('地点交接')
+    await page.keyboard.press('Escape')
+    await expect(find).toBeHidden()
+    await expect(editor(page)).toBeFocused()
+  }
+})
+
 test('formatting a selection deep in a document keeps it in view at desktop and narrow widths', async ({ page, request }) => {
   await login(page, await createAccount(request))
   await createDocument(page)
