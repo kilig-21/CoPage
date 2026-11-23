@@ -844,6 +844,9 @@ export default function useQuillCollab(docId) {
     queryDocument: (query, caseSensitive, selectMatches) => documentFindRef.current?.setQuery(query, caseSensitive, selectMatches),
     nextDocumentMatch: step => documentFindRef.current?.next(step),
     replaceDocumentMatch: (replacement, all) => documentFindRef.current?.replace(replacement, all),
-    focusDocumentEditor: () => quillRef.current?.focus(),
+    focusDocumentEditor: ({ onlyBlank = false } = {}) => {
+      const quill = quillRef.current
+      if (!onlyBlank || (quill?.isEnabled() && quill.getLength() === 1)) quill?.focus()
+    },
   }
 }

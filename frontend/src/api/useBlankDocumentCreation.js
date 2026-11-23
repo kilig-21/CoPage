@@ -26,12 +26,13 @@ export default function useBlankDocumentCreation() {
     }
   }, [location.key])
 
-  function openCreatedDocument(data) {
-    navigate(documentHref(data.id, sourcePath))
+  function openCreatedDocument(data, focusBody = false) {
+    navigate(documentHref(data.id, sourcePath), focusBody ? { state: { focusNewDocument: data.id } } : undefined)
   }
 
-  async function createBlankDocument() {
+  async function createBlankDocument(event) {
     if (attempt.current) return
+    const focusBody = event?.detail === 0
     const controller = new AbortController()
     attempt.current = controller
     setCreating(true)
@@ -42,7 +43,7 @@ export default function useBlankDocumentCreation() {
       })
       if (controller.signal.aborted) return
       warnTracking(response)
-      openCreatedDocument(response.data)
+      openCreatedDocument(response.data, focusBody)
     } catch (error) {
       if (controller.signal.aborted) return
       const detail = requestFailureMessage(error, '')

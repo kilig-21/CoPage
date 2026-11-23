@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeftOutlined, CloudOutlined, DownOutlined, EditOutlined, ExclamationCircleOutlined, FontSizeOutlined, LockOutlined, MoreOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons'
 import { Alert, Avatar, Button, Dropdown, Layout, Modal, Popover, Space, Tag, Tooltip, Typography } from 'antd'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useNavigationType, useParams } from 'react-router-dom'
 import { documentHref, documentReturn } from '../navigation/documents'
 import useQuillCollab from '../editor/useQuillCollab'
 import useEditorStickyOffsets from '../editor/useEditorStickyOffsets'
@@ -32,6 +32,7 @@ export default function Editor() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  const navigationType = useNavigationType()
   const returnTarget = documentReturn(location.search)
   const docId = Number(id)
   const topbarRef = useRef(null)
@@ -41,6 +42,7 @@ export default function Editor() {
   const findButtonRef = useRef(null)
   const titleButtonRef = useRef(null)
   const permissionDraftButtonRef = useRef(null)
+  const handledWritingFocus = useRef(null)
   useEditorStickyOffsets(topbarRef, statusRef)
   const [renameEntry, setRenameEntry] = useState(null)
   const [sharing, setSharing] = useState(false)
@@ -73,6 +75,13 @@ export default function Editor() {
   const isConnected = connection === '已连接'
   const loadFailed = connection === '加载失败'
   const awaitingDocument = permission === 0 && ['未连接', '加载中'].includes(connection)
+  const writingFocusRequested = navigationType === 'PUSH' && location.state?.focusNewDocument === docId
+  useEffect(() => {
+    if (!writingFocusRequested || handledWritingFocus.current === location.key || !isConnected
+        || permission !== 2 || recoveryDraft || !canExportDocument()) return
+    handledWritingFocus.current = location.key
+    if (document.activeElement === document.body) focusDocumentEditor({ onlyBlank: true })
+  }, [writingFocusRequested, location.key, isConnected, permission, recoveryDraft, canExportDocument, focusDocumentEditor])
   const accessDenied = loadFailed && loadErrorCode === 403
   const deniedAccount = accessDenied && pageSession.current() ? pageSession.identity.account : null
   const loadFailureTitle = accessDenied ? '当前账号没有访问权限' : loadErrorCode === 404 ? '找不到这篇文档' : '文档加载失败'

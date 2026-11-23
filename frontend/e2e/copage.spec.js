@@ -308,6 +308,46 @@ test('create, approximate composition in Quill, and reload the saved document', 
   await expect(editor(page)).toContainText('Saved text 中文组合输入样例')
 })
 
+test('keyboard creation starts writing without jumping away from a control during sync', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  for (const [width, source, key] of [[1280, '/home', 'Enter'], [320, '/docs', 'Space']]) {
+    await page.setViewportSize({ width, height: width === 320 ? 640 : 850 })
+    await page.goto(source)
+    await page.getByRole('button', { name: '新建文档', exact: true }).press(key)
+    await expect(editor(page)).toBeFocused()
+    await page.keyboard.insertText('Keyboard-created document ' + width)
+    await expect(saved(page)).toHaveText('所有修改已保存')
+    await page.keyboard.press('Shift+Tab')
+    await expect(editor(page)).not.toBeFocused()
+    await page.reload()
+    await expect(saved(page)).toHaveText('所有修改已保存')
+    await expect(editor(page)).toHaveText('Keyboard-created document ' + width)
+    await expect(editor(page)).not.toBeFocused()
+  }
+
+  let releaseSync
+  const heldSync = new Promise(resolve => { releaseSync = resolve })
+  await page.routeWebSocket('**/ws/collab', socket => {
+    const server = socket.connectToServer()
+    server.onMessage(async frame => {
+      if (JSON.parse(frame).type === 'sync') await heldSync
+      socket.send(frame)
+    })
+  })
+  await page.goto('/home')
+  await page.getByRole('button', { name: '新建文档', exact: true }).press('Enter')
+  const back = page.getByRole('button', { name: '返回工作台' })
+  try {
+    await expect(back).toBeVisible()
+    await page.keyboard.press('Tab')
+    await expect(back).toBeFocused()
+  } finally {
+    releaseSync()
+  }
+  await expect(saved(page)).toHaveText('所有修改已保存')
+  await expect(back).toBeFocused()
+})
+
 test('name a new document from the editor title on desktop and narrow screens', async ({ page, request }) => {
   await login(page, await createAccount(request))
 
