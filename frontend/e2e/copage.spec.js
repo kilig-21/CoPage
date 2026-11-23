@@ -521,6 +521,41 @@ test('search returns a saved document from a body-only keyword', async ({ page, 
   await expect(editor(page)).toContainText(marker)
 })
 
+test('document menus and deletion confirmation stay on screen with reduced motion', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  await createDocument(page)
+  const docTitle = 'Popup fixture ' + fresh()
+  await rename(page, docTitle)
+  const docUrl = page.url()
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 850 })
+    await page.goto(docUrl)
+    await expect(title(page)).toHaveText(docTitle)
+    await page.getByRole('button', { name: '更多文档操作' }).press('Enter')
+    const editTitle = page.getByRole('menuitem', { name: '重命名', exact: true })
+    await expect(editTitle).toBeInViewport({ ratio: 1 })
+    await editTitle.press('Escape')
+    await expect(editTitle).toBeHidden()
+    await page.getByRole('button', { name: '返回文档列表' }).press('Enter')
+
+    const entry = page.getByRole('link', { name: docTitle, exact: true })
+    const row = page.locator('.ant-list-item').filter({ has: entry })
+    await row.getByRole('button', { name: '更多操作：' + docTitle }).press('Enter')
+    const copy = page.getByRole('menuitem', { name: '创建副本', exact: true })
+    await expect(copy).toBeInViewport({ ratio: 1 })
+    await copy.press('Escape')
+    await expect(copy).toBeHidden()
+    await row.getByRole('button', { name: '删除', exact: true }).press('Enter')
+    const cancel = page.locator('.document-action-confirm').getByRole('button', { name: /^取\s*消$/ })
+    await expect(cancel).toBeInViewport({ ratio: 1 })
+    await cancel.press('Enter')
+    await expect(cancel).toBeHidden()
+    await expect(entry).toBeVisible()
+  }
+})
+
 test('trash removes a document from the list and restores the same document and content', async ({ page, request }) => {
   await login(page, await createAccount(request))
   const docId = await createDocument(page)

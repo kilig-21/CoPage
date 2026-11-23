@@ -16,9 +16,6 @@
 .editor-workspace .editor-title-edit-icon { flex: none; color: var(--cp-accent); font-size: 13px; }
 .editor-title-popover { max-width: min(320px, calc(100vw - 24px)); }
 .editor-title-popover .ant-popover-inner { max-height: calc(100dvh - 88px); overflow-y: auto; }
-@media (prefers-reduced-motion: reduce) {
-  .editor-title-popover { transition-property: none !important; }
-}
 .editor-full-title { margin: 0; color: var(--cp-ink); font-size: var(--cp-type-body); line-height: var(--cp-leading-body); overflow-wrap: anywhere; }
 .editor-workspace .editor-topbar .ant-btn { min-height: var(--cp-control-height); }
 .editor-workspace .editor-actions { flex-shrink: 0; }
