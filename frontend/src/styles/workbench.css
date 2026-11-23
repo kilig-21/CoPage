@@ -157,6 +157,12 @@
   .workbench .cp-workspace-counts { column-gap: 18px; }
   .workbench .cp-workbench-secondary { margin-top: 24px; }
 }
+@media (max-width: 640px) and (max-height: 560px) {
+  .workbench { padding-top: var(--cp-space-4); }
+  .cp-workbench-heading { padding-block: var(--cp-space-4); margin-bottom: var(--cp-space-4); }
+  .cp-workbench-greeting { margin-top: var(--cp-space-2); }
+  .cp-workbench-actions { row-gap: var(--cp-space-1); margin-top: var(--cp-space-3); }
+}
 @media (prefers-reduced-motion: reduce) {
   .cp-recent-link,
   .cp-recent-arrow { transition: none; }
