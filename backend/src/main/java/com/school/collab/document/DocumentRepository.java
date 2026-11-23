@@ -14,12 +14,36 @@ import java.util.Optional;
 @Repository
 public class DocumentRepository {
     private static final String DELETED_OWNED_FILTER = "owner_id = ? AND is_deleted = 1 AND (? = '' OR LOCATE(?, title) > 0)";
-    private static final String VISIBLE_FILTER = """
-            d.is_deleted = 0 AND
-            (d.owner_id = ? OR c.user_id IS NOT NULL)
-            AND (? = '' OR LOCATE(?, d.title) > 0)
-            AND (? = 'all' OR (? = 'owned' AND d.owner_id = ?)
-                 OR (? = 'shared' AND d.owner_id <> ?))
+    private static final String VISIBLE_OWNED = """
+            FROM document d
+            WHERE ? IN ('all', 'owned') AND d.owner_id = ? AND d.is_deleted = 0
+              AND (? = '' OR LOCATE(?, d.title) > 0)
+            """;
+    private static final String VISIBLE_SHARED = """
+            FROM doc_collaborator c JOIN document d ON d.id = c.doc_id
+            WHERE ? IN ('all', 'shared') AND c.user_id = ? AND d.owner_id <> ? AND d.is_deleted = 0
+              AND (? = '' OR LOCATE(?, d.title) > 0)
+            """;
+    private static final String COUNT_VISIBLE = """
+            SELECT SUM(total) FROM (
+                SELECT COUNT(*) AS total
+            """ + VISIBLE_OWNED + """
+                UNION ALL
+                SELECT COUNT(*)
+            """ + VISIBLE_SHARED + """
+            ) AS visible_counts
+            """;
+    private static final String LIST_VISIBLE = """
+            SELECT d.id, d.title, d.owner_id, u.nickname AS owner_name, d.parent_id, d.update_time, d.permission
+            FROM (
+                SELECT d.id, d.title, d.owner_id, d.parent_id, d.update_time, 2 AS permission
+            """ + VISIBLE_OWNED + """
+                UNION ALL
+                SELECT d.id, d.title, d.owner_id, d.parent_id, d.update_time, c.permission
+            """ + VISIBLE_SHARED + """
+            ) AS d JOIN user u ON u.id = d.owner_id
+            ORDER BY d.update_time DESC, d.id DESC
+            LIMIT ? OFFSET ?
             """;
     private static final RowMapper<DocumentRow> ROW_MAPPER = (rs, rowNum) -> new DocumentRow(
             rs.getLong("id"),
@@ -118,28 +142,17 @@ public class DocumentRepository {
     public record CollaboratorView(long userId, String username, String nickname, int permission) { }
 
     public long countVisible(long userId, String keyword, String scope) {
-        return jdbc.queryForObject(
-                "SELECT COUNT(*) FROM document d LEFT JOIN doc_collaborator c ON c.doc_id=d.id AND c.user_id=? WHERE " + VISIBLE_FILTER,
-                Long.class, userId, userId, keyword, keyword, scope, scope, userId, scope, userId);
+        return jdbc.queryForObject(COUNT_VISIBLE, Long.class,
+                scope, userId, keyword, keyword, scope, userId, userId, keyword, keyword);
     }
 
-    /** 列表只取摘要；成员权限与正文可见性在同一次查询中计算，避免逐篇补查。 */
+    /** 先从所有者和授权索引收集可见摘要，再统一排序分页。 */
     public List<VisibleSummaryRow> listVisible(long userId, String keyword, String scope, int page, int size) {
         long offset = ((long) page - 1) * size;
-        return jdbc.query("""
-                SELECT d.id, d.title, d.owner_id,
-                       u.nickname AS owner_name, d.parent_id, d.update_time,
-                       CASE WHEN d.owner_id = ? THEN 2 ELSE c.permission END AS permission
-                FROM document d JOIN user u ON u.id = d.owner_id
-                LEFT JOIN doc_collaborator c ON c.doc_id = d.id AND c.user_id = ?
-                WHERE
-                """ + VISIBLE_FILTER + """
-                ORDER BY d.update_time DESC, d.id DESC
-                LIMIT ? OFFSET ?
-                """, (rs, index) -> new VisibleSummaryRow(rs.getLong("id"), rs.getString("title"),
+        return jdbc.query(LIST_VISIBLE, (rs, index) -> new VisibleSummaryRow(rs.getLong("id"), rs.getString("title"),
                 rs.getLong("owner_id"), rs.getString("owner_name"), rs.getLong("parent_id"),
                 rs.getObject("update_time", LocalDateTime.class), rs.getInt("permission")),
-                userId, userId, userId, keyword, keyword, scope, scope, userId, scope, userId, size, offset);
+                scope, userId, keyword, keyword, scope, userId, userId, keyword, keyword, size, offset);
     }
 
     public record VisibleSummaryRow(long id, String title, long ownerId, String ownerName,

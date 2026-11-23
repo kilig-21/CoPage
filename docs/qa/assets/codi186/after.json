@@ -1,0 +1,22 @@
+{
+  "workbench": {
+    "p50Ms": 7.92,
+    "p95Ms": 33.54,
+    "responseSha256": "028627021db5e4f7fc8ee243542e13f634b80c6dfa48314aa5ce760bd590fc27"
+  },
+  "all": {
+    "p50Ms": 6.7,
+    "p95Ms": 49.03,
+    "responseSha256": "1a2d0418f34360501620a984e771e04aebe9ec914dd9766def989125af4b5d4f"
+  },
+  "shared": {
+    "p50Ms": 6.54,
+    "p95Ms": 31.11,
+    "responseSha256": "3468ea0f52ce33ff4ec1385bfbfa6012ff2f60d368afc7ef81deb943f413c7d4"
+  },
+  "ownedLiteral": {
+    "p50Ms": 6.24,
+    "p95Ms": 10.01,
+    "responseSha256": "fd156034e960fdc01087a2f0a66450c1fc41ac65e712beec1ab45789beab0626"
+  }
+}

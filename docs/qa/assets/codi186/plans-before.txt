@@ -1,0 +1,18 @@
+-> Aggregate: count(0)  (cost=14574 rows=1) (actual time=74.6..74.6 rows=1 loops=1)
+    -> Filter: ((d.owner_id = <cache>((@`account`))) or (c.user_id is not null))  (cost=13585 rows=9891) (actual time=0.0519..74.6 rows=54 loops=1)
+        -> Nested loop left join  (cost=13585 rows=9891) (actual time=0.0512..70.7 rows=100035 loops=1)
+            -> Filter: (d.is_deleted = 0)  (cost=10123 rows=9891) (actual time=0.0434..24.7 rows=100035 loops=1)
+                -> Table scan on d  (cost=10123 rows=98906) (actual time=0.0424..20.4 rows=100037 loops=1)
+            -> Single-row covering index lookup on c using uk_doc_collaborator_doc_user (doc_id=d.id, user_id=(@`account`))  (cost=0.25 rows=1) (actual time=388e-6..388e-6 rows=190e-6 loops=100035)
+
+-> Limit: 6 row(s)  (actual time=112..112 rows=6 loops=1)
+    -> Sort: d.update_time DESC, d.id DESC, limit input to 6 row(s) per chunk  (actual time=112..112 rows=6 loops=1)
+        -> Stream results  (cost=15571 rows=9891) (actual time=42.1..112 rows=54 loops=1)
+            -> Filter: ((d.owner_id = <cache>((@`account`))) or (c.user_id is not null))  (cost=15571 rows=9891) (actual time=42.1..112 rows=54 loops=1)
+                -> Nested loop left join  (cost=15571 rows=9891) (actual time=39..107 rows=100035 loops=1)
+                    -> Inner hash join (u.id = d.owner_id)  (cost=12109 rows=9891) (actual time=39..53.2 rows=100035 loops=1)
+                        -> Table scan on u  (cost=829e-6 rows=2) (actual time=0.0202..0.0226 rows=2 loops=1)
+                        -> Hash
+                            -> Filter: (d.is_deleted = 0)  (cost=10123 rows=9891) (actual time=0.0312..27.3 rows=100035 loops=1)
+                                -> Table scan on d  (cost=10123 rows=98906) (actual time=0.0305..21.9 rows=100037 loops=1)
+                    -> Single-row index lookup on c using uk_doc_collaborator_doc_user (doc_id=d.id, user_id=(@`account`))  (cost=0.25 rows=1) (actual time=458e-6..458e-6 rows=190e-6 loops=100035)

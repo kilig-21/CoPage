@@ -195,7 +195,7 @@ if (process.argv.includes('--smoke') || fullSmoke) {
       }
       assert.deepEqual(
         sql('SELECT version FROM flyway_schema_history WHERE success ORDER BY installed_rank;').stdout.trim().split(/\r?\n/),
-        ['0', '1', '2', '3', '4', '5', '6', '7', '8'],
+        ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
       )
       const username = 'qa' + randomBytes(6).toString('hex')
       const password = secret()

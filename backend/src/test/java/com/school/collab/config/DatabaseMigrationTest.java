@@ -47,9 +47,12 @@ class DatabaseMigrationTest {
 
         context(clean).run(app -> assertThat(app).hasNotFailed());
         context(bootstrap).run(app -> assertThat(app).hasNotFailed());
-        assertThat(versions(cleanDb)).containsExactly("1", "2", "3", "4", "5", "6", "7", "8");
-        assertThat(versions(bootstrapDb)).containsExactly("0", "1", "2", "3", "4", "5", "6", "7", "8");
+        assertThat(versions(cleanDb)).containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9");
+        assertThat(versions(bootstrapDb)).containsExactly("0", "1", "2", "3", "4", "5", "6", "7", "8", "9");
         assertThat(createTable(cleanDb, "document")).isEqualTo(createTable(bootstrapDb, "document"));
+        assertThat(createTable(cleanDb, "doc_collaborator"))
+                .isEqualTo(createTable(bootstrapDb, "doc_collaborator"))
+                .contains("KEY `idx_doc_collaborator_user_doc` (`user_id`,`doc_id`)");
     }
 
     @Test
@@ -73,7 +76,7 @@ class DatabaseMigrationTest {
         var accounts = jdbc.queryForList("SELECT id, username, password, nickname, create_time FROM `user`");
 
         context(legacy).run(app -> assertThat(app).hasNotFailed());
-        assertThat(versions(jdbc)).containsExactly("0", "1", "2", "3", "4", "5", "6", "7", "8");
+        assertThat(versions(jdbc)).containsExactly("0", "1", "2", "3", "4", "5", "6", "7", "8", "9");
         assertThat(jdbc.queryForList("SELECT id,title,content,revision,owner_id,is_deleted,create_time,update_time FROM document"))
                 .isEqualTo(documents);
         assertThat(jdbc.queryForObject("SELECT search_version FROM document WHERE id=7002", Long.class)).isEqualTo(1L);
@@ -89,7 +92,7 @@ class DatabaseMigrationTest {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM doc_creation_receipt", Long.class)).isZero();
 
         context(legacy).run(app -> assertThat(app).hasNotFailed());
-        assertThat(versions(jdbc)).containsExactly("0", "1", "2", "3", "4", "5", "6", "7", "8");
+        assertThat(versions(jdbc)).containsExactly("0", "1", "2", "3", "4", "5", "6", "7", "8", "9");
     }
 
     @Test
