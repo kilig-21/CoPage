@@ -288,14 +288,26 @@ body { margin: 0; min-width: 0; }
 .document-print-sheet .ql-editor img { max-width: 100%; height: auto; }
 .document-print-sheet .ql-tooltip { display: none; }
 .document-print-controls .ant-alert { margin: 12px 0; }
-@media (max-width: 640px) { .document-print-sheet { padding: 16px; } }
+.document-print-help summary {
+  width: fit-content; min-height: 44px; padding-inline: var(--cp-space-2);
+  color: var(--cp-accent); line-height: 44px; cursor: pointer; border-radius: var(--cp-radius-control);
+}
+.document-print-help summary:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: -2px; }
+.document-print-help .ant-typography { margin: 0 0 var(--cp-space-2); }
+.document-print-empty { color: var(--cp-muted); }
+@media screen and (max-width: 640px) {
+  .document-print-sheet { padding: var(--cp-space-3); }
+  .document-print-sheet > h1 { margin-bottom: var(--cp-space-2); font-size: 20px; }
+  .document-print-meta { margin-bottom: var(--cp-space-3); }
+  .document-print-sheet .ql-snow .ql-editor > h2 { font-size: 1.375em; }
+}
 @media screen {
   .document-print-modal { top: 24px; padding-bottom: 24px; }
   .document-print-modal .ant-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); }
   .document-print-modal .ant-modal-header, .document-print-modal .ant-modal-footer { flex-shrink: 0; }
   .document-print-modal .ant-modal-title { padding-inline-end: 44px; overflow-wrap: anywhere; }
   .document-print-modal .ant-modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-  .document-print-modal .document-print-sheet { max-height: none; overflow-y: visible; }
+  .document-print-modal .document-print-sheet { margin-top: var(--cp-space-2); max-height: none; overflow-y: visible; }
   .document-print-modal .ant-modal-footer > .ant-space { justify-content: flex-end; }
   .document-print-modal .ant-btn { min-height: 44px; max-width: 100%; height: auto; white-space: normal; }
   .document-print-modal .ant-modal-close { width: 44px; height: 44px; }
@@ -309,7 +321,8 @@ body { margin: 0; min-width: 0; }
   .document-print-portal .ant-modal-header,
   .document-print-portal .ant-modal-footer,
   .document-print-portal .ant-modal-close,
-  .document-print-controls { display: none !important; }
+  .document-print-controls,
+  .document-print-empty { display: none !important; }
   .document-print-portal .ant-modal-root,
   .document-print-portal .ant-modal-wrap,
   .document-print-portal .ant-modal,

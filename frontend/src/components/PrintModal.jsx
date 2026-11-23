@@ -14,7 +14,7 @@ export default function PrintModal({ docId, canPrint, onClose }) {
     return node
   })
   const [snapshot, setSnapshot] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [printing, setPrinting] = useState(false)
   const [error, setError] = useState('')
   const [ready, setReady] = useState(() => canPrint())
@@ -124,6 +124,7 @@ export default function PrintModal({ docId, canPrint, onClose }) {
     return () => window.removeEventListener('keydown', shortcut)
   })
   const disabled = !ready || loading || printing || !snapshot || !assetsReady || (missingImages > 0 && !acceptMissing)
+  const empty = snapshot?.content.ops.every(({ insert }) => typeof insert === 'string' && !insert.trim())
   return <Modal className="document-print-modal" title="打印 / 另存为 PDF" open width={880} getContainer={portal} onCancel={onClose}
     footer={<Space wrap>
       <Button disabled={loading || printing || !ready} onClick={() => setAttempt(value => value + 1)}>刷新预览</Button>
@@ -131,9 +132,12 @@ export default function PrintModal({ docId, canPrint, onClose }) {
       <Button type="primary" disabled={disabled} loading={printing} onClick={print}>打开打印窗口</Button>
     </Space>}>
     <div className="document-print-controls">
-      <Typography.Paragraph>预览为已保存的固定版本，不随其他人的后续编辑变化。需要最新内容时请刷新预览；打印窗口中可选择“另存为 PDF”。纸张、页边距和页眉页脚由浏览器设置。</Typography.Paragraph>
-      <Typography.Paragraph type="secondary">不包含本地未确认草稿、成员权限或历史记录。图片不打包源文件；无法加载时请重试。关闭或取消打印不会修改文档。</Typography.Paragraph>
-      {!ready && <Alert type="warning" showIcon message="请先等待连接、同步和保存完成" />}
+      <details className="document-print-help">
+        <summary>打印说明</summary>
+        <Typography.Paragraph>预览使用打开时已保存的版本。要纳入之后保存的编辑，请刷新预览。</Typography.Paragraph>
+        <Typography.Paragraph type="secondary">可在浏览器打印窗口选择「另存为 PDF」，并设置纸张、页边距和页眉页脚。图片随预览加载，失败时可刷新重试。</Typography.Paragraph>
+      </details>
+      {!ready && !error && <Alert type="warning" showIcon message="请先等待连接、同步和保存完成" />}
       <div ref={notices}>
         {error && <Alert type="error" showIcon message={error} />}
         {(loading || (snapshot && !assetsReady)) && <div role="status"><Spin size="small" /> {loading ? '正在读取已保存版本…' : '正在加载打印图片…'}</div>}
@@ -141,13 +145,14 @@ export default function PrintModal({ docId, canPrint, onClose }) {
           description={<Checkbox checked={acceptMissing} onChange={event => setAcceptMissing(event.target.checked)}>我接受缺图，仅打印当前可见内容</Checkbox>} />}
       </div>
     </div>
-    <article ref={sheet} className="document-print-sheet" aria-label="打印文档预览">
-      {snapshot ? <>
+    <article ref={sheet} className="document-print-sheet" aria-label="打印文档预览" hidden={!snapshot}>
+      {snapshot && <>
         <h1>{snapshot.title}</h1>
         <p className="document-print-meta">CoPage · 已保存版本 {snapshot.revision}</p>
         {missingImages > 0 && <p className="document-print-meta">部分图片未能加载，本副本可能缺图。</p>}
+        {empty && <p className="document-print-empty">此版本没有正文。</p>}
         <DocumentPreview content={snapshot.content} label="打印正文" />
-      </> : <p>打印预览尚未就绪，请刷新预览后重试。</p>}
+      </>}
     </article>
   </Modal>
 }
