@@ -17,6 +17,13 @@
 .project-document-picker-modal .ant-modal-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .project-document-picker-modal .ant-modal-title { padding-right: 32px; overflow-wrap: anywhere; }
 .project-document-picker-modal .ant-typography, .project-document-picker .ant-list-item-meta-description { overflow-wrap: anywhere; }
+.project-document-picker-context { display: grid; gap: 4px; margin-bottom: 12px; }
+.project-document-picker-status { margin-top: 16px; }
+.project-document-picker-modal .project-read-alert { margin-top: 12px; }
+.project-document-picker .ant-list-item-meta { min-width: 0; }
+.project-document-picker.ant-list .ant-list-item .ant-list-item-action { display: flex; gap: 8px; }
+.project-document-picker .ant-list-item .ant-list-item-action > li { padding: 0; }
+.project-document-picker .ant-list-item-action-split { display: none; }
 @media (max-width: 640px), (max-height: 640px) {
   .project-fields-modal { top: 24px; padding-bottom: 24px; }
   .project-fields-modal .ant-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); }

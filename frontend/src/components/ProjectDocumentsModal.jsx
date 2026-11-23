@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, List, Modal, Pagination, Space, Tag, Typography } from 'antd'
 import ListEmptyState from './ListEmptyState'
 import { usePageRequest } from '../auth/PageSessionContext'
 import { documentHref } from '../navigation/documents'
+import { focusDialogControl, useDialogEscapeFallback } from './dialogFocus'
 
-export default function ProjectDocumentsModal({ project, from, busy, uncertain, error, onClose, onAdd, onReview }) {
+export default function ProjectDocumentsModal({ project, from, busy, uncertain, error, triggerRef, onClose, onAdd, onReview }) {
   const request = usePageRequest()
   const [input, setInput] = useState('')
   const [keyword, setKeyword] = useState('')
@@ -14,8 +15,11 @@ export default function ProjectDocumentsModal({ project, from, busy, uncertain, 
   const [readError, setReadError] = useState('')
   const [dataFrom, setDataFrom] = useState('')
   const [refresh, setRefresh] = useState(0)
+  const filterField = useRef(null)
   const readKey = JSON.stringify([project.id, keyword, page, refresh])
   const current = dataFrom === readKey ? data : null
+  const waiting = loading || (!current && !readError)
+  useDialogEscapeFallback(onClose, () => !busy, triggerRef)
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true); setData(null); setReadError('')
@@ -30,32 +34,52 @@ export default function ProjectDocumentsModal({ project, from, busy, uncertain, 
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [project.id, keyword, page, readKey, request])
+  function filter(value) {
+    setInput(value)
+    setKeyword(value.trim())
+    setPage(1)
+  }
+
   return <Modal open title="加入已有文档" className="project-document-picker-modal" width={720} onCancel={busy ? undefined : onClose}
+    afterOpenChange={open => { if (open) focusDialogControl(filterField.current?.input) }}
     closable={!busy} maskClosable={!busy} keyboard={!busy} footer={[
       uncertain && <Button key="review" disabled={busy} onClick={onReview}>核对项目文档</Button>,
       <Button key="close" disabled={busy} onClick={onClose}>关闭</Button>,
     ]}>
-    <Typography.Paragraph>项目：{project.name}</Typography.Paragraph>
-    <Typography.Paragraph>{project.groupId > 0 ? '小组项目只能主动加入你拥有的文档，其他成员仍需单篇授权。' : '个人项目可以整理你当前有权限阅读的资料。'}</Typography.Paragraph>
-    <Typography.Paragraph type="secondary">保留原正文和版本，通过关联分类；加入项目不修改成员权限。</Typography.Paragraph>
-    <Input.Search aria-label="筛选可加入的文档" value={input} maxLength={200} disabled={busy || uncertain}
-      placeholder="按标题筛选" onChange={e => setInput(e.target.value)} onSearch={value => { setKeyword(value.trim()); setPage(1) }} enterButton="筛选" />
+    <div className="project-document-picker-context">
+      <Typography.Text strong>{project.name}</Typography.Text>
+      <Typography.Text type="secondary">{project.groupId > 0
+        ? '可加入你拥有的文档。小组成员仍需逐篇授权。'
+        : '可加入你有权阅读的文档。正文、版本和权限均保留。'}</Typography.Text>
+    </div>
+    <Input.Search ref={filterField} aria-label="筛选可加入的文档" value={input} maxLength={200} disabled={busy || uncertain}
+      placeholder="按标题筛选" onChange={e => setInput(e.target.value)} onSearch={filter} enterButton="筛选" />
     {error && <Alert className="project-read-alert" type="error" showIcon message={error} />}
     {readError && <Alert className="project-read-alert" type="error" showIcon message={readError} action={!uncertain &&
       <Button disabled={busy || loading} onClick={() => setRefresh(n => n + 1)}>重试读取</Button>} />}
-    <List rowKey="id" loading={loading} dataSource={current?.list || []} className="project-document-picker"
-      locale={{ emptyText: loading ? '正在加载…' : !current ? '文档列表暂不可用' : <ListEmptyState description="没有可加入的文档，试试其他标题或先创建一篇" /> }}
-      renderItem={doc => <List.Item actions={[
-        <a key="view" className="document-open-link" href={documentHref(doc.id, from)} target="_blank" rel="noopener noreferrer"
-          aria-label={'查看文档 #' + doc.id + '（新标签页）'}>查看文档（新标签页）</a>,
-        <Button key="add" disabled={busy || loading || uncertain || !current}
-          onClick={() => { if (!busy && !loading && !uncertain && current) onAdd(doc) }}>加入项目</Button>,
-      ]}><List.Item.Meta title={doc.title} description={<Space wrap>
-        <span>文档 #{doc.id}</span><Tag>{doc.isOwner === true ? '所有者' : doc.permission === 2 ? '可编辑' : doc.permission === 1 ? '只读' : '打开后查看权限'}</Tag>
-        <span>所有者：{typeof doc.ownerName === 'string' && doc.ownerName.trim() ? doc.ownerName : '用户 #' + doc.ownerId}</span>
-        <span>更新于 {doc.updateTime}</span>
-      </Space>} /></List.Item>} />
-    {current?.total > 20 && <Pagination current={page} total={current.total} pageSize={20} showSizeChanger={false}
-      disabled={busy || loading || uncertain} onChange={setPage} />}
+    {waiting && <Typography.Paragraph className="project-document-picker-status" role="status">正在读取可加入的文档…</Typography.Paragraph>}
+    {!waiting && current && (
+      <List rowKey="id" dataSource={current.list} className="project-document-picker"
+        locale={{ emptyText: (
+          <ListEmptyState description={keyword ? '没有匹配的可加入文档' : '暂无可加入的文档'}>
+            {keyword && <Button disabled={busy || uncertain} onClick={() => {
+              filter('')
+              filterField.current?.focus({ preventScroll: true })
+            }}>清除筛选</Button>}
+          </ListEmptyState>
+        ) }}
+        renderItem={doc => <List.Item actions={[
+          <Button key="add" aria-label={`加入项目「${doc.title}」（文档 #${doc.id}）`} disabled={busy || uncertain}
+            onClick={() => { if (!busy && !uncertain) onAdd(doc) }}>加入项目</Button>,
+          <a key="view" className="document-open-link" href={documentHref(doc.id, from)} target="_blank" rel="noopener noreferrer"
+            aria-label={`另开查看「${doc.title}」（文档 #${doc.id}，新标签页）`}>另开查看</a>,
+        ]}><List.Item.Meta title={doc.title} description={<Space wrap>
+          <span>文档 #{doc.id}</span><Tag>{doc.isOwner === true ? '所有者' : doc.permission === 2 ? '可编辑' : doc.permission === 1 ? '只读' : '打开后查看权限'}</Tag>
+          <span>所有者：{typeof doc.ownerName === 'string' && doc.ownerName.trim() ? doc.ownerName : '用户 #' + doc.ownerId}</span>
+          <span>更新于 {doc.updateTime}</span>
+        </Space>} /></List.Item>} />
+    )}
+    {!waiting && current?.total > 20 && <Pagination current={page} total={current.total} pageSize={20} showSizeChanger={false}
+      disabled={busy || uncertain} onChange={setPage} />}
   </Modal>
 }

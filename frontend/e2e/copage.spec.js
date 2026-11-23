@@ -284,6 +284,43 @@ test('personal template actions distinguish each row and keep keyboard focus on 
   }
 })
 
+test('the project document picker starts in the filter and returns to its trigger', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  const docId = await createDocument(page)
+  const docTitle = '场地交接记录'
+  await rename(page, docTitle)
+  const token = await page.evaluate(() => localStorage.getItem('collab-token'))
+  const reply = await request.post(`${backend}/api/projects`, {
+    headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': randomUUID() },
+    data: { name: '校刊资料', description: '', groupId: 0 },
+  })
+  expect(reply.status()).toBe(200)
+  const project = await reply.json()
+  expect(project.code).toBe(0)
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: width === 320 ? 640 : 850 })
+    await page.goto(`/projects?project=${project.data.id}`)
+    const trigger = page.getByRole('button', { name: '加入已有文档', exact: true })
+    await trigger.press('Enter')
+    const picker = page.getByRole('dialog', { name: '加入已有文档' })
+    const filter = picker.getByRole('textbox', { name: '筛选可加入的文档' })
+    await expect(filter).toBeFocused()
+    const add = picker.getByRole('button', { name: `加入项目「${docTitle}」（文档 #${docId}）`, exact: true })
+    await expect(add).toBeVisible()
+    await page.keyboard.insertText('不存在的资料')
+    await page.keyboard.press('Enter')
+    await expect(picker.getByText('没有匹配的可加入文档')).toBeVisible()
+    await picker.getByRole('button', { name: '清除筛选', exact: true }).press('Enter')
+    await expect(filter).toBeFocused()
+    await expect(add).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(picker).toBeHidden()
+    await expect(trigger).toBeFocused()
+  }
+})
+
 test('the complete title opens in the viewport with reduced motion enabled', async ({ page, request }) => {
   await login(page, await createAccount(request))
   await createDocument(page)

@@ -84,6 +84,7 @@ export default function Projects() {
   const [fields, setFields] = useState(null)
   const fieldsTrigger = useRef(null)
   const [adding, setAdding] = useState(false)
+  const addDocumentTrigger = useRef(null)
   const [newDocument, setNewDocument] = useState(null)
   const [documentBusy, setDocumentBusy] = useState(false)
   const operation = useProjectOperation(target => {
@@ -217,11 +218,11 @@ export default function Projects() {
       else creations.reportMissing()
     } else await operation.review()
   }
-  function closeFields() {
+  function closeProjectDialog(triggerRef, close) {
     if (busy) return
-    const trigger = fieldsTrigger.current
-    fieldsTrigger.current = null
-    setFields(null)
+    const trigger = triggerRef.current
+    triggerRef.current = null
+    close()
     queueMicrotask(() => {
       if (trigger?.isConnected && !trigger.disabled && document.activeElement === document.body) {
         trigger.focus({ preventScroll: true })
@@ -323,7 +324,7 @@ export default function Projects() {
           <Typography.Paragraph>{current.total} 篇你可访问的文档 · {current.groupId ? '小组：' + current.groupName : '个人项目'}</Typography.Paragraph>
           <Space wrap className="project-section">
             <Button type="primary" disabled={!detailReady} onClick={() => setNewDocument({ id: current.id, name: current.name, groupId: current.groupId })}>新建文档</Button>
-            <Button disabled={!detailReady} onClick={() => setAdding(true)}>加入已有文档</Button>
+            <Button disabled={!detailReady} onClick={event => { addDocumentTrigger.current = event.currentTarget; setAdding(true) }}>加入已有文档</Button>
             {manage && <Button disabled={!detailReady} onClick={event => { fieldsTrigger.current = event.currentTarget; setFields(current) }}>修改项目资料</Button>}
             {manage && <Popconfirm overlayClassName="document-action-confirm" title={'归档“' + current.name + '”？'}
               description="保留原文档、单独权限及项目关联，可在已归档列表恢复。" disabled={!detailReady}
@@ -356,7 +357,7 @@ export default function Projects() {
       ready={fields.id ? detailReady && manage : createReady} busy={busy} uncertain={uncertain}
       error={operationError || (fields.id ? detailError : contextError || error)} notice={operation.notice?.target?.projectId === fields.id ? operation.notice : null}
       onRetry={() => { if (fields.id) setDetailRefresh(n => n + 1); else { setListRefresh(n => n + 1); setContextRefresh(n => n + 1) } }}
-      onClose={closeFields} onReview={review}
+      onClose={() => closeProjectDialog(fieldsTrigger, () => setFields(null))} onReview={review}
       onSave={values => {
         const target = { kind: fields.id ? 'rename' : 'create', projectId: fields.id, name: values.name, description: values.description, groupId: values.groupId }
         if (fields.id) mutate(target, config => request.put('/projects/' + fields.id, { name: values.name, description: values.description }, config), () => setFields(null), detailReady && manage)
@@ -364,7 +365,7 @@ export default function Projects() {
           (config, prepared) => creations.create(values, config, prepared), openCreated, { trackedCreation: true })
       }} />}
     {adding && current && <ProjectDocumentsModal key={current.id} project={current} from={sourcePath} busy={busy} uncertain={uncertain}
-      error={operationError} onClose={() => setAdding(false)} onReview={review}
+      triggerRef={addDocumentTrigger} error={operationError} onClose={() => closeProjectDialog(addDocumentTrigger, () => setAdding(false))} onReview={review}
       onAdd={doc => mutate({ kind: 'add', projectId: current.id, groupId: current.groupId, docId: doc.id, title: doc.title }, config =>
         request.post('/projects/' + current.id + '/documents', { docId: doc.id }, config), () => setAdding(false))} />}
   </Layout>
