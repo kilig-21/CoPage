@@ -52,6 +52,16 @@
 }
 .cp-workbench-action:hover,
 .cp-workbench-section-title a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.cp-workbench-drafts {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 12px 20px; margin-bottom: 24px; padding: 12px 16px;
+  background: var(--cp-surface); border: 1px solid var(--cp-line);
+  border-inline-start: 3px solid var(--cp-accent); border-radius: var(--cp-radius-panel);
+}
+.cp-workbench-drafts p { flex: 1 1 200px; display: grid; gap: 4px; margin: 0; color: var(--cp-muted); }
+.cp-workbench-drafts strong { color: var(--cp-ink); }
+.cp-workbench-drafts .ant-btn { min-height: 44px; }
+.cp-workbench-secondary > :only-child { grid-column: 1 / -1; }
 .workbench > .document-creation-review,
 .workbench > .lifecycle-review-alert { margin-bottom: 24px; }
 .cp-workbench-section-title {

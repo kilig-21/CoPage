@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import Delta from 'quill-delta'
 import CollabClient from '../ws/CollabClient.js'
-import { enumerateAccountDrafts, readAccountDraft } from './accountDrafts.js'
+import { enumerateAccountDrafts, hasAccountDraftRecords, readAccountDraft } from './accountDrafts.js'
 import { draftRecordsJson } from './draftRecords.js'
 import { draftBackupJson, draftBackupText } from './draftBackup.js'
 
@@ -30,6 +30,27 @@ function source(entries = []) {
 }
 
 const options = storage => ({ storage, username, Delta, now })
+
+test('工作台草稿提醒只检查当前账号槽位，不读取草稿内容', () => {
+  const f = source([[keyFor(217, 'other-tab', 'testAB'), '其他账号草稿']])
+  assert.equal(hasAccountDraftRecords({ storage: f.storage, username }), false)
+  f.values.set(keyFor(), '仍需用户核对的旧记录')
+  assert.equal(hasAccountDraftRecords({ storage: f.storage, username }), true)
+  assert.deepEqual(f.reads, [])
+})
+
+test('工作台草稿提醒无法确认原账号时拒绝返回记录存在与否', () => {
+  const f = source([[keyFor(), '草稿']])
+  const key = f.storage.key
+  let current = true
+  f.storage.key = index => {
+    current = false
+    return key(index)
+  }
+  assert.throws(() => hasAccountDraftRecords({ storage: f.storage, username, isCurrent: () => current }),
+    error => error.code === 'DRAFT_IDENTITY_CHANGED')
+  assert.deepEqual(f.reads, [])
+})
 
 test('一次枚举当前账号全部槽位，只返回摘要，不读取近似账号或其他正文', () => {
   const a = draftFor(), b = draftFor(26, 'time-id:non-uuid')

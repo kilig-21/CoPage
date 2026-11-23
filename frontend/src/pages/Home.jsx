@@ -4,8 +4,9 @@ import { ArrowRightOutlined, FileTextOutlined, PlusOutlined, SearchOutlined } fr
 import { Link, useLocation } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
 import useDocumentReturnFocus from '../navigation/useDocumentReturnFocus'
-import { usePageRequest } from '../auth/PageSessionContext'
+import { usePageSession } from '../auth/PageSessionContext'
 import { parseAccountProfile } from '../auth/accountProfile'
+import { hasAccountDraftRecords } from '../editor/accountDrafts'
 import WorkspaceOverview from '../components/WorkspaceOverview'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import AccountDraftsDrawer from '../components/AccountDraftsDrawer'
@@ -17,7 +18,8 @@ import { requestFailureMessage } from '../api/requestError'
 import '../styles/workbench.css'
 
 export default function Home() {
-  const request = usePageRequest()
+  const session = usePageSession()
+  const { request } = session
   const location = useLocation()
   const sourcePath = location.pathname + location.search + location.hash
   const { creating, createBlankDocument, openCreatedDocument, creationIdentity } = useBlankDocumentCreation()
@@ -32,11 +34,41 @@ export default function Home() {
   const [refresh, setRefresh] = useState(0)
   const lifecycle = useDocumentLifecycle({ onConfirmed: () => setRefresh(value => value + 1) })
   const [showDrafts, setShowDrafts] = useState(false)
-  const draftsButton = useRef(null)
+  const [draftSession, setDraftSession] = useState(null)
+  const hasLocalDrafts = draftSession === session
+  const draftsTrigger = useRef(null)
+  const main = useRef(null)
+  function openDrafts(event) {
+    draftsTrigger.current = event.currentTarget
+    setShowDrafts(true)
+  }
   function closeDrafts() {
     setShowDrafts(false)
-    queueMicrotask(() => draftsButton.current?.focus())
+    queueMicrotask(() => {
+      const trigger = draftsTrigger.current
+      const target = trigger?.isConnected ? trigger : main.current
+      target?.focus({ preventScroll: true })
+    })
   }
+  useEffect(() => {
+    function updateDraftPresence() {
+      try {
+        const hasRecords = hasAccountDraftRecords({
+          storage: localStorage, username: session.identity?.account, isCurrent: session.current,
+        })
+        setDraftSession(hasRecords ? session : null)
+      } catch {
+        setDraftSession(null)
+      }
+    }
+    updateDraftPresence()
+    window.addEventListener('storage', updateDraftPresence)
+    window.addEventListener('copage-auth-changed', updateDraftPresence)
+    return () => {
+      window.removeEventListener('storage', updateDraftPresence)
+      window.removeEventListener('copage-auth-changed', updateDraftPresence)
+    }
+  }, [session])
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true); setError(''); setData(null)
@@ -60,7 +92,7 @@ export default function Home() {
   }, [profileRefresh, request])
   return <Layout className="app-shell">
     <WorkspaceHeader title="工作台" />
-    <main id="workspace-main" tabIndex={-1} className="content-wrap workbench">
+    <main ref={main} id="workspace-main" tabIndex={-1} className="content-wrap workbench">
       <header className="cp-workbench-heading">
         <Typography.Title level={1}>工作台</Typography.Title>
         {profile && <p className="cp-workbench-greeting">你好，{profile.nickname?.trim() || profile.username}</p>}
@@ -71,6 +103,10 @@ export default function Home() {
           <Link to="/templates" className="cp-workbench-action">从模板开始<ArrowRightOutlined aria-hidden="true" /></Link>
         </div>
       </header>
+      {hasLocalDrafts && <section className="cp-workbench-drafts" aria-label="本地草稿提醒">
+        <p role="status"><strong>有本地草稿</strong><span>可核对此浏览器保存的记录，或下载副本。</span></p>
+        <Button onClick={openDrafts}>查看本地草稿</Button>
+      </section>}
       {profileError && <Alert type="warning" showIcon message={profileError}
         action={<Button disabled={profileLoading} onClick={() => setProfileRefresh(value => value + 1)}>重试账号资料</Button>} />}
       <PendingDocumentCreations expectedIdentity={creationIdentity} disabled={creating} onCreated={openCreatedDocument} />
@@ -111,12 +147,12 @@ export default function Home() {
       </section>
       <div className="cp-workbench-secondary">
         <WorkspaceOverview />
-        <aside className="cp-workbench-tools" aria-label="资料工具">
+        {!hasLocalDrafts && <aside className="cp-workbench-tools" aria-label="资料工具">
           <section className="cp-workbench-tool"><Typography.Title level={3}>本地草稿</Typography.Title>
             <Typography.Paragraph type="secondary">继续处理保存在这个浏览器里的草稿，或下载副本。</Typography.Paragraph>
-            <Button ref={draftsButton} onClick={() => setShowDrafts(true)}>查看本地草稿</Button>
+            <Button onClick={openDrafts}>查看本地草稿</Button>
           </section>
-        </aside>
+        </aside>}
       </div>
     </main>
     {showDrafts && <AccountDraftsDrawer sourcePath={sourcePath} onClose={closeDrafts} />}

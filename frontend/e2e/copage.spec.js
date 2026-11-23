@@ -392,7 +392,15 @@ test('two accounts converge and recover a draft after losing the connection', as
     await context.setOffline(false)
 
     const recovered = await context.newPage()
-    await recovered.goto(`/docs/${docId}`)
+    await recovered.setViewportSize({ width: 320, height: 850 })
+    await recovered.goto('/home')
+    const draftReminder = recovered.getByRole('region', { name: '本地草稿提醒' })
+    const openDrafts = draftReminder.getByRole('button', { name: '查看本地草稿' })
+    await expect(openDrafts).toBeInViewport({ ratio: 1 })
+    await openDrafts.press('Enter')
+    const localDrafts = recovered.getByRole('dialog', { name: '本地草稿' })
+    await expect(localDrafts.getByRole('heading', { name: `文档 ${docId}`, exact: true })).toBeVisible()
+    await localDrafts.getByRole('button', { name: '继续处理此文档' }).press('Enter')
     const choice = recovered.getByRole('dialog', { name: '发现未确认的本地编辑' })
     await expect(choice).toBeVisible()
     await choice.getByRole('button', { name: '恢复草稿并同步' }).click()
@@ -400,6 +408,9 @@ test('two accounts converge and recover a draft after losing the connection', as
     const expected = 'Owner edit Member edit Recovered edit'
     await expect(editor(recovered)).toHaveText(expected)
     await expect(editor(peer)).toHaveText(expected)
+    await recovered.goto('/home')
+    await expect(recovered.locator('.cp-workbench-tools').getByRole('button', { name: '查看本地草稿' })).toBeVisible()
+    await expect(draftReminder).toBeHidden()
   } finally {
     await peerContext.close()
   }

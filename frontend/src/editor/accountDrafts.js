@@ -54,10 +54,7 @@ function inspect({ key, raw, prefix, Delta, now }) {
   } catch { return { key, docId: slot.docId, savedAt: null, readable: false } }
 }
 
-/** 一次枚举当前账号的槽位；列表只返回摘要，不返回正文或原始字符串。 */
-export function enumerateAccountDrafts({ storage, username, Delta, isCurrent = () => true, now = Date.now() }) {
-  checkIdentity(isCurrent)
-  const prefix = accountPrefix(username)
+function accountDraftKeys(storage, prefix, isCurrent) {
   const length = readStorage(() => storage.length, isCurrent)
   if (!Number.isSafeInteger(length) || length < 0) {
     throw failure('DRAFT_STORAGE_UNAVAILABLE', '浏览器暂时无法读取本地草稿，原记录保留。')
@@ -67,8 +64,20 @@ export function enumerateAccountDrafts({ storage, username, Delta, isCurrent = (
     const key = readStorage(() => storage.key(index), isCurrent)
     if (typeof key === 'string' && key.startsWith(prefix)) keys.add(key)
   }
+  return keys
+}
+
+export function hasAccountDraftRecords({ storage, username, isCurrent = () => true }) {
+  checkIdentity(isCurrent)
+  return accountDraftKeys(storage, accountPrefix(username), isCurrent).size > 0
+}
+
+/** 一次枚举当前账号的槽位；列表只返回摘要，不返回正文或原始字符串。 */
+export function enumerateAccountDrafts({ storage, username, Delta, isCurrent = () => true, now = Date.now() }) {
+  checkIdentity(isCurrent)
+  const prefix = accountPrefix(username)
   const summaries = []
-  for (const key of keys) {
+  for (const key of accountDraftKeys(storage, prefix, isCurrent)) {
     const raw = readStorage(() => storage.getItem(key), isCurrent)
     if (raw === null) continue
     if (typeof raw !== 'string') throw failure('DRAFT_STORAGE_UNAVAILABLE', '浏览器暂时无法读取本地草稿，原记录保留。')
