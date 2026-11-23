@@ -8,17 +8,18 @@ export function focusDialogControl(control) {
   control.focus({ preventScroll: true })
 }
 
-export function useDialogEscapeFallback(onClose, canClose) {
+export function useDialogEscapeFallback(onClose, canClose, triggerRef) {
   useLayoutEffect(() => {
-    function closeFromBody(event) {
-      // On a dialog swap the previous control disappears before the new dialog receives focus.
+    function closeDuringFocusHandoff(event) {
+      // A dialog may still be opening while focus remains on its trigger or the body.
+      const active = document.activeElement
       if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented ||
-          event.target !== document.body || document.activeElement !== document.body || canClose?.() === false) return
+          event.target !== active || (active !== document.body && active !== triggerRef?.current) || canClose?.() === false) return
       event.preventDefault()
       onClose()
     }
 
-    window.addEventListener('keydown', closeFromBody)
-    return () => window.removeEventListener('keydown', closeFromBody)
-  }, [onClose, canClose])
+    window.addEventListener('keydown', closeDuringFocusHandoff)
+    return () => window.removeEventListener('keydown', closeDuringFocusHandoff)
+  }, [onClose, canClose, triggerRef])
 }

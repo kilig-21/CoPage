@@ -226,6 +226,25 @@ test('name a new document from the editor title on desktop and narrow screens', 
   }
 })
 
+test('a built-in template can be previewed and dismissed from the first screen', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: width === 320 ? 640 : 850 })
+    await page.goto('/home')
+    await page.getByRole('link', { name: '从模板开始' }).press('Enter')
+    const preview = page.getByRole('button', { name: '预览并使用会议纪要' })
+    await expect(preview).toBeInViewport({ ratio: 1 })
+    await preview.press('Enter')
+    const dialog = page.getByRole('dialog', { name: '使用会议纪要' })
+    await expect(dialog.locator('.document-preview .ql-editor')).toBeAttached()
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+    await expect(preview).toBeFocused()
+  }
+})
+
 test('the complete title opens in the viewport with reduced motion enabled', async ({ page, request }) => {
   await login(page, await createAccount(request))
   await createDocument(page)

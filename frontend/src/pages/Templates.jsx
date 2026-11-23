@@ -9,6 +9,7 @@ import { useCreationTrackingWarning } from '../components/useCreationTrackingWar
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import WorkspacePageHeading from '../components/WorkspacePageHeading'
 import DocumentPreview from '../components/DocumentPreview'
+import { focusDialogControl, useDialogEscapeFallback } from '../components/dialogFocus'
 
 import { templateCategories as categories } from '../templates/categories'
 export default function Templates() {
@@ -35,6 +36,14 @@ export default function Templates() {
   const [submittedTitle, setSubmittedTitle] = useState('')
   const createController = useRef(null)
   const attempted = useRef(null)
+  const previewTrigger = useRef(null)
+  const titleField = useRef(null)
+  function closePreview() {
+    if (creating || createController.current) return
+    setSelected(null)
+    if (!uncertain) setCreateError('')
+  }
+  useDialogEscapeFallback(closePreview, () => Boolean(selected) && !creating && !createController.current, previewTrigger)
   useEffect(() => {
     if (attempted.current) {
       setUncertain(true); setSubmittedTitle(attempted.current.title)
@@ -91,8 +100,8 @@ export default function Templates() {
   }
   return <Layout className="app-shell">
     <WorkspaceHeader title="模板中心" />
-    <main id="workspace-main" tabIndex={-1} className="content-wrap template-center">
-      <WorkspacePageHeading title="选一个适合这次工作的框架" description="先预览内容，再创建独立文档。内置模板只提供通用框架，不读取其他用户的资料。">
+    <main id="workspace-main" tabIndex={-1} className="content-wrap template-center builtin-templates">
+      <WorkspacePageHeading title="选择模板" description="预览后创建一篇独立文档。">
         <Button onClick={() => navigate('/templates?source=personal')}>我的模板</Button>
       </WorkspacePageHeading>
       {loadError && <Alert type="error" showIcon message={loadError} action={<Button disabled={loading} onClick={() => setRefresh(n => n + 1)}>重试读取</Button>} />}
@@ -101,33 +110,39 @@ export default function Templates() {
           <Button disabled={creating} loading={creating} onClick={create}>重试本次创建</Button>
           <Button disabled={creating} onClick={review}>核对我的文档</Button>
         </Space>} />}
-      <Space wrap className="template-filters">
+      <div className="builtin-template-controls">
         <Radio.Group aria-label="模板分类" value={category} disabled={creating}
           options={[{ label: '全部', value: 'all' }, ...Object.entries(categories).map(([value, label]) => ({ value, label }))]}
           onChange={e => filter(e.target.value, keyword)} />
-      </Space>
-      <Input.Search aria-label="筛选模板" maxLength={200} value={input} disabled={creating} placeholder="搜索模板名称或用途"
-        onChange={e => setInput(e.target.value)} onSearch={value => filter(category, value.trim())} enterButton="筛选" />
-      {templates && <Space wrap className="template-filters"><Typography.Text type="secondary">找到 {filtered.length} 个模板</Typography.Text>
-        {(category !== 'all' || keyword) && <Button disabled={creating} onClick={() => filter('all', '')}>清除筛选</Button>}</Space>}
+        <Input.Search aria-label="筛选模板" maxLength={200} value={input} disabled={creating} placeholder="搜索模板名称或用途"
+          onChange={e => setInput(e.target.value)} onSearch={value => filter(category, value.trim())} enterButton="筛选" />
+        {templates && <div className="builtin-template-summary">
+          <Typography.Text type="secondary" role="status">找到 {filtered.length} 个模板</Typography.Text>
+          {(category !== 'all' || keyword) && <Button type="text" disabled={creating} onClick={() => filter('all', '')}>清除筛选</Button>}
+        </div>}
+      </div>
       <List rowKey="id" loading={{ spinning: loading, tip: '正在加载…' }} grid={{ gutter: 16, xs: 1, sm: 1, md: 2, lg: 3, xl: 3, xxl: 3 }}
         dataSource={filtered} locale={{ emptyText: !templates ? '模板列表暂不可用' : <ListEmptyState description="没有匹配的模板，试试其他分类或关键词" /> }}
-        renderItem={template => <List.Item><Card title={template.title}>
+        renderItem={template => <List.Item><Card title={template.title} className="builtin-template-card">
           <Tag>{categories[template.category] || '通用'}</Tag><Typography.Paragraph>{template.description}</Typography.Paragraph>
-          <Button disabled={loading || creating || uncertain} onClick={() => { setSelected(template); setTitle(template.title); setCreateError('') }}>预览并使用{template.title}</Button>
+          <Button aria-label={'预览并使用' + template.title} disabled={loading || creating || uncertain}
+            onClick={event => {
+              previewTrigger.current = event.currentTarget
+              setSelected(template); setTitle(template.title); setCreateError('')
+            }}>预览模板</Button>
         </Card></List.Item>} />
       <Link to="/docs">也可以返回我的文档创建空白文档</Link>
     </main>
     <Modal className="builtin-template-modal" title={selected ? '使用' + selected.title : '使用模板'} open={Boolean(selected)} width={720}
-      onCancel={() => { if (!creating) { setSelected(null); if (!uncertain) setCreateError('') } }}
+      onCancel={closePreview} afterOpenChange={open => { if (open) focusDialogControl(titleField.current?.input) }}
       closable={!creating} maskClosable={!creating} keyboard={!creating} footer={[
-        <Button key="close" disabled={creating} onClick={() => { setSelected(null); if (!uncertain) setCreateError('') }}>关闭</Button>,
+        <Button key="close" disabled={creating} onClick={closePreview}>关闭</Button>,
         uncertain && <Button key="review" onClick={review}>核对我的文档</Button>,
         <Button key="create" type="primary" loading={creating} disabled={!title.trim() || !templates || loading} onClick={create}>{uncertain ? '重试本次创建' : '创建文档'}</Button>,
       ]}>
       {createError && selected && <Alert type={uncertain ? 'warning' : 'error'} showIcon message={createError} />}
       <Typography.Paragraph>创建后可自由编辑；模板内容会作为文档的初始版本保留。</Typography.Paragraph>
-      <Input aria-label="新文档标题" maxLength={200} value={title} disabled={creating || uncertain} onChange={e => setTitle(e.target.value)} />
+      <Input ref={titleField} aria-label="新文档标题" maxLength={200} value={title} disabled={creating || uncertain} onChange={e => setTitle(e.target.value)} />
       {selected && <DocumentPreview content={selected.content} label="模板内容预览" />}
     </Modal>
   </Layout>

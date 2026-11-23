@@ -92,6 +92,25 @@ body .ant-list .ant-list-empty-text { color: var(--cp-muted); }
 .template-center .ant-card-body { padding-top: 22px; }
 .template-center .ant-card { transition: border-color 160ms ease, box-shadow 160ms ease; }
 .template-center .ant-card:hover { border-color: #a6b3e0; box-shadow: 0 6px 20px rgb(35 44 57 / 4%); }
+.builtin-templates .page-heading { margin-bottom: 24px; }
+.builtin-templates .page-heading-copy { flex-basis: 164px; }
+.builtin-template-controls { display: grid; gap: 12px; margin-bottom: 16px; }
+.builtin-template-summary { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; min-height: 24px; gap: 8px; }
+.builtin-templates .builtin-template-card .ant-btn { min-height: 44px; }
+@media (max-width: 640px) {
+  .builtin-templates .page-heading { gap: 8px 12px; margin-bottom: 16px; }
+  .builtin-templates .builtin-template-controls .ant-btn,
+  .builtin-templates .builtin-template-controls .ant-input { min-height: 44px; }
+  .builtin-template-controls .ant-radio-wrapper { min-height: 44px; align-items: center; }
+  .builtin-templates .builtin-template-card .ant-card-head { min-height: 48px; padding-inline: 16px; }
+  .builtin-templates .builtin-template-card .ant-card-body { padding: 14px 16px 16px; }
+}
+@media (max-width: 420px) {
+  .builtin-templates .builtin-template-controls .ant-radio-group {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 8px;
+  }
+  .builtin-template-controls .ant-radio-wrapper { margin-inline-end: 0; }
+}
 
 .workspace-header { position: sticky; top: 0; z-index: 20; display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 0 28px; padding: 12px 32px; background: var(--cp-surface); border-bottom: 1px solid var(--cp-line); }
