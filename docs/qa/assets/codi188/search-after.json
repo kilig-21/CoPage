@@ -1,0 +1,26 @@
+{
+  "owned:1": {
+    "p50Ms": 18.96,
+    "p95Ms": 67.1,
+    "total": 36,
+    "responseSha256": "33547f3696de1ec7f5d4b8619f77fe344bad8c93c8ab5e1a9fe8fd502fc78526"
+  },
+  "shared:1": {
+    "p50Ms": 21.16,
+    "p95Ms": 55.57,
+    "total": 18,
+    "responseSha256": "5e4babff5ec1299e0fc9314db94bd129e2cefe4ed39da44cc9083c71ca059346"
+  },
+  "owned:2": {
+    "p50Ms": 12.94,
+    "p95Ms": 46.7,
+    "total": 36,
+    "responseSha256": "67a47656f84a979f9220676a19fc03a19ae406da8136889e970bf9db346da883"
+  },
+  "zz-no-title-188:1": {
+    "p50Ms": 8.46,
+    "p95Ms": 13.87,
+    "total": 0,
+    "responseSha256": "78acb4e4c4a6a35ea697f56a1493a4cc60525f9ad214cb99662951402e239e0d"
+  }
+}

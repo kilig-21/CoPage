@@ -34,6 +34,10 @@ class DocumentVisibilityDatabaseTest {
                     (101, 1, 1), (103, 1, 1), (104, 1, 2), (105, 1, 2), (107, 2, 2)
                 """);
 
+        assertEquals(List.of(101L, 102L, 103L, 104L), repository.visibleIds(1).stream().sorted().toList());
+        assertEquals(List.of(103L, 104L, 107L), repository.visibleIds(2).stream().sorted().toList());
+        assertEquals(List.of(), repository.visibleIds(3));
+
         assertEquals(4, repository.countVisible(1, "", "all"));
         assertEquals(2, repository.countVisible(1, "", "owned"));
         assertEquals(2, repository.countVisible(1, "", "shared"));

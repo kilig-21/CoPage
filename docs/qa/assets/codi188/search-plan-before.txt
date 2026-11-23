@@ -1,0 +1,5 @@
+-> Filter: ((d.is_deleted = 0) and ((d.owner_id = <cache>((@`account`))) or exists(select #2)))  (cost=10123 rows=9891) (actual time=0.27..103 rows=54 loops=1)
+    -> Table scan on d  (cost=10123 rows=98906) (actual time=0.0573..17.2 rows=100037 loops=1)
+    -> Select #2 (subquery in condition; dependent)
+        -> Limit: 1 row(s)  (cost=0.35 rows=1) (actual time=657e-6..657e-6 rows=180e-6 loops=99999)
+            -> Single-row covering index lookup on c using uk_doc_collaborator_doc_user (doc_id=d.id, user_id=(@`account`))  (cost=0.35 rows=1) (actual time=584e-6..584e-6 rows=180e-6 loops=99999)

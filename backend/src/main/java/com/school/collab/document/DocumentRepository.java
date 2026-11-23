@@ -16,31 +16,35 @@ public class DocumentRepository {
     private static final String DELETED_OWNED_FILTER = "owner_id = ? AND is_deleted = 1 AND (? = '' OR LOCATE(?, title) > 0)";
     private static final String VISIBLE_OWNED = """
             FROM document d
-            WHERE ? IN ('all', 'owned') AND d.owner_id = ? AND d.is_deleted = 0
-              AND (? = '' OR LOCATE(?, d.title) > 0)
+            WHERE d.owner_id = ? AND d.is_deleted = 0
             """;
     private static final String VISIBLE_SHARED = """
             FROM doc_collaborator c JOIN document d ON d.id = c.doc_id
-            WHERE ? IN ('all', 'shared') AND c.user_id = ? AND d.owner_id <> ? AND d.is_deleted = 0
-              AND (? = '' OR LOCATE(?, d.title) > 0)
+            WHERE c.user_id = ? AND d.owner_id <> ? AND d.is_deleted = 0
+            """;
+    private static final String FILTER_OWNED = """
+              AND ? IN ('all', 'owned') AND (? = '' OR LOCATE(?, d.title) > 0)
+            """;
+    private static final String FILTER_SHARED = """
+              AND ? IN ('all', 'shared') AND (? = '' OR LOCATE(?, d.title) > 0)
             """;
     private static final String COUNT_VISIBLE = """
             SELECT SUM(total) FROM (
                 SELECT COUNT(*) AS total
-            """ + VISIBLE_OWNED + """
+            """ + VISIBLE_OWNED + FILTER_OWNED + """
                 UNION ALL
                 SELECT COUNT(*)
-            """ + VISIBLE_SHARED + """
+            """ + VISIBLE_SHARED + FILTER_SHARED + """
             ) AS visible_counts
             """;
     private static final String LIST_VISIBLE = """
             SELECT d.id, d.title, d.owner_id, u.nickname AS owner_name, d.parent_id, d.update_time, d.permission
             FROM (
                 SELECT d.id, d.title, d.owner_id, d.parent_id, d.update_time, 2 AS permission
-            """ + VISIBLE_OWNED + """
+            """ + VISIBLE_OWNED + FILTER_OWNED + """
                 UNION ALL
                 SELECT d.id, d.title, d.owner_id, d.parent_id, d.update_time, c.permission
-            """ + VISIBLE_SHARED + """
+            """ + VISIBLE_SHARED + FILTER_SHARED + """
             ) AS d JOIN user u ON u.id = d.owner_id
             ORDER BY d.update_time DESC, d.id DESC
             LIMIT ? OFFSET ?
@@ -143,7 +147,7 @@ public class DocumentRepository {
 
     public long countVisible(long userId, String keyword, String scope) {
         return jdbc.queryForObject(COUNT_VISIBLE, Long.class,
-                scope, userId, keyword, keyword, scope, userId, userId, keyword, keyword);
+                userId, scope, keyword, keyword, userId, userId, scope, keyword, keyword);
     }
 
     /** 先从所有者和授权索引收集可见摘要，再统一排序分页。 */
@@ -152,7 +156,7 @@ public class DocumentRepository {
         return jdbc.query(LIST_VISIBLE, (rs, index) -> new VisibleSummaryRow(rs.getLong("id"), rs.getString("title"),
                 rs.getLong("owner_id"), rs.getString("owner_name"), rs.getLong("parent_id"),
                 rs.getObject("update_time", LocalDateTime.class), rs.getInt("permission")),
-                scope, userId, keyword, keyword, scope, userId, userId, keyword, keyword, size, offset);
+                userId, scope, keyword, keyword, userId, userId, scope, keyword, keyword, size, offset);
     }
 
     public record VisibleSummaryRow(long id, String title, long ownerId, String ownerName,
@@ -161,13 +165,11 @@ public class DocumentRepository {
     /** 搜索前在数据库计算权限边界，ES 不保存或推断协作者权限。 */
     public List<Long> visibleIds(long userId) {
         return jdbc.query("""
-                SELECT d.id FROM document d
-                WHERE d.is_deleted = 0 AND
-                      (d.owner_id = ? OR EXISTS (
-                          SELECT 1 FROM doc_collaborator c
-                          WHERE c.doc_id = d.id AND c.user_id = ?
-                      ))
-                """, (rs, index) -> rs.getLong(1), userId, userId);
+                SELECT d.id
+                """ + VISIBLE_OWNED + """
+                UNION ALL
+                SELECT d.id
+                """ + VISIBLE_SHARED, (rs, index) -> rs.getLong(1), userId, userId, userId);
     }
 
     public Optional<SearchRow> findForIndex(long docId) {
