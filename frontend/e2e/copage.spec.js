@@ -991,6 +991,90 @@ test('returning from the editor reveals and focuses the same entry in a long doc
   await expect(entry).toBeInViewport({ ratio: 1 })
 })
 
+test('document library pagination keeps keyboard access to the filtered results', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  const token = await page.evaluate(() => localStorage.getItem('collab-token'))
+  const keyword = '阅读节策划'
+  for (let index = 1; index <= 22; index += 1) {
+    const response = await request.post(`${backend}/api/doc`, {
+      headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': randomUUID() },
+      data: { title: keyword + ' ' + String(index).padStart(2, '0') },
+    })
+    expect(response.ok()).toBe(true)
+    expect((await response.json()).code).toBe(0)
+  }
+  const path = '/docs?scope=owned&keyword=' + encodeURIComponent(keyword)
+  const list = page.getByRole('region', { name: '文档列表' })
+  const documents = list.getByRole('link')
+  const next = list.locator('li[title="下一页"]')
+  const filter = page.getByRole('textbox', { name: '按文档标题筛选' })
+  const onPage = (url, pageNumber) => url.pathname === '/api/doc/list' && url.searchParams.get('page') === pageNumber
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 760 })
+    await page.goto(path)
+    await expect(documents).toHaveCount(20)
+    let release
+    const hold = new Promise(resolve => { release = resolve })
+    await page.route(url => onPage(url, '2'), async route => {
+      await hold
+      await route.fulfill({ status: 503, json: { code: 503, message: '文档列表暂时无法加载' } })
+    }, { times: 1 })
+    try {
+      await next.press('Enter')
+      await expect(list).toBeFocused()
+      await expect(list).toHaveAttribute('aria-busy', 'true')
+      await expect(documents).toHaveCount(0)
+    } finally {
+      release()
+    }
+    await expect(list.getByRole('alert')).toBeVisible()
+    await page.keyboard.press('Tab')
+    const retry = list.getByRole('button', { name: '重试文档列表' })
+    await expect(retry).toBeFocused()
+    await retry.press('Enter')
+    await expect(documents).toHaveCount(2)
+    await expect(list).toBeFocused()
+    await page.keyboard.press('Tab')
+    const name = await documents.first().innerText()
+    const first = list.getByRole('link', { name, exact: true })
+    await expect(first).toBeFocused()
+    await expect(first).toBeInViewport({ ratio: 1 })
+    await first.press('Enter')
+    await expect(saved(page)).toHaveText('所有修改已保存')
+    await page.getByRole('button', { name: '返回文档列表' }).press('Enter')
+    await expect(page).toHaveURL(url => url.searchParams.get('scope') === 'owned' &&
+      url.searchParams.get('keyword') === keyword && url.searchParams.get('page') === '2')
+    await expect(first).toBeFocused()
+
+    await page.goto('/home')
+    let complete
+    const clamp = new Promise(resolve => { complete = resolve })
+    await page.route(url => onPage(url, '99'), async route => {
+      await clamp
+      await route.continue()
+    }, { times: 1 })
+    try {
+      await page.goto(path + '&page=99')
+      await expect(list).toHaveAttribute('aria-busy', 'true')
+      await filter.focus()
+    } finally {
+      complete()
+    }
+    await expect(page).toHaveURL(url => url.searchParams.get('page') === '2')
+    await expect(documents).toHaveCount(2)
+    await expect(filter).toBeFocused()
+    await page.goBack()
+    await expect(page).toHaveURL(/\/home$/)
+    await page.goForward()
+    await expect(page).toHaveURL(url => url.searchParams.get('page') === '2')
+    await filter.fill('未匹配的标题')
+    await filter.press('Enter')
+    await expect(list.getByText('没有匹配的标题，试试其他关键词')).toBeVisible()
+    await expect(filter).toBeFocused()
+  }
+})
+
 test('object retain is rejected on the wire without advancing document revision', async ({ page, request }) => {
   await login(page, await createAccount(request))
   const docId = await createDocument(page)

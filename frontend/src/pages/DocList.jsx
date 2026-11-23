@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowRightOutlined, CloseCircleOutlined, DeleteOutlined, FileTextOutlined, MoreOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import { Alert, App, Button, Card, Dropdown, Input, Layout, List, Pagination, Popconfirm, Radio, Space, Tag, Tooltip } from 'antd'
 import ListEmptyState from '../components/ListEmptyState'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
+import { focusWorkspaceRegion } from '../navigation/focusWorkspaceRegion'
 import useDocumentReturnFocus from '../navigation/useDocumentReturnFocus'
 import { usePageRequest } from '../auth/PageSessionContext'
 import useBlankDocumentCreation from '../api/useBlankDocumentCreation'
@@ -41,8 +42,8 @@ export default function DocList() {
   const page = Number.isSafeInteger(rawPage) && rawPage > 0 && rawPage <= 1_000_000 ? rawPage : 1
   const [filter, setFilter] = useState(keyword)
   const scopeParams = scope === 'all' ? {} : { scope }
-  const setPage = useCallback(next => setSearchParams({ ...(scope === 'all' ? {} : { scope }),
-    ...(keyword ? { keyword } : {}), page: String(next) }), [scope, keyword, setSearchParams])
+  const setPage = useCallback((next, replace = false) => setSearchParams({ ...(scope === 'all' ? {} : { scope }),
+    ...(keyword ? { keyword } : {}), page: String(next) }, { replace }), [scope, keyword, setSearchParams])
   useEffect(() => setFilter(keyword), [keyword])
   const applyFilter = value => setSearchParams({ ...scopeParams, ...(value.trim() ? { keyword: value.trim() } : {}) })
   const applyScope = next => setSearchParams({ ...(next === 'all' ? {} : { scope: next }), ...(keyword ? { keyword } : {}) })
@@ -54,11 +55,23 @@ export default function DocList() {
   const [savingTemplate, setSavingTemplate] = useState(null)
   const [templatePendingName, setTemplatePendingName] = useState(null)
   const [loadedFrom, setLoadedFrom] = useState(null)
+  const listRegion = useRef(null)
   const listKey = JSON.stringify([page, keyword, scope, refresh])
   const listReady = loadedFrom === listKey && !loading && !loadError
+  const reading = loading || (loadedFrom !== listKey && !loadError)
   useDocumentReturnFocus(listReady)
   const deletion = useDocumentLifecycle({ operation: 'delete', ready: listReady,
     onConfirmed: () => setRefresh(value => value + 1) })
+
+  function openPage(next) {
+    if (next === page) return
+    focusWorkspaceRegion(listRegion.current)
+    setPage(next)
+  }
+  function retryList() {
+    focusWorkspaceRegion(listRegion.current)
+    setRefresh(value => value + 1)
+  }
 
   useEffect(() => {
     setCopying(null); setImporting(false); setSavingTemplate(null)
@@ -73,7 +86,7 @@ export default function DocList() {
       .then((response) => {
         if (controller.signal.aborted) return
         const lastPage = Math.max(1, Math.ceil(response.data.total / PAGE_SIZE))
-        if (page > lastPage) { setPage(lastPage); return }
+        if (page > lastPage) { setPage(lastPage, true); return }
         setDocs(response.data.list)
         setTotal(response.data.total)
         setLoadedFrom(listKey)
@@ -114,13 +127,13 @@ export default function DocList() {
         {templatePendingName && <Alert type="warning" showIcon message="模板保存结果未确认，请先核对我的模板，再决定是否重试。"
           action={<Button onClick={() => navigate('/templates?' + new URLSearchParams({ source: 'personal', keyword: templatePendingName }).toString())}>核对我的模板</Button>} />}
         <DocumentLifecycleFeedback lifecycle={deletion} returnTo={sourcePath} />
-        <Card className="doc-list-card" role="region" aria-label="文档列表" aria-busy={loading}>
+        <Card ref={listRegion} tabIndex={-1} className="doc-list-card" role="region" aria-label="文档列表" aria-busy={reading}>
           {loadError && <Alert type="error" showIcon message={loadError}
-            action={<Button disabled={loading} onClick={() => setRefresh(value => value + 1)}>重试</Button>} />}
+            action={<Button disabled={reading} onClick={retryList}>重试文档列表</Button>} />}
           <List
             rowKey="id"
-            loading={{ spinning: loading, tip: '正在加载…' }}
-            dataSource={docs}
+            loading={{ spinning: reading, tip: '正在加载…' }}
+            dataSource={listReady ? docs : []}
             locale={{ emptyText: loadError ? '列表暂不可用' : <ListEmptyState description={keyword ? '没有匹配的标题，试试其他关键词' : scope === 'shared' ? '还没有共享给你的文档，请文档所有者添加你为协作者' : '还没有文档，先新建一篇吧'} /> }}
             renderItem={(doc) => (
               <List.Item actions={[
@@ -148,8 +161,8 @@ export default function DocList() {
               </List.Item>
             )}
           />
-          {total > PAGE_SIZE && <Pagination current={page} pageSize={PAGE_SIZE} total={total} showSizeChanger={false}
-            disabled={loading || deletion.busy} onChange={setPage} />}
+          {listReady && total > PAGE_SIZE && <Pagination current={page} pageSize={PAGE_SIZE} total={total} showSizeChanger={false}
+            disabled={deletion.busy} onChange={openPage} />}
         </Card>
       </main>
       {savingTemplate && <SavePersonalTemplateModal key={savingTemplate.id} doc={savingTemplate} onClose={() => setSavingTemplate(null)} onUncertain={setTemplatePendingName}

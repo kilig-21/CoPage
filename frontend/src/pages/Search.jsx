@@ -3,6 +3,7 @@ import { ArrowRightOutlined } from '@ant-design/icons'
 import { Alert, Button, Input, Layout, List, Skeleton, Tag, Typography } from 'antd'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
+import { focusWorkspaceRegion } from '../navigation/focusWorkspaceRegion'
 import useDocumentReturnFocus from '../navigation/useDocumentReturnFocus'
 import { usePageRequest } from '../auth/PageSessionContext'
 import { requestFailureMessage } from '../api/requestError'
@@ -87,21 +88,13 @@ export default function Search() {
   }
   function retrySearch() {
     if (loading || !validQuery) return
-    focusResults()
+    focusWorkspaceRegion(resultRegion.current)
     discardRead()
     setRetry(value => value + 1)
   }
-  function focusResults() {
-    const region = resultRegion.current
-    if (!region) return
-    const header = document.querySelector('.workspace-header')
-    const top = window.scrollY + region.getBoundingClientRect().top - (header?.getBoundingClientRect().height ?? 0) - 16
-    region.focus({ preventScroll: true })
-    window.scrollTo({ top: Math.max(0, top), behavior: 'instant' })
-  }
   function openPage(next) {
     if (next === page) return
-    focusResults()
+    focusWorkspaceRegion(resultRegion.current)
     changePage(next)
   }
   function clearSearch() {

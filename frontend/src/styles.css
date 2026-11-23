@@ -77,7 +77,9 @@ body { margin: 0; min-width: 0; }
 }
 .search-result-summary > p { margin: 0; font-size: var(--cp-type-meta); }
 .search-result-summary > .ant-btn { min-height: 44px; color: var(--cp-accent); flex: none; }
-.search-results:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 4px; border-radius: 2px; }
+.search-results:focus-visible,
+.document-library .doc-list-card:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 4px; }
+.search-results:focus-visible { border-radius: 2px; }
 .search-results .search-result-item.ant-list-item {
   display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px;
   padding: 12px 0 20px; border-bottom: 1px solid var(--cp-line);
