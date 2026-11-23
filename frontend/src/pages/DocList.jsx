@@ -4,6 +4,7 @@ import { Alert, App, Button, Card, Dropdown, Input, Layout, List, Pagination, Po
 import ListEmptyState from '../components/ListEmptyState'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
+import useDocumentReturnFocus from '../navigation/useDocumentReturnFocus'
 import { usePageRequest } from '../auth/PageSessionContext'
 import useBlankDocumentCreation from '../api/useBlankDocumentCreation'
 import { requestFailureMessage } from '../api/requestError'
@@ -54,7 +55,9 @@ export default function DocList() {
   const [templatePendingName, setTemplatePendingName] = useState(null)
   const [loadedFrom, setLoadedFrom] = useState(null)
   const listKey = JSON.stringify([page, keyword, scope, refresh])
-  const deletion = useDocumentLifecycle({ operation: 'delete', ready: loadedFrom === listKey && !loading && !loadError,
+  const listReady = loadedFrom === listKey && !loading && !loadError
+  useDocumentReturnFocus(listReady)
+  const deletion = useDocumentLifecycle({ operation: 'delete', ready: listReady,
     onConfirmed: () => setRefresh(value => value + 1) })
 
   useEffect(() => {
@@ -137,7 +140,7 @@ export default function DocList() {
                 </Popconfirm>,
               ].filter(Boolean)}>
                 <List.Item.Meta avatar={<FileTextOutlined className="doc-icon" aria-hidden="true" />}
-                  title={<Link to={documentHref(doc.id, sourcePath)}><span>{doc.title}</span><ArrowRightOutlined aria-hidden="true" /></Link>}
+                  title={<Link to={documentHref(doc.id, sourcePath)} data-document-id={doc.id}><span>{doc.title}</span><ArrowRightOutlined aria-hidden="true" /></Link>}
                   description={<div className="doc-list-metadata"><Tag>{doc.isOwner ? '所有者' : doc.permission === 2 ? '可编辑' : '只读'}</Tag>
                     <span>{typeof doc.ownerName === 'string' && doc.ownerName.trim() ? doc.ownerName
                       : Number.isSafeInteger(doc.ownerId) && doc.ownerId > 0 ? '用户 #' + doc.ownerId : '所有者暂不可用'}</span>

@@ -3,6 +3,7 @@ import { ArrowRightOutlined } from '@ant-design/icons'
 import { Alert, Button, Input, Layout, List, Skeleton, Tag, Typography } from 'antd'
 import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
+import useDocumentReturnFocus from '../navigation/useDocumentReturnFocus'
 import { usePageRequest } from '../auth/PageSessionContext'
 import { requestFailureMessage } from '../api/requestError'
 import WorkspaceHeader from '../components/WorkspaceHeader'
@@ -30,6 +31,7 @@ export default function Search() {
   const validQuery = Boolean(query && !validationError)
   const currentRead = read?.key === readKey ? read : null
   const ready = validQuery && currentRead?.status === 'success'
+  useDocumentReturnFocus(ready)
   const loading = validQuery && (!currentRead || currentRead.status === 'loading')
   const error = validationError || (currentRead?.status === 'error' ? currentRead.error : '')
   const results = ready ? currentRead.list : []
@@ -116,7 +118,7 @@ export default function Search() {
         {results.length > 0 && <List rowKey="id" dataSource={results}
           pagination={ready && total > PAGE_SIZE ? { current: page, pageSize: PAGE_SIZE, total: Math.min(total, 10000), showSizeChanger: false, responsive: true, showLessItems: true, onChange: (next) => changePage(next) } : false}
           renderItem={item => <List.Item className="search-result-item">
-            <h2 className="search-result-title"><Link to={documentHref(item.id, sourcePath)}>
+            <h2 className="search-result-title"><Link to={documentHref(item.id, sourcePath)} data-document-id={item.id}>
               <span>{item.title}</span><ArrowRightOutlined aria-hidden="true" />
             </Link></h2>
             <SearchExcerpt snippet={item.snippet} title={item.title} />

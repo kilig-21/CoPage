@@ -3,6 +3,7 @@ import { Alert, Button, Layout, Skeleton, Typography } from 'antd'
 import { ArrowRightOutlined, FileTextOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { Link, useLocation } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
+import useDocumentReturnFocus from '../navigation/useDocumentReturnFocus'
 import { usePageRequest } from '../auth/PageSessionContext'
 import { parseAccountProfile } from '../auth/accountProfile'
 import WorkspaceOverview from '../components/WorkspaceOverview'
@@ -21,6 +22,7 @@ export default function Home() {
   const sourcePath = location.pathname + location.search + location.hash
   const { creating, createBlankDocument, openCreatedDocument, creationIdentity } = useBlankDocumentCreation()
   const [data, setData] = useState(null)
+  useDocumentReturnFocus(Boolean(data))
   const [profile, setProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(true)
   const [profileError, setProfileError] = useState('')
@@ -86,7 +88,7 @@ export default function Home() {
           action={<Button onClick={() => setRefresh(value => value + 1)}>重试文档概览</Button>} />}
         {data?.recent.length > 0 && <ul className="cp-recent-list">
           {data.recent.map(doc => <li key={doc.id}>
-            <Link className="cp-recent-link" to={documentHref(doc.id, sourcePath)}>
+            <Link className="cp-recent-link" to={documentHref(doc.id, sourcePath)} data-document-id={doc.id}>
               <FileTextOutlined className="cp-recent-document-icon" aria-hidden="true" />
               <span className="cp-recent-document-text">
                 <strong>{doc.title}</strong>

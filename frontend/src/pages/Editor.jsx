@@ -154,6 +154,9 @@ export default function Editor() {
     setRenameEntry(null)
     queueMicrotask(() => trigger.current?.focus({ preventScroll: true }))
   }
+  function returnToSource() {
+    navigate(returnTarget.path, { state: { returnDocumentId: docId } })
+  }
   useEffect(() => { setToolsOpen(false); setTitleOpen(false) }, [docId, permission])
   useEffect(() => { changeManagement(null); setSharing(false); setShareError(''); setShowImages(false) }, [docId])
   useEffect(() => { setSavingTemplate(null); setTemplateNotice(null) }, [docId, location.key])
@@ -215,7 +218,7 @@ export default function Editor() {
       <header className="topbar editor-topbar" ref={topbarRef}>
         <div className="editor-title-row">
           <Tooltip title={returnTarget.label}><Button type="text" className="editor-return" aria-label={returnTarget.label}
-            icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={() => navigate(returnTarget.path)}><span className="editor-action-label">{returnTarget.label}</span></Button></Tooltip>
+            icon={<ArrowLeftOutlined aria-hidden="true" />} onClick={returnToSource}><span className="editor-action-label">{returnTarget.label}</span></Button></Tooltip>
           <div className="editor-document-context">
             <span className="editor-brand">CoPage</span>
             <h1 className="editor-title"><Popover title="文档标题" content={<p className="editor-full-title">{displayTitle}</p>}
@@ -279,7 +282,7 @@ export default function Editor() {
               {unavailableDrafts.length > 1 && <Typography.Paragraph strong>本地草稿 {index + 1}</Typography.Paragraph>}
               <DraftBackupDownloads backup={backup} />
             </div>)}
-            <Button onClick={() => navigate(returnTarget.path)}>稍后处理，{returnTarget.label}</Button></>} />}
+            <Button onClick={returnToSource}>稍后处理，{returnTarget.label}</Button></>} />}
         {showFind && permission > 0 && <DocumentFindPanel state={documentFindState} permission={permission}
           focusEpoch={findFocusEpoch} onQuery={queryDocument} onNext={nextDocumentMatch}
           onReplace={replaceDocumentMatch} onClose={closeFind} />}
@@ -335,7 +338,7 @@ export default function Editor() {
         maskClosable={false} keyboard={false} onCancel={() => undefined}
         footer={[
           <Button key="discard" danger onClick={discardDraft}>丢弃本地草稿</Button>,
-          <Button key="later" onClick={() => navigate(returnTarget.path)}>稍后处理</Button>,
+          <Button key="later" onClick={returnToSource}>稍后处理</Button>,
           <Button key="recover" type="primary" disabled={permission !== 2} onClick={recoverDraft}>恢复草稿并同步</Button>,
         ]}>
         <Typography.Paragraph>这份草稿可能包含服务端尚未确认的修改。恢复前不会自动重发，也不会覆盖本地草稿。</Typography.Paragraph>

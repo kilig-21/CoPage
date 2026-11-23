@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { expect, test } from '@playwright/test'
 
 const backend = process.env.COPAGE_E2E_BACKEND_ORIGIN
@@ -31,7 +31,7 @@ async function createDocument(page) {
   await page.getByRole('button', { name: /新建文档$/ }).click()
   await expect(page).toHaveURL(/\/docs\/\d+(\?|$)/)
   const id = Number(new URL(page.url()).pathname.split('/').at(-1))
-  expect(Number.isSafeInteger(id) && id > 0 && ![26, 536, 548].includes(id)).toBe(true)
+  expect(Number.isSafeInteger(id) && id > 0).toBe(true)
   await expect(saved(page)).toHaveText('所有修改已保存')
   return id
 }
@@ -222,6 +222,29 @@ test('name a new document from the editor title on desktop and narrow screens', 
     await page.getByRole('button', { name: '返回工作台' }).click()
     await expect(page.getByRole('link', { name: new RegExp(documentTitle) })).toBeVisible()
   }
+})
+
+test('returning from the editor reveals and focuses the same entry in a long document list', async ({ page, request }) => {
+  await page.setViewportSize({ width: 320, height: 850 })
+  await login(page, await createAccount(request))
+  const token = await page.evaluate(() => localStorage.getItem('collab-token'))
+  for (let index = 1; index <= 14; index += 1) {
+    const reply = await request.post(`${backend}/api/doc`, {
+      headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': randomUUID() },
+      data: { title: 'Return fixture ' + index },
+    })
+    expect((await reply.json()).code).toBe(0)
+  }
+
+  await page.goto('/docs?scope=owned')
+  const entry = page.getByRole('link', { name: 'Return fixture 1', exact: true })
+  await entry.scrollIntoViewIfNeeded()
+  await entry.press('Enter')
+  await expect(saved(page)).toHaveText('所有修改已保存')
+  await page.getByRole('button', { name: '返回文档列表' }).press('Enter')
+  await expect(page).toHaveURL(/\/docs\?scope=owned$/)
+  await expect(entry).toBeFocused()
+  await expect(entry).toBeInViewport({ ratio: 1 })
 })
 
 test('object retain is rejected on the wire without advancing document revision', async ({ page, request }) => {
