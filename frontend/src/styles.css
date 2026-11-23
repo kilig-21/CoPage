@@ -177,6 +177,9 @@ body { margin: 0; min-width: 0; }
 .collaborator-add-result .ant-typography { display: block; }
 .collaborator-add-result:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: -2px; }
 .collaborator-list-status { margin-top: 12px; }
+.document-collaborators-modal.collaborator-removal-modal { max-width: calc(100vw - 24px); }
+.collaborator-removal { display: grid; gap: 8px; overflow-wrap: anywhere; }
+.collaborator-removal .ant-typography { margin-bottom: 0; }
 @media (max-width: 640px) {
   .trash-restore-confirm .ant-popconfirm-buttons .ant-btn { min-height: 44px; }
 }

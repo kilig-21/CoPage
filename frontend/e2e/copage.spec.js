@@ -169,6 +169,37 @@ test('adding a collaborator confirms the grant in place and keeps sharing reacha
   }
 })
 
+test('collaborator removal can be cancelled and returns focus to the same account', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  const docId = await createDocument(page)
+  const first = await createAccount(request)
+  const second = await createAccount(request)
+  await grantEditor(page, request, docId, first.username)
+  await grantEditor(page, request, docId, second.username)
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: width === 320 ? 640 : 850 })
+    await page.getByRole('button', { name: '分享链接', exact: true }).press('Enter')
+    await page.getByRole('button', { name: '设置协作者权限', exact: true }).press('Enter')
+    const management = page.getByRole('dialog', { name: /^协作者管理/ })
+    await expect(management.getByRole('button', { name: `移除「${second.username}」的访问权限` })).toBeVisible()
+    const trigger = management.getByRole('button', { name: `移除「${first.username}」的访问权限` })
+    await trigger.press('Enter')
+    const confirmation = page.getByRole('dialog', { name: '移除文档访问权限？' })
+    await expect(confirmation.getByRole('strong')).toHaveText(first.username)
+    const cancel = confirmation.getByRole('button', { name: /^取\s*消$/ })
+    await expect(cancel).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(confirmation.getByRole('button', { name: '移除权限', exact: true })).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(confirmation).toBeHidden()
+    await expect(trigger).toBeFocused()
+
+    await management.getByRole('button', { name: '返回分享' }).press('Enter')
+    await page.getByRole('dialog', { name: '分享文档链接' }).getByRole('button', { name: /^关\s*闭$/ }).press('Enter')
+  }
+})
+
 test('login surfaces Chinese messages for bad credentials, offline, timeout, and HTTP errors', async ({ page, context, request }) => {
   const account = await createAccount(request)
   const endpoint = `${backend}/api/auth/login`
