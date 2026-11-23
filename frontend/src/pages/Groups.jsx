@@ -44,6 +44,19 @@ export default function Groups() {
   const [params, setParams] = useSearchParams()
   const location = useLocation()
   const navigate = useNavigate()
+  const inboxHeading = useRef(null)
+  useEffect(() => {
+    if (location.hash !== '#group-invitations') return undefined
+    const frame = requestAnimationFrame(() => {
+      const target = inboxHeading.current
+      if (!target) return
+      const headerHeight = document.querySelector('.workspace-header')?.getBoundingClientRect().height || 0
+      const top = Math.max(0, window.scrollY + target.getBoundingClientRect().top - headerHeight - 16)
+      target.focus({ preventScroll: true })
+      window.scrollTo({ top, behavior: 'instant' })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [location.hash])
   const [session] = useState(() => {
     try { return { value: createGroupSession({ readIdentity: () => pageSession.current() ? readIdentity() : null }) } }
     catch (error) { return { error } }
@@ -328,7 +341,8 @@ export default function Groups() {
         expectedIdentity={session.value?.identity} assertSession={assertSession}
         disabled={Boolean(sessionError) || busy || uncertain || creating || Boolean(fields)} />
       <Card role="region" aria-label="收到的邀请" className={'group-section group-inbox-card' + (compactInbox ? ' group-inbox-empty' : '')}
-        title={<div className="group-inbox-heading"><span>收到的邀请</span>{compactInbox && <span className="group-inbox-status">暂无待处理邀请</span>}</div>}
+        title={<div className="group-inbox-heading"><h2 id="group-invitations" className="workspace-detail-title" ref={inboxHeading} tabIndex={-1}>收到的邀请</h2>
+          {compactInbox && <span className="group-inbox-status">暂无待处理邀请</span>}</div>}
         extra={<Button disabled={busy} loading={inboxReading} aria-disabled={inboxReading || busy}
           onClick={() => { if (!inboxReading && !busy) setInboxRefresh(n => n + 1) }}>刷新邀请</Button>}>
         {!compactInbox && <>

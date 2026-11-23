@@ -13,6 +13,7 @@ import DocumentLifecycleFeedback from '../components/DocumentLifecycleFeedback'
 import PendingDocumentCreations from '../components/PendingDocumentCreations'
 import useBlankDocumentCreation from '../api/useBlankDocumentCreation'
 import useDocumentLifecycle from '../api/useDocumentLifecycle'
+import useWorkspaceOverview from '../api/useWorkspaceOverview'
 import { requestFailureMessage } from '../api/requestError'
 import '../styles/workbench.css'
 
@@ -21,6 +22,8 @@ export default function Home() {
   const { request } = session
   const location = useLocation()
   const sourcePath = location.pathname + location.search + location.hash
+  const workspace = useWorkspaceOverview()
+  const invitationCount = workspace.data?.pendingInvitationCount ?? 0
   const { creating, createBlankDocument, openCreatedDocument, creationIdentity } = useBlankDocumentCreation()
   const [data, setData] = useState(null)
   useDocumentReturnFocus(Boolean(data))
@@ -125,9 +128,15 @@ export default function Home() {
           <Link to="/templates" className="cp-workbench-action">从模板开始<ArrowRightOutlined aria-hidden="true" /></Link>
         </div>
       </header>
-      {hasLocalDrafts && <section className="cp-workbench-drafts" aria-label="本地草稿提醒">
+      {hasLocalDrafts && <section className="cp-workbench-notice" aria-label="本地草稿提醒">
         <p role="status"><strong>有本地草稿</strong><span>可核对此浏览器保存的记录，或下载副本。</span></p>
         {draftsAction}
+      </section>}
+      {invitationCount > 0 && <section className="cp-workbench-notice" aria-label="小组邀请提醒">
+        <p role="status"><strong>有 {invitationCount} 个小组邀请待处理</strong>
+          {invitationCount === 1 && workspace.data.invitations[0] && <span>{workspace.data.invitations[0].name}</span>}
+        </p>
+        <Link to="/groups#group-invitations" className="cp-workbench-action">查看并处理邀请<ArrowRightOutlined aria-hidden="true" /></Link>
       </section>}
       {profileError && <Alert type="warning" showIcon message={profileError}
         action={<Button disabled={profileLoading} onClick={() => setProfileRefresh(value => value + 1)}>重试账号资料</Button>} />}
@@ -168,7 +177,7 @@ export default function Home() {
         </div>}
       </section>
       <div className="cp-workbench-secondary">
-        <WorkspaceOverview />
+        <WorkspaceOverview {...workspace} />
         {!hasLocalDrafts && <aside className="cp-workbench-tools" aria-label="资料工具">
           <section className="cp-workbench-tool"><Typography.Title level={3}>本地草稿</Typography.Title>
             <Typography.Paragraph type="secondary">继续处理保存在这个浏览器里的草稿，或下载副本。</Typography.Paragraph>

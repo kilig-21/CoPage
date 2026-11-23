@@ -1,7 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Alert, Button, Card, List, Space, Typography } from 'antd'
+import { Alert, Button, Card, List, Typography } from 'antd'
 import { Link } from 'react-router-dom'
-import { usePageRequest } from '../auth/PageSessionContext'
 
 const counters = [
   ['activeGroupCount', '我加入的小组', '/groups'],
@@ -10,27 +8,12 @@ const counters = [
   ['personalTemplateCount', '我的模板', '/templates?source=personal'],
 ]
 
-export default function WorkspaceOverview() {
-  const request = usePageRequest()
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [refresh, setRefresh] = useState(0)
-  useEffect(() => {
-    const controller = new AbortController()
-    setLoading(true); setError(''); setData(null)
-    request.get('/workspace/overview', { signal: controller.signal })
-      .then(({ data }) => { if (!controller.signal.aborted) setData(data) })
-      .catch(failure => { if (!controller.signal.aborted) setError([400, 403, 404].includes(failure?.code)
-        ? failure.message : '小组与项目概览暂时无法加载，请重试。') })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
-    return () => controller.abort()
-  }, [refresh, request])
+export default function WorkspaceOverview({ data, loading, error, retry }) {
   return <Card title={<Typography.Title level={3}>小组与项目</Typography.Title>} className="workbench-recent cp-workspace-overview"
-    extra={<Button type="text" disabled={loading} onClick={() => setRefresh(value => value + 1)}>刷新概览</Button>}
+    extra={<Button type="text" disabled={loading} onClick={retry}>刷新概览</Button>}
     loading={loading}>
     {error && <Alert type="error" showIcon message={error}
-      action={<Button onClick={() => setRefresh(value => value + 1)}>重试组织概览</Button>} />}
+      action={<Button onClick={retry}>重试组织概览</Button>} />}
     {data && <>
       <div className="cp-workspace-counts" aria-label="小组与项目概览">
         {counters.map(([key, label, path]) => <Link key={key} to={path} aria-label={'查看' + label + '，共' + data[key] + '个'}>
@@ -44,8 +27,7 @@ export default function WorkspaceOverview() {
           <List.Item.Meta title={invitation.name}
             description={invitation.inviterNickname + '（' + invitation.inviterUsername + '）邀请你加入 · ' + invitation.createdAt} />
         </List.Item>} />
-        <Space wrap><Link to="/groups">查看并处理邀请</Link>
-          {data.pendingInvitationCount > data.invitations.length && <Typography.Text type="secondary">更多邀请可在我的小组查看</Typography.Text>}</Space>
+        {data.pendingInvitationCount > data.invitations.length && <Typography.Text type="secondary">更多邀请可在我的小组查看</Typography.Text>}
       </> : <Typography.Paragraph className="cp-workspace-empty-invitations">暂无待处理的小组邀请。可以创建小组，或请同伴按用户名邀请你。</Typography.Paragraph>}
     </>}
     {!loading && !data && !error && <Typography.Paragraph>重试后可查看当前组织资料。</Typography.Paragraph>}
