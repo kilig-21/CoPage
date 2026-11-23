@@ -155,6 +155,72 @@ test('narrow navigation keeps primary links visible and keyboard access to other
   await expect(navigation.getByRole('button', { name: '更多页面，当前是回收站' })).toHaveAttribute('aria-expanded', 'false')
 })
 
+test('a slow account profile failure leaves recent documents in the workbench viewport', async ({ page, request }) => {
+  const account = await createAccount(request)
+  await login(page, account)
+  const token = await page.evaluate(() => localStorage.getItem('collab-token'))
+  const documentName = '首屏工作文档'
+  const created = await request.post(`${backend}/api/doc`, {
+    headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': randomUUID() },
+    data: { title: documentName },
+  })
+  expect(created.ok()).toBe(true)
+  expect((await created.json()).code).toBe(0)
+
+  const recent = page.getByRole('region', { name: '最近文档' })
+  const doc = recent.getByRole('link', { name: new RegExp(documentName) })
+  const documentTitle = doc.getByText(documentName, { exact: true })
+  const greeting = page.getByText(`你好，${account.username}`, { exact: true })
+  const retry = page.getByRole('button', { name: '重试账号资料' })
+  const profilePath = '**/api/account/me'
+  for (const [width, height] of [[1280, 850], [320, 480]]) {
+    await page.setViewportSize({ width, height })
+    let failFirst
+    const first = new Promise(resolve => { failFirst = resolve })
+    await page.route(profilePath, async route => {
+      await first
+      await route.fulfill({ status: 503, json: { code: 503, message: '账号资料暂时无法加载' } })
+    }, { times: 1 })
+    await page.goto('/home')
+    let top
+    try {
+      await expect(greeting).toBeVisible()
+      await expect(documentTitle).toBeInViewport({ ratio: 1 })
+      top = await documentTitle.evaluate(element => element.getBoundingClientRect().top)
+    } finally {
+      failFirst()
+    }
+    await expect(retry).toBeVisible()
+    await expect(documentTitle).toBeInViewport({ ratio: 1 })
+    expect(await documentTitle.evaluate(element => element.getBoundingClientRect().top)).toBe(top)
+
+    let releaseRetry
+    const second = new Promise(resolve => { releaseRetry = resolve })
+    await page.route(profilePath, async route => {
+      await second
+      await route.continue()
+    }, { times: 1 })
+    const directory = recent.getByRole('link', { name: '全部文档' })
+    try {
+      await retry.press('Enter')
+      await expect(retry).toBeFocused()
+      await expect(retry).toHaveAttribute('aria-busy', 'true')
+      if (width === 320) await directory.focus()
+    } finally {
+      releaseRetry()
+    }
+    await expect(retry).toHaveCount(0)
+    await expect(width === 320 ? directory : greeting).toBeFocused()
+    await expect(page.locator('html')).toHaveJSProperty('scrollWidth', width)
+
+    await doc.press('Enter')
+    await expect(saved(page)).toHaveText('所有修改已保存')
+    await page.getByRole('button', { name: '返回工作台' }).press('Enter')
+    await expect(doc).toBeFocused()
+    await expect(documentTitle).toBeInViewport({ ratio: 1 })
+  }
+})
+
 test('share and collaborator dialogs keep keyboard focus at desktop and narrow widths', async ({ page, request }) => {
   await login(page, await createAccount(request))
   await createDocument(page)

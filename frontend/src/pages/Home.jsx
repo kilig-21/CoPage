@@ -31,6 +31,9 @@ export default function Home() {
   const [profileLoading, setProfileLoading] = useState(true)
   const [profileError, setProfileError] = useState('')
   const [profileRefresh, setProfileRefresh] = useState(0)
+  const profileRetry = useRef(null)
+  const greeting = useRef(null)
+  const displayName = profile?.nickname?.trim() || profile?.username || session.identity?.account
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
@@ -99,9 +102,15 @@ export default function Home() {
   }, [refresh, request])
   useEffect(() => {
     const controller = new AbortController()
-    setProfileLoading(true); setProfileError(''); setProfile(null)
+    setProfileLoading(true)
     request.get('/account/me', { signal: controller.signal }).then(({ data }) => {
-      if (!controller.signal.aborted) setProfile(parseAccountProfile(data))
+      if (controller.signal.aborted) return
+      setProfile(parseAccountProfile(data))
+      setProfileError('')
+      if (greeting.current && document.activeElement === profileRetry.current) {
+        greeting.current.focus({ preventScroll: true })
+        greeting.current.scrollIntoView({ block: 'center', behavior: 'instant' })
+      }
     }).catch(failure => {
       if (!controller.signal.aborted) setProfileError(requestFailureMessage(failure, '账号资料暂时无法加载，可单独重试。'))
     }).finally(() => { if (!controller.signal.aborted) setProfileLoading(false) })
@@ -120,7 +129,7 @@ export default function Home() {
     <main ref={main} id="workspace-main" tabIndex={-1} className="content-wrap workbench">
       <header className="cp-workbench-heading">
         <Typography.Title level={1}>工作台</Typography.Title>
-        {profile && <p className="cp-workbench-greeting">你好，{profile.nickname?.trim() || profile.username}</p>}
+        {displayName && <p ref={greeting} tabIndex={-1} className="cp-workbench-greeting">你好，{displayName}</p>}
         <div className="cp-workbench-actions">
           <Button size="large" type="primary" icon={<PlusOutlined aria-hidden="true" />}
             loading={creating} onClick={createBlankDocument}>新建文档</Button>
@@ -138,8 +147,6 @@ export default function Home() {
         </p>
         <Link to="/groups#group-invitations" className="cp-workbench-action">查看并处理邀请<ArrowRightOutlined aria-hidden="true" /></Link>
       </section>}
-      {profileError && <Alert type="warning" showIcon message={profileError}
-        action={<Button disabled={profileLoading} onClick={() => setProfileRefresh(value => value + 1)}>重试账号资料</Button>} />}
       <PendingDocumentCreations expectedIdentity={creationIdentity} disabled={creating} onCreated={openCreatedDocument} />
       <DocumentLifecycleFeedback lifecycle={lifecycle} returnTo={sourcePath} />
       <section className="workbench-documents" aria-labelledby="workbench-recent-title">
@@ -176,6 +183,11 @@ export default function Home() {
           <Link to="/docs?scope=shared"><span>与我协作的文档</span><strong>{data.sharedCount}</strong></Link>
         </div>}
       </section>
+      {profileError && <Alert className="cp-workbench-profile-error" type="warning" showIcon message={profileError}
+        action={<Button loading={profileLoading} aria-busy={profileLoading} onClick={event => {
+          profileRetry.current = event.currentTarget
+          setProfileRefresh(value => value + 1)
+        }}>重试账号资料</Button>} />}
       <div className="cp-workbench-secondary">
         <WorkspaceOverview {...workspace} />
         {!hasLocalDrafts && <aside className="cp-workbench-tools" aria-label="资料工具">
