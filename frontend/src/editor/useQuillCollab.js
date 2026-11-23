@@ -43,6 +43,7 @@ export default function useQuillCollab(docId) {
   const [permission, setPermission] = useState(0)
   const [isOwner, setIsOwner] = useState(false)
   const [recoveryDraft, setRecoveryDraft] = useState(null)
+  const [permissionDraft, setPermissionDraft] = useState(null)
   const [unreadableDrafts, setUnreadableDrafts] = useState([])
   const [unavailableDrafts, setUnavailableDrafts] = useState([])
   const [skippedDraftNotice, setSkippedDraftNotice] = useState(false)
@@ -70,6 +71,7 @@ export default function useQuillCollab(docId) {
     setTitleError('')
     setSaveStatus('等待同步')
     setRecoveryDraft(null)
+    setPermissionDraft(null)
     setUnreadableDrafts([])
     setUnavailableDrafts([])
     setSkippedDraftNotice(false)
@@ -385,6 +387,10 @@ export default function useQuillCollab(docId) {
       let permission
       if (message.docId === docId && [0, 1, 2].includes(message.permission)) {
         permission = message.permission
+        if (permission < 2 && client.hasUnconfirmedChanges()) {
+          const backup = createDraftBackup({ docId, username, title: draftTitle, content: quill.getContents() })
+          setPermissionDraft(current => current ?? backup)
+        }
         setPermission(permission)
         canEdit = permission === 2
         if (!canEdit) abortImageUpload()
@@ -613,6 +619,7 @@ export default function useQuillCollab(docId) {
       compositionInbox.clear()
       updateEditable()
       setConnection('登录已变化')
+      setPermissionDraft(null)
       if (draftPersisted) setError('登录状态已变化，编辑已暂停；原账号未确认的内容保留在本机，请重新登录原账号核对。')
       titleController?.abort()
       sessionCheckController.abort()
@@ -815,7 +822,7 @@ export default function useQuillCollab(docId) {
   }, [docId, loadAttempt, pageSession, request])
 
   return {
-    editorHostRef, toolbarHostRef, connection, users, error, loadErrorCode, title, permission, isOwner, recoveryDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, saveStatus, titleError,
+    editorHostRef, toolbarHostRef, connection, users, error, loadErrorCode, title, permission, isOwner, recoveryDraft, permissionDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, saveStatus, titleError,
     dismissSkippedDraftNotice: () => skippedDraftNoticeRef.current?.dismiss(),
     refreshTitle: () => refreshTitleRef.current?.(),
     retryLoad: () => { if (connection === '加载失败') setLoadAttempt(value => value + 1) },

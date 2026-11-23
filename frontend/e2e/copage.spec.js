@@ -714,6 +714,53 @@ test('two accounts converge and recover a draft after losing the connection', as
   }
 })
 
+test('a collaborator can download held edits from the editor after a permission change', async ({ page, browser, request }) => {
+  await login(page, await createAccount(request))
+  const reader = await createAccount(request)
+  const docId = await createDocument(page)
+  await grantEditor(page, request, docId, reader.username)
+  const token = await page.evaluate(() => localStorage.getItem('collab-token'))
+  const members = `${backend}/api/doc/${docId}/collaborators`
+  const headers = { Authorization: `Bearer ${token}` }
+  const listing = await request.get(members, { headers })
+  const collaborator = (await listing.json()).data.find(member => member.username === reader.username)
+  expect(collaborator).toBeTruthy()
+
+  const viewerContext = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport: { width: 320, height: 640 } })
+  try {
+    const peer = await viewerContext.newPage()
+    let held = 0
+    await peer.routeWebSocket('**/ws/collab', downstream => {
+      const upstream = downstream.connectToServer()
+      downstream.onMessage(message => {
+        if (typeof message === 'string' && JSON.parse(message).type === 'op') held++
+        else upstream.send(message)
+      })
+    })
+    await login(peer, reader)
+    await peer.goto(`/docs/${docId}`)
+    await expect(saved(peer)).toHaveText('所有修改已保存')
+    await append(peer, 'Unsynced collaborator text', { acknowledge: false })
+    await expect.poll(() => held).toBeGreaterThan(0)
+
+    const update = await request.put(`${members}/${collaborator.userId}`, { headers, data: { permission: 1 } })
+    expect((await update.json()).code).toBe(0)
+    await expect(editor(peer)).toHaveAttribute('aria-readonly', 'true')
+    const action = peer.getByRole('button', { name: '备份草稿', exact: true })
+    await expect(action).toBeInViewport({ ratio: 1 })
+    await action.press('Enter')
+    const dialog = peer.getByRole('dialog', { name: '备份未同步的编辑' })
+    const downloading = peer.waitForEvent('download')
+    await dialog.getByRole('button', { name: '下载纯文本草稿' }).press('Enter')
+    expect(await readFile(await (await downloading).path(), 'utf8')).toContain('Unsynced collaborator text')
+    await peer.keyboard.press('Escape')
+    await expect(action).toBeFocused()
+    await expect(editor(page)).not.toContainText('Unsynced collaborator text')
+  } finally {
+    await viewerContext.close()
+  }
+})
+
 test('revision gaps and a missed final broadcast catch up on the same socket', async ({ page, browser, request }) => {
   const owner = await createAccount(request)
   const member = await createAccount(request)

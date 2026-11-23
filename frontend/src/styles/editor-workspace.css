@@ -26,6 +26,8 @@
 .editor-save-state { flex: 1; min-width: 0; }
 .editor-save-state .ant-tag { margin-inline-end: 0; }
 .editor-save-status { font-size: var(--cp-type-meta); overflow-wrap: anywhere; }
+.editor-status-row .editor-permission-draft-action.ant-btn { flex-shrink: 0; min-height: 44px; }
+.editor-permission-draft-modal .ant-modal-body .ant-btn { min-height: 44px; }
 .editor-presence { flex-shrink: 0; }
 .editor-presence .ant-avatar:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 2px; }
 .editor-workspace .editor-canvas { margin-top: 12px; padding: 48px 64px; background: var(--cp-surface); }

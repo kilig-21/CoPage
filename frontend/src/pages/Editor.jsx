@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeftOutlined, CloudOutlined, DownOutlined, EditOutlined, ExclamationCircleOutlined, FontSizeOutlined, LockOutlined, MoreOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons'
-import { Alert, Avatar, Button, Dropdown, Layout, Popover, Space, Tag, Tooltip, Typography } from 'antd'
+import { Alert, Avatar, Button, Dropdown, Layout, Modal, Popover, Space, Tag, Tooltip, Typography } from 'antd'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { documentHref, documentReturn } from '../navigation/documents'
 import useQuillCollab from '../editor/useQuillCollab'
@@ -40,6 +40,7 @@ export default function Editor() {
   const shareButtonRef = useRef(null)
   const findButtonRef = useRef(null)
   const titleButtonRef = useRef(null)
+  const permissionDraftButtonRef = useRef(null)
   useEditorStickyOffsets(topbarRef, statusRef)
   const [renameEntry, setRenameEntry] = useState(null)
   const [sharing, setSharing] = useState(false)
@@ -62,8 +63,9 @@ export default function Editor() {
   const [titleOpen, setTitleOpen] = useState(false)
   const [findFocusEpoch, setFindFocusEpoch] = useState(0)
   const [draftDownloadNotice, setDraftDownloadNotice] = useState('')
+  const [openedPermissionDraft, setOpenedPermissionDraft] = useState(null)
   const { editorHostRef, toolbarHostRef, connection, users, error, loadErrorCode, title, permission, isOwner,
-    saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, dismissSkippedDraftNotice, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor, revealDocumentMatch,
+    saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, permissionDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, dismissSkippedDraftNotice, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor, revealDocumentMatch,
     documentImagesState, startDocumentImages, closeDocumentImages, saveDocumentImageDescription } = useQuillCollab(docId)
   useLayoutEffect(() => {
     if (showFind) revealDocumentMatch()
@@ -77,6 +79,8 @@ export default function Editor() {
   const formatExpanded = expandedFormatDoc === docId
   const renaming = renameEntry?.docId === docId ? renameEntry.source : null
   const canNameDocument = permission === 2 && title === UNTITLED_DOCUMENT_TITLE
+  const currentPermissionDraft = permissionDraft?.docId === docId && pageSession.current() ? permissionDraft : null
+  const showingPermissionDraft = currentPermissionDraft && openedPermissionDraft === currentPermissionDraft
   managementScope.current = { docId, isOwner, permission }
   templateScope.current = { docId, permission, routeKey: location.key }
   const displayTitle = title || '协同文档 #' + id
@@ -204,9 +208,13 @@ export default function Editor() {
       if (permission === 1 || document.activeElement === document.body) findButtonRef.current?.focus({ preventScroll: true })
     })
   }
+  function closePermissionDraft() {
+    setOpenedPermissionDraft(null)
+    requestAnimationFrame(() => permissionDraftButtonRef.current?.focus({ preventScroll: true }))
+  }
   useEffect(() => {
     const shortcut = event => {
-      if (permission <= 0 || recoveryDraft || renaming || sharing || managing || savingTemplate || showHistory || showExport || showPrint || showCopy || showGuide || showImages ||
+      if (permission <= 0 || recoveryDraft || showingPermissionDraft || renaming || sharing || managing || savingTemplate || showHistory || showExport || showPrint || showCopy || showGuide || showImages ||
           event.isComposing || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || !['f', 'p'].includes(event.key.toLowerCase())) return
       event.preventDefault()
       if (event.key.toLowerCase() === 'p') { setToolsOpen(false); setShowPrint(true) }
@@ -214,7 +222,7 @@ export default function Editor() {
     }
     window.addEventListener('keydown', shortcut)
     return () => window.removeEventListener('keydown', shortcut)
-  }, [permission, recoveryDraft, renaming, sharing, managing, savingTemplate, showHistory, showExport, showPrint, showCopy, showGuide, showImages, openFind])
+  }, [permission, recoveryDraft, showingPermissionDraft, renaming, sharing, managing, savingTemplate, showHistory, showExport, showPrint, showCopy, showGuide, showImages, openFind])
   function saveRawDrafts() {
     try {
       downloadTextFile(draftRecordsJson(docId, unreadableDrafts), `原始草稿-${docId}.json`, 'application/json;charset=utf-8')
@@ -266,6 +274,8 @@ export default function Editor() {
             <Tag color={isConnected ? 'green' : 'gold'} icon={<CloudOutlined />}>{connection}</Tag>
             <Typography.Text className="editor-save-status" role="status" aria-live="polite">{saveStatus}</Typography.Text>
           </Space>
+          {currentPermissionDraft && <Button ref={permissionDraftButtonRef} className="editor-permission-draft-action" aria-haspopup="dialog"
+            onClick={() => setOpenedPermissionDraft(currentPermissionDraft)}>备份草稿</Button>}
           {isConnected && <div className="editor-presence" role="group" aria-label="在线协作者"><Avatar.Group size={28} max={{ count: 2 }}>
             {users.map(user => <Tooltip key={user.userId} title={user.nickname} trigger={['hover', 'focus']}>
               <Avatar tabIndex={0} aria-label={user.nickname} style={{ backgroundColor: user.color }}>{user.nickname?.slice(0, 1).toUpperCase()}</Avatar>
@@ -359,6 +369,10 @@ export default function Editor() {
         onClose={() => setShowPrint(false)} />}
       {recoveryDraft && <DraftRecoveryModal key={`${docId}:${recoveryDraft.savedAt}`} draft={recoveryDraft} editable={permission === 2}
         onDiscard={discardDraft} onLater={returnToSource} onRecover={recoverDraft} />}
+      {showingPermissionDraft && <Modal className="document-transfer-modal editor-permission-draft-modal" open title="备份未同步的编辑"
+        onCancel={closePermissionDraft} footer={<Button onClick={closePermissionDraft}>关闭</Button>}>
+        <DraftBackupDownloads backup={currentPermissionDraft} />
+      </Modal>}
     </Layout>
   )
 }
