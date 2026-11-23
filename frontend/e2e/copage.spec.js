@@ -144,6 +144,31 @@ test('share and collaborator dialogs keep keyboard focus at desktop and narrow w
   }
 })
 
+test('adding a collaborator confirms the grant in place and keeps sharing reachable', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  const colleague = await createAccount(request)
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: width === 320 ? 640 : 850 })
+    await page.goto('/home')
+    await createDocument(page)
+    await page.getByRole('button', { name: '分享链接', exact: true }).press('Enter')
+    await page.getByRole('button', { name: '设置协作者权限', exact: true }).press('Enter')
+    const dialog = page.getByRole('dialog', { name: /^协作者管理/ })
+    await dialog.getByRole('textbox', { name: '已注册用户名' }).fill(colleague.username)
+    const submit = dialog.getByRole('button', { name: '添加协作者' })
+    await expect(submit).toBeEnabled()
+    await submit.press('Enter')
+    const confirmation = dialog.getByRole('status').filter({ hasText: '已添加协作者' })
+    await expect(confirmation).toContainText(colleague.username)
+    await expect(confirmation).toContainText('本次授予只读')
+    await expect(confirmation).toBeFocused()
+    await expect(confirmation).toBeInViewport({ ratio: 1 })
+    await dialog.getByRole('button', { name: '返回分享' }).press('Enter')
+    await expect(page.getByRole('dialog', { name: '分享文档链接' }).getByRole('button', { name: '复制链接' })).toBeFocused()
+  }
+})
+
 test('login surfaces Chinese messages for bad credentials, offline, timeout, and HTTP errors', async ({ page, context, request }) => {
   const account = await createAccount(request)
   const endpoint = `${backend}/api/auth/login`

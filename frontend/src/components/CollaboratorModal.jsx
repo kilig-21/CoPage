@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { CheckCircleFilled } from '@ant-design/icons'
 import { Alert, Button, Form, Input, List, Modal, Popconfirm, Select, Space, Typography } from 'antd'
 import ListEmptyState from './ListEmptyState'
 import { focusDialogControl, useDialogEscapeFallback } from './dialogFocus'
@@ -16,12 +17,24 @@ export default function CollaboratorModal({ doc, onClose, returnToShare = false 
   const mutation = useRef(null)
   useEffect(() => () => mutation.current?.abort(), [])
   const [error, setError] = useState('')
+  const [addition, setAddition] = useState(null)
   const [refresh, setRefresh] = useState(0)
   const [form] = Form.useForm()
   const backButton = useRef(null)
+  const addButton = useRef(null)
+  const additionResult = useRef(null)
   const base = '/doc/' + doc.id + '/collaborators'
 
   useDialogEscapeFallback(onClose, () => !busy && !mutation.current)
+
+  useEffect(() => {
+    if (!addition) return
+    const frame = requestAnimationFrame(() => {
+      const active = document.activeElement
+      if (active === document.body || active === addButton.current) additionResult.current?.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [addition])
 
   useEffect(() => {
     let active = true
@@ -41,6 +54,7 @@ export default function CollaboratorModal({ doc, onClose, returnToShare = false 
     mutation.current = controller
     setBusy(true)
     setError('')
+    setAddition(null)
     try {
       const reply = await action(controller.signal)
       if (controller.signal.aborted) return
@@ -60,23 +74,39 @@ export default function CollaboratorModal({ doc, onClose, returnToShare = false 
     }
   }
 
+  function addCollaborator(values) {
+    const grant = { username: values.username.trim(), permission: values.permission }
+    mutate(signal => request.post(base, grant, { signal }), () => {
+      form.resetFields(['username'])
+      setAddition(grant)
+    })
+  }
+
   return <Modal className="document-collaborators-modal" title={'协作者管理 · ' + doc.title} open
     transitionName={returnToShare ? '' : undefined} maskTransitionName={returnToShare ? '' : undefined}
     afterOpenChange={open => { if (open && returnToShare) focusDialogControl(backButton.current) }}
     onCancel={() => { if (!busy) onClose() }} closable={!busy} maskClosable={!busy} keyboard={!busy}
     footer={<Button ref={backButton} disabled={busy} onClick={onClose}>{returnToShare ? '返回分享' : '关闭'}</Button>}>
-    <Typography.Paragraph type="secondary">只有文档所有者可以管理成员。输入对方已注册的用户名；添加后把文档链接发给对方即可。</Typography.Paragraph>
-    {error && <Alert type="error" showIcon message={error} action={<Button size="small" disabled={busy || loading} onClick={() => { setError(''); setRefresh((value) => value + 1) }}>刷新列表</Button>} />}
-    <Form form={form} layout="vertical" initialValues={{ permission: 1 }} onFinish={(values) => mutate(signal => request.post(base, { ...values, username: values.username.trim() }, { signal }), () => form.resetFields(['username']))}>
+    <Typography.Paragraph className="collaborator-intro" type="secondary">用对方的注册用户名添加协作者，再把文档链接发给对方。</Typography.Paragraph>
+    <Form form={form} layout="vertical" initialValues={{ permission: 1 }} onFinish={addCollaborator}>
       <Form.Item label="已注册用户名" name="username" rules={[{ required: true, whitespace: true, message: '请输入用户名' }, { max: 50, message: '用户名最多 50 个字符' }]}><Input maxLength={50} disabled={busy} autoComplete="off" /></Form.Item>
       <Space align="start" wrap>
         <Form.Item label="访问权限" name="permission"><Select options={options} disabled={busy} style={{ width: 130 }} /></Form.Item>
-        <Form.Item label=" "><Button type="primary" htmlType="submit" loading={busy} disabled={!listReady}>添加协作者</Button></Form.Item>
+        <Form.Item label=" "><Button ref={addButton} type="primary" htmlType="submit" loading={busy} disabled={!listReady}>添加协作者</Button></Form.Item>
       </Space>
     </Form>
-    <List rowKey="userId" loading={loading} dataSource={members} locale={{ emptyText: listReady ? <ListEmptyState description="尚未添加协作者" /> : loading ? '正在加载…' : '成员列表暂不可用' }} renderItem={(member) => <List.Item actions={[
-      <Select key="permission" aria-label={member.username + ' 的权限'} value={member.permission} options={options} disabled={busy || !listReady} style={{ width: 110 }} onChange={(permission) => mutate(signal => request.put(base + '/' + member.userId, { permission }, { signal }))} />,
-      <Popconfirm key="remove" title={'移除 ' + member.username + ' 的访问权限？'} disabled={busy || !listReady} onConfirm={() => mutate(signal => request.delete(base + '/' + member.userId, { signal }))}><Button type="link" danger disabled={busy || !listReady}>移除</Button></Popconfirm>,
-    ]}><List.Item.Meta title={member.nickname || member.username} description={member.username} /></List.Item>} />
+    {addition && <div ref={additionResult} className="collaborator-add-result" tabIndex={-1} role="status">
+      <CheckCircleFilled aria-hidden="true" />
+      <div><Typography.Text strong>已添加协作者</Typography.Text>
+        <Typography.Text type="secondary">「{addition.username}」 · 本次授予{options.find(option => option.value === addition.permission)?.label}</Typography.Text>
+      </div>
+    </div>}
+    {error && <Alert type="error" showIcon message={error} action={<Button size="small" disabled={busy || loading} onClick={() => { setError(''); setRefresh((value) => value + 1) }}>刷新列表</Button>} />}
+    {loading && <Typography.Paragraph className="collaborator-list-status" role="status">正在读取协作者名单…</Typography.Paragraph>}
+    {(listReady || members.length > 0) && <List rowKey="userId" loading={loading} dataSource={members}
+      locale={{ emptyText: <ListEmptyState description="尚未添加协作者" /> }} renderItem={(member) => <List.Item actions={[
+        <Select key="permission" aria-label={member.username + ' 的权限'} value={member.permission} options={options} disabled={busy || !listReady} style={{ width: 110 }} onChange={(permission) => mutate(signal => request.put(base + '/' + member.userId, { permission }, { signal }))} />,
+        <Popconfirm key="remove" title={'移除 ' + member.username + ' 的访问权限？'} disabled={busy || !listReady} onConfirm={() => mutate(signal => request.delete(base + '/' + member.userId, { signal }))}><Button type="link" danger disabled={busy || !listReady}>移除</Button></Popconfirm>,
+      ]}><List.Item.Meta title={member.nickname || member.username} description={member.username} /></List.Item>} />}
   </Modal>
 }
