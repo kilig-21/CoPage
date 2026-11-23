@@ -75,11 +75,13 @@ export default function Projects() {
   const docPage = Math.min(idValue(params.get('docPage')) || 1, 1000000)
   const docKeyword = (params.get('docKeyword') || '').slice(0, 200).trim()
   const [docInput, setDocInput] = useState(docKeyword)
+  const docFilter = useRef(null)
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState('')
   const [detailError, setDetailError] = useState('')
-  const [detailErrorCode, setDetailErrorCode] = useState(null)
+  const [unavailableProject, setUnavailableProject] = useState(null)
+  const detailAccessLost = unavailableProject === selected
   const [refresh, setRefresh] = useState(0)
   const [listRefresh, setListRefresh] = useState(0)
   const [detailRefresh, setDetailRefresh] = useState(0)
@@ -99,7 +101,7 @@ export default function Projects() {
   const uncertain = Boolean(operation.uncertain)
   const operationError = operation.error
   const latestAddition = operation.notice?.addition
-  const additionNotice = latestAddition?.projectId === selected && !archived && ![401, 403, 404].includes(detailErrorCode)
+  const additionNotice = latestAddition?.projectId === selected && !archived && !detailAccessLost
     ? operation.notice : null
   const arrivingAtAddition = detailArrival?.target === 'addition' && Boolean(additionNotice)
   const creations = useProjectCreations(busy)
@@ -121,7 +123,7 @@ export default function Projects() {
     return () => { if (!automaticPageChange.current) cancelProjectOperation() }
   }, [location.key, sourcePath, routeTargetKey, cancelProjectOperation])
   useEffect(() => setInput(keyword), [keyword])
-  useEffect(() => setDocInput(docKeyword), [docKeyword])
+  useEffect(() => setDocInput(docKeyword), [docKeyword, selected])
   const navigate = changes => {
     automaticPageChange.current = null
     const next = { ...(scope === 'all' ? {} : { scope }), ...(groupId ? { groupId: String(groupId) } : {}),
@@ -172,7 +174,8 @@ export default function Projects() {
   }, [groupId, contextKey, request])
   useEffect(() => {
     const controller = new AbortController()
-    setDetail(null); setDetailError(''); setDetailErrorCode(null); setDetailLoading(Boolean(selected && !archived))
+    setDetail(previous => !archived && previous?.id === selected ? previous : null)
+    setDetailError(''); setDetailLoading(Boolean(selected && !archived))
     if (selected && !archived) request.get('/projects/' + selected,
       { params: { page: docPage, size: SIZE, keyword: docKeyword }, signal: controller.signal })
       .then(({ data }) => {
@@ -183,17 +186,26 @@ export default function Projects() {
           return
         }
         if (data?.id !== selected) throw new Error('项目资料响应不匹配')
+        setUnavailableProject(null)
         setDetail(data); setDetailFrom(detailKey)
       }).catch(failure => { if (!controller.signal.aborted) {
-        setDetailErrorCode(failure?.code)
-        setDetailError([400, 401, 403, 404].includes(failure?.code) ? failure.message : '项目文档未能加载，请刷新重试。')
+        const accessChanged = failure?.reason === 'PAGE_SESSION_CHANGED' || [401, 403, 404].includes(failure?.code)
+        if (accessChanged) { setUnavailableProject(selected); setDetail(null) }
+        setDetailError(accessChanged || failure?.code === 400 ? failure.message : '项目文档未能加载，请刷新重试。')
       } })
       .finally(() => { if (!controller.signal.aborted) { setDetailLoading(false); setDetailSettledFrom(detailKey) } })
     return () => controller.abort()
   }, [selected, archived, docPage, docKeyword, detailKey, request, correctPage])
   const listed = dataFrom === listKey ? data : null
   const ready = Boolean(listed && !loading && !busy && !uncertain)
-  const current = detailFrom === detailKey && detail?.id === selected ? detail : null
+  const summary = detail?.id === selected ? detail : null
+  const detailPending = detailLoading || detailSettledFrom !== detailKey
+  const current = !detailPending && detailFrom === detailKey ? summary : null
+  const visibleDetailError = detailSettledFrom === detailKey ? detailError : ''
+  const retryDetail = () => {
+    docFilter.current?.focus()
+    setDetailRefresh(n => n + 1)
+  }
   const manage = current?.canManage
   const hasGroupContext = Boolean(groupId && contextFrom === contextKey && context?.id === groupId)
   const canCreateGroup = hasGroupContext && ['owner', 'admin'].includes(context.role)
@@ -205,8 +217,8 @@ export default function Projects() {
       : hasGroupContext ? canCreateGroup ? '还没有小组项目，可以创建一个整理本组资料' : '暂无小组项目，可请创建者或管理员创建'
         : scope === 'personal' ? '还没有个人项目，可以先创建一个' : '创建个人项目，或从小组入口创建小组项目'
   useEffect(() => {
-    if (fields?.id && ((current && !manage) || (!detailLoading && [401, 403, 404].includes(detailErrorCode)))) setFields(null)
-  }, [current, manage, detailLoading, detailErrorCode, fields?.id])
+    if (fields?.id && ((current && !manage) || (!detailPending && detailAccessLost))) setFields(null)
+  }, [current, manage, detailPending, detailAccessLost, fields?.id])
   const mutate = (target, action, onSuccess, available = detailReady) => {
     if (available) return operation.run(target, action, onSuccess)
   }
@@ -328,50 +340,55 @@ export default function Projects() {
       </Card>
       {selected > 0 && !archived && <WorkspaceDetailCard key={selected} id="project-detail" arrival={detailArrival}
         arrivalTarget={arrivingAtAddition ? addResult : returnedDocumentId ? returnedDocumentLink : undefined}
-        waiting={arrivingAtAddition ? loading || (!listed && !error) : detailLoading || detailSettledFrom !== detailKey}
-        title={current?.name || (additionNotice && latestAddition.projectName) || '项目资料'}
-        loading={detailLoading && !additionNotice} className="project-section"
-        extra={<Button disabled={detailLoading || busy} onClick={() => setDetailRefresh(n => n + 1)}>刷新项目资料</Button>}>
+        waiting={arrivingAtAddition ? loading || (!listed && !error) : detailPending}
+        title={summary?.name || (additionNotice && latestAddition.projectName) || '项目资料'}
+        loading={detailPending && !summary && !additionNotice} className="project-section"
+        extra={<Button disabled={detailPending || busy} onClick={() => setDetailRefresh(n => n + 1)}>刷新项目资料</Button>}>
         {additionNotice && <div ref={addResult} className="project-add-feedback" tabIndex={-1} role="region" aria-label="加入文档结果">
           <Alert className="project-read-alert" type={additionNotice.type} showIcon message={additionNotice.message}
             description={<>{latestAddition.title} · 文档 #{latestAddition.docId}</>}
             action={<Link className="document-open-link" to={documentHref(latestAddition.docId, sourcePath)}
               aria-label={`打开文档「${latestAddition.title}」（文档 #${latestAddition.docId}）`}>打开文档</Link>} />
         </div>}
-        {additionNotice && detailLoading && <Typography.Paragraph role="status">正在刷新项目资料…</Typography.Paragraph>}
-        {detailError && <Alert className="project-read-alert" type="error" showIcon message={detailError}
-          action={<Button disabled={detailLoading || busy} onClick={() => setDetailRefresh(n => n + 1)}>重试项目资料</Button>} />}
-        {current && <>
-          <Typography.Paragraph>{current.description || '尚未填写简介'}</Typography.Paragraph>
-          <Typography.Paragraph>{current.total} 篇你可访问的文档 · {current.groupId ? '小组：' + current.groupName : '个人项目'}</Typography.Paragraph>
+        {additionNotice && detailPending && !summary && <Typography.Paragraph role="status">正在刷新项目资料…</Typography.Paragraph>}
+        {summary && <>
+          <Typography.Paragraph>{summary.description || '尚未填写简介'}</Typography.Paragraph>
+          <Typography.Paragraph>{current && `${current.total} 篇你可访问的文档 · `}{summary.groupId ? '小组：' + summary.groupName : '个人项目'}</Typography.Paragraph>
           <Space wrap className="project-section">
-            <Button type="primary" disabled={!detailReady} onClick={() => setNewDocument({ id: current.id, name: current.name, groupId: current.groupId })}>新建文档</Button>
+            <Button type="primary" disabled={!detailReady} onClick={() => setNewDocument({ id: summary.id, name: summary.name, groupId: summary.groupId })}>新建文档</Button>
             <Button disabled={!detailReady} onClick={event => { addDocumentTrigger.current = event.currentTarget; setAdding(true) }}>加入已有文档</Button>
-            {manage && <Button disabled={!detailReady} onClick={event => { fieldsTrigger.current = event.currentTarget; setFields(current) }}>修改项目资料</Button>}
-            {manage && <Popconfirm overlayClassName="document-action-confirm" title={'归档“' + current.name + '”？'}
+            {summary.canManage && <Button disabled={!detailReady} onClick={event => { fieldsTrigger.current = event.currentTarget; setFields(summary) }}>修改项目资料</Button>}
+            {summary.canManage && <Popconfirm overlayClassName="document-action-confirm" title={'归档“' + summary.name + '”？'}
               description="保留原文档、单独权限及项目关联，可在已归档列表恢复。" disabled={!detailReady}
-              onConfirm={() => mutate({ kind: 'archive', projectId: current.id, name: current.name }, config => request.post('/projects/' + current.id + '/archive', {}, config), () => navigate({ project: null }))}>
+              onConfirm={() => mutate({ kind: 'archive', projectId: summary.id, name: summary.name }, config => request.post('/projects/' + summary.id + '/archive', {}, config), () => navigate({ project: null }))}>
               <Button disabled={!detailReady} danger>归档项目</Button></Popconfirm>}
           </Space>
-          <Input.Search aria-label="筛选项目内文档" value={docInput} maxLength={200} disabled={busy} placeholder="按文档标题筛选"
+          <Input.Search ref={docFilter} aria-label="筛选项目内文档" value={docInput} maxLength={200} disabled={busy} placeholder="按文档标题筛选"
             onChange={e => setDocInput(e.target.value)} onSearch={value => navigate({ docKeyword: value.trim() || null, docPage: null })} enterButton="筛选" />
-          <List rowKey="id" dataSource={current.list} locale={{ emptyText: <ListEmptyState description={docKeyword ? '没有符合条件且可访问的文档' : '还没有你可访问的文档，可以新建一篇或加入已有文档'} /> }}
-            renderItem={doc => <List.Item actions={[
-              <Link key="open" to={documentHref(doc.id, sourcePath)}>打开</Link>,
-              doc.canRemove && <Popconfirm key="remove" overlayClassName="document-action-confirm" title={'将“' + doc.title + '”移出项目？'}
-                description="只移除当前关联，保留原文档和成员权限。" disabled={!detailReady} onConfirm={() => mutate({ kind: 'remove', projectId: current.id, groupId: current.groupId, docId: doc.id, title: doc.title, associationId: doc.associationId }, config =>
-                  request.delete('/projects/' + current.id + '/documents/' + doc.id, { ...config, params: { associationId: doc.associationId } }))}>
-                <Button disabled={!detailReady} danger>移出项目</Button></Popconfirm>,
-            ].filter(Boolean)}><List.Item.Meta title={<Link ref={doc.id === returnedDocumentId ? returnedDocumentLink : undefined}
-              to={documentHref(doc.id, sourcePath)}>{doc.title}</Link>}
-              description={<Space wrap><Tag>{doc.isOwner === true ? '所有者' : doc.permission === 2 ? '可编辑' : doc.permission === 1 ? '只读' : '打开后查看权限'}</Tag>
-                <span>文档 #{doc.id}</span>
-                <span>所有者：{typeof doc.ownerName === 'string' && doc.ownerName.trim() ? doc.ownerName : '用户 #' + doc.ownerId}</span>
-                <span>更新于 {doc.updateTime}</span></Space>} />
-            </List.Item>} />
-          {current.total > SIZE && <Pagination current={docPage} total={current.total} pageSize={SIZE} showSizeChanger={false}
-            disabled={!detailReady} onChange={next => navigate({ docPage: String(next) })} />}
         </>}
+        {(summary || visibleDetailError) && <section aria-label="项目文档" className={summary ? 'project-document-results' : undefined}>
+          {visibleDetailError && <Alert className="project-read-alert" type="error" showIcon message={visibleDetailError}
+            action={<Button disabled={detailPending || busy} onClick={retryDetail}>重试项目资料</Button>} />}
+          {summary && detailPending && <Typography.Paragraph role="status" type="secondary">正在读取项目文档…</Typography.Paragraph>}
+          {current && <>
+            <List rowKey="id" dataSource={current.list} locale={{ emptyText: <ListEmptyState description={docKeyword ? '没有符合条件且可访问的文档' : '还没有你可访问的文档，可以新建一篇或加入已有文档'} /> }}
+              renderItem={doc => <List.Item actions={[
+                <Link key="open" to={documentHref(doc.id, sourcePath)}>打开</Link>,
+                doc.canRemove && <Popconfirm key="remove" overlayClassName="document-action-confirm" title={'将“' + doc.title + '”移出项目？'}
+                  description="只移除当前关联，保留原文档和成员权限。" disabled={!detailReady} onConfirm={() => mutate({ kind: 'remove', projectId: current.id, groupId: current.groupId, docId: doc.id, title: doc.title, associationId: doc.associationId }, config =>
+                    request.delete('/projects/' + current.id + '/documents/' + doc.id, { ...config, params: { associationId: doc.associationId } }))}>
+                  <Button disabled={!detailReady} danger>移出项目</Button></Popconfirm>,
+              ].filter(Boolean)}><List.Item.Meta title={<Link ref={doc.id === returnedDocumentId ? returnedDocumentLink : undefined}
+                to={documentHref(doc.id, sourcePath)}>{doc.title}</Link>}
+                description={<Space wrap><Tag>{doc.isOwner === true ? '所有者' : doc.permission === 2 ? '可编辑' : doc.permission === 1 ? '只读' : '打开后查看权限'}</Tag>
+                  <span>文档 #{doc.id}</span>
+                  <span>所有者：{typeof doc.ownerName === 'string' && doc.ownerName.trim() ? doc.ownerName : '用户 #' + doc.ownerId}</span>
+                  <span>更新于 {doc.updateTime}</span></Space>} />
+              </List.Item>} />
+            {current.total > SIZE && <Pagination current={docPage} total={current.total} pageSize={SIZE} showSizeChanger={false}
+              disabled={!detailReady} onChange={next => navigate({ docPage: String(next) })} />}
+          </>}
+        </section>}
       </WorkspaceDetailCard>}
     </main>
     {newDocument && <CreateProjectDocumentModal project={newDocument} contextKey={location.key}

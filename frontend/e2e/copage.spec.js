@@ -586,11 +586,13 @@ test('project lists and selected documents load independently at desktop and nar
     const fail = { status: 503, json: { code: 503, message: '暂时无法读取' } }
     await page.route(detailRoute, route => route.fulfill(fail), { times: 1 })
     await detail.getByRole('button', { name: '刷新项目资料' }).press('Enter')
-    const failed = page.getByRole('region', { name: '项目资料' })
+    const failed = detail.getByRole('region', { name: '项目文档' })
     await expect(failed.getByRole('alert')).toBeVisible()
+    await expect(filter).toHaveValue('待查文档')
     await expect(open).toBeEnabled()
     await failed.getByRole('button', { name: '重试项目资料' }).press('Enter')
     await expect(detail.getByText('没有符合条件且可访问的文档')).toBeVisible()
+    await expect(filter).toBeFocused()
     expect(reads.map(url => url.pathname)).toEqual([detailPath, detailPath, detailPath, detailPath])
     expect(reads[1].searchParams.get('keyword')).toBe('待查文档')
     reads.length = 0
@@ -616,6 +618,83 @@ test('project lists and selected documents load independently at desktop and nar
     expect(reads.filter(url => url.pathname === listPath)).toHaveLength(2)
     expect(reads.filter(url => url.pathname === detailPath)).toHaveLength(1)
     page.off('request', record)
+  }
+})
+
+test('a pending project document filter keeps focus and discards results from older queries', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  const name = '校园写作项目'
+  const projectId = await createProject(page, request, name)
+  const otherName = '校对计划'
+  await createProject(page, request, otherName)
+  const docId = await createDocument(page)
+  const documentName = '阅读节素材'
+  await rename(page, documentName)
+  const token = await page.evaluate(() => localStorage.getItem('collab-token'))
+  const link = await request.post(`${backend}/api/projects/${projectId}/documents`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { docId },
+  })
+  expect(link.status()).toBe(200)
+  expect((await link.json()).code).toBe(0)
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 760 })
+    await page.goto(`/projects?project=${projectId}`)
+    const detail = page.getByRole('region', { name })
+    const filter = detail.getByRole('textbox', { name: '筛选项目内文档' })
+    const doc = detail.getByRole('link', { name: documentName, exact: true })
+    const openProject = projectName => page.getByRole('listitem')
+      .filter({ hasText: projectName }).getByRole('button', { name: '查看项目' })
+    await expect(doc).toBeVisible()
+    await filter.fill('未提交的查询')
+    await openProject(otherName).press('Enter')
+    const otherDetail = page.getByRole('region', { name: otherName })
+    await expect(otherDetail.getByRole('textbox', { name: '筛选项目内文档' })).toHaveValue('')
+    await expect(doc).toHaveCount(0)
+    await openProject(name).press('Enter')
+    await expect(doc).toBeVisible()
+
+    const slowQuery = '无匹配结果'
+    const slowRoute = url => url.pathname === `/api/projects/${projectId}` && url.searchParams.get('keyword') === slowQuery
+    let release
+    const delayed = new Promise(resolve => { release = resolve })
+    const slowRequest = page.waitForRequest(req => slowRoute(new URL(req.url())))
+    await page.route(slowRoute, async route => {
+      await delayed
+      await route.continue()
+    }, { times: 1 })
+    try {
+      await filter.fill(slowQuery)
+      await filter.press('Enter')
+      await slowRequest
+      await expect(detail.getByRole('status')).toHaveText('正在读取项目文档…')
+      await expect(filter).toBeFocused()
+      await expect(filter).toBeInViewport()
+      await expect(doc).toHaveCount(0)
+      await expect(detail.getByRole('button', { name: '新建文档' })).toBeDisabled()
+
+      await filter.fill('阅读节')
+      await filter.press('Enter')
+      await expect(doc).toBeVisible()
+      await expect(filter).toBeFocused()
+    } finally {
+      release()
+    }
+    const denied = page.waitForResponse(response => new URL(response.url()).pathname === `/api/projects/${projectId}` &&
+      response.status() === 403)
+    await page.route(`**/api/projects/${projectId}?*`, route => route.fulfill({
+      status: 403,
+      json: { code: 403, message: '当前账号无权访问该项目' },
+    }), { times: 1 })
+    await filter.fill('换个查询')
+    await filter.press('Enter')
+    await denied
+    const unavailable = page.getByRole('region', { name: '项目资料' })
+    await expect(unavailable.getByRole('alert')).toBeVisible()
+    await expect(filter).toHaveCount(0)
+    await expect(doc).toHaveCount(0)
+    await expect(unavailable.getByRole('button', { name: '重试项目资料' })).toBeEnabled()
   }
 })
 
