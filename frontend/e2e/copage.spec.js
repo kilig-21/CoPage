@@ -443,6 +443,101 @@ test('personal template actions distinguish each row and keep keyboard focus on 
   }
 })
 
+test('opening group members keeps the list and invitation inbox available', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  const token = await page.evaluate(() => localStorage.getItem('collab-token'))
+  const groups = []
+  for (const name of ['写作小组', '校对小组']) {
+    const reply = await request.post(`${backend}/api/groups`, {
+      headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': randomUUID() },
+      data: { name, description: '协作验收用资料' },
+    })
+    expect(reply.status()).toBe(200)
+    const { code, data } = await reply.json()
+    expect(code).toBe(0)
+    groups.push({ name, id: data.id })
+  }
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 760 })
+    await page.goto('/groups')
+    const groupButton = name => page.getByRole('listitem')
+      .filter({ hasText: name }).getByRole('button', { name: '查看成员' })
+    const [writing, review] = groups
+    const writingButton = groupButton(writing.name)
+    const reviewButton = groupButton(review.name)
+    await expect(writingButton).toBeEnabled()
+    await expect(page.getByText('暂无待处理邀请')).toBeVisible()
+
+    const requests = []
+    const recordResources = req => {
+      const path = new URL(req.url()).pathname
+      if (req.method() === 'GET' && path.startsWith('/api/groups')) requests.push(path)
+    }
+    page.on('request', recordResources)
+    let releaseWriting
+    const holdWriting = new Promise(resolve => { releaseWriting = resolve })
+    const writingPath = `**/api/groups/${writing.id}`
+    await page.route(writingPath, async route => {
+      await holdWriting
+      await route.continue()
+    })
+    await page.route(`**/api/groups/${review.id}`, route => route.fulfill({
+      status: 503,
+      json: { code: 503, message: '暂时无法读取小组资料' },
+    }), { times: 1 })
+
+    try {
+      await writingButton.press('Enter')
+      await expect(writingButton).toHaveAttribute('aria-expanded', 'true')
+      await expect(reviewButton).toBeEnabled()
+      await expect(page.getByRole('region', { name: '小组资料' }).getByRole('heading')).not.toBeFocused()
+    } finally {
+      releaseWriting()
+    }
+    const writingHeading = page.getByRole('heading', { name: writing.name, exact: true, level: 3 })
+    await expect(writingHeading).toBeFocused()
+    await expect(writingHeading).toBeInViewport()
+    await page.unroute(writingPath)
+
+    await reviewButton.press('Enter')
+    const fallback = page.getByRole('region', { name: '小组资料' })
+    await expect(fallback.getByRole('heading')).toBeFocused()
+    await expect(fallback.getByRole('alert')).toBeVisible()
+    await expect(writingButton).toBeEnabled()
+    await expect(writingHeading).toHaveCount(0)
+    await fallback.getByRole('button', { name: '重试小组资料' }).press('Enter')
+    const reviewDetail = page.getByRole('region', { name: review.name })
+    await expect(reviewDetail.getByText('我的角色：创建者')).toBeVisible()
+    await expect(reviewDetail.getByText('没有待接受邀请')).toBeVisible()
+    await expect(reviewButton).toHaveAttribute('aria-expanded', 'true')
+    expect(requests).toEqual([
+      `/api/groups/${writing.id}`,
+      `/api/groups/${review.id}`,
+      `/api/groups/${review.id}`,
+    ])
+    page.off('request', recordResources)
+
+    const filter = page.getByRole('textbox', { name: '筛选小组名称或简介' })
+    await filter.fill('无匹配的小组名称')
+    await filter.press('Enter')
+    await expect(page.getByText('没有匹配的小组，请调整关键词或清除筛选')).toBeVisible()
+    await expect(reviewDetail).toHaveCount(0)
+    await page.getByRole('button', { name: '清除小组筛选' }).press('Enter')
+    await expect(writingButton).toBeEnabled()
+    await expect(reviewButton).toBeEnabled()
+
+    const refreshed = page.waitForResponse(response => new URL(response.url()).pathname === '/api/groups')
+    await page.getByRole('button', { name: '刷新小组', exact: true }).press('Enter')
+    expect((await refreshed).ok()).toBe(true)
+    await page.goto(`/groups?page=8&group=${writing.id}`)
+    await expect(page).toHaveURL(url => url.searchParams.get('page') === '1' &&
+      url.searchParams.get('group') === String(writing.id))
+    await expect(writingHeading).toBeVisible()
+    await expect(writingButton).toBeEnabled()
+  }
+})
+
 test('the project document picker starts in the filter and returns to its trigger', async ({ page, request }) => {
   await login(page, await createAccount(request))
   const docId = await createDocument(page)

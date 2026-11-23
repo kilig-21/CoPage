@@ -69,6 +69,8 @@ export default function Groups() {
   const archived = params.get('archived') === 'true'
   const page = Math.min(validId(params.get('page')) || 1, 1000000)
   const selected = validId(params.get('group'))
+  const currentRoute = useRef({ selected, setParams })
+  currentRoute.current = { selected, setParams }
   const [detailArrival, setDetailArrival] = useState(0)
   const [inboxPage, setInboxPage] = useState(1)
   const [groups, setGroups] = useState(null)
@@ -165,20 +167,21 @@ export default function Groups() {
     choose(data.archived ? 0 : data.id, 1, data.archived,
       data.archived && typeof data.name === 'string' ? data.name : '')
   }
-  const confirmRead = useCallback((resource, epoch, target = 0) => {
+  const confirmRead = useCallback((resource, epoch, target = 0, readKeyword = '') => {
     assertSession()
     const pending = unconfirmed.current
     if (!pending || pending.resource !== resource || pending.epoch !== epoch || epoch !== mutationEpoch.current ||
         (resource === 'detail' && pending.target !== target) ||
-        (resource === 'groups' && pending.keyword && pending.keyword !== keyword)) return
+        (resource === 'groups' && pending.keyword && pending.keyword !== readKeyword)) return
     if (!waiting.current.clear(pending)) return
     unconfirmed.current = null; setUncertain(false); setError('')
+    const { selected, setParams } = currentRoute.current
     if (resource === 'groups' && pending.target === selected && selected && !pending.keyword) {
       setDetail(null)
       setParams(current => { const next = new URLSearchParams(current); next.delete('group'); return next }, { replace: true })
     }
     setNoticeType('info'); setNotice('已重新读取相关资料，请核对上次操作的实际结果。')
-  }, [assertSession, keyword, selected, setParams])
+  }, [assertSession])
   function reviewOperation() {
     feedbackAction.current = document.activeElement
     try { assertSession() } catch { return }
@@ -210,10 +213,14 @@ export default function Groups() {
       assertSession(controller.signal)
       const last = Math.max(1, Math.ceil(data.total / SIZE))
       if (page > last) {
-        setParams(current => { const next = new URLSearchParams(current); next.set('page', String(last)); return next }, { replace: true })
+        currentRoute.current.setParams(current => {
+          const next = new URLSearchParams(current)
+          next.set('page', String(last))
+          return next
+        }, { replace: true })
         return
       }
-      setGroups(data); confirmRead('groups', epoch)
+      setGroups(data); confirmRead('groups', epoch, 0, keyword)
     }).catch(failure => {
       if (!controller.signal.aborted && !isGroupSessionFailure(failure)) {
         waiting.current.finishRead(read, true)
@@ -221,7 +228,7 @@ export default function Groups() {
       }
     }).finally(() => { waiting.current.finishRead(read); if (!controller.signal.aborted) setLoading(false) })
     return () => { controller.abort(); waiting.current.cancelRead(read) }
-  }, [page, archived, keyword, selected, refresh, groupRefresh, request, runSession, assertSession, confirmRead, setParams])
+  }, [page, archived, keyword, refresh, groupRefresh, request, runSession, assertSession, confirmRead])
   useEffect(() => {
     const controller = new AbortController()
     const epoch = mutationEpoch.current
@@ -244,8 +251,7 @@ export default function Groups() {
         }
       }).finally(() => { waiting.current.finishRead(read); if (current()) setInboxLoading(false) })
     return () => { controller.abort(); waiting.current.cancelRead(read) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- confirmRead 的筛选和路由参数只用于小组列表，邀请读取独立刷新。
-  }, [inboxPage, inboxKey, request, runSession, assertSession])
+  }, [inboxPage, inboxKey, request, runSession, assertSession, confirmRead])
   useEffect(() => {
     const controller = new AbortController()
     const epoch = mutationEpoch.current
@@ -262,8 +268,7 @@ export default function Groups() {
       })
       .finally(() => { waiting.current.finishRead(read); if (!controller.signal.aborted) { setDetailLoading(false); setDetailTarget(selected) } })
     return () => { controller.abort(); waiting.current.cancelRead(read) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 原资料核对按所选 ID 和操作 epoch 判断，列表筛选不应打断详情读取。
-  }, [selected, archived, refresh, detailRefresh, request, runSession, assertSession])
+  }, [selected, archived, refresh, detailRefresh, request, runSession, assertSession, confirmRead])
   useEffect(() => {
     const pending = unconfirmed.current
     // 用户已离开原核对目标时，只取消尚未开始的意图；无关读取本身不能记作核对失败。
@@ -394,7 +399,7 @@ export default function Groups() {
           showSizeChanger={false} disabled={loading || busy} onChange={next => choose(selected, next)} />}
       </Card>
       {selected > 0 && !archived && <WorkspaceDetailCard key={selected} id="group-detail" arrival={detailArrival}
-        waiting={loading || detailLoading || inboxReading || detailTarget !== selected}
+        waiting={detailLoading || detailTarget !== selected}
         title={detail?.id === selected ? detail.name : '小组资料'} loading={detailLoading} className="group-section">
         {detailError && <Alert type="error" showIcon message={detailError}
           action={<Button disabled={detailLoading || busy} onClick={() => setDetailRefresh(n => n + 1)}>重试小组资料</Button>} />}
