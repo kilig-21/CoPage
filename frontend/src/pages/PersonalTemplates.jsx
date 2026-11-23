@@ -27,6 +27,7 @@ export default function PersonalTemplates() {
   const page = Number.isSafeInteger(rawPage) && rawPage > 0 && rawPage <= 1000000 ? rawPage : 1
   const [input, setInput] = useState(keyword)
   const [data, setData] = useState(null)
+  const emptyLibrary = data?.usage.count === 0
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [loadError, setLoadError] = useState('')
@@ -163,7 +164,7 @@ export default function PersonalTemplates() {
   return <Layout className="app-shell">
     <WorkspaceHeader title="我的模板" guideSection="templates" />
     <main id="workspace-main" tabIndex={-1} className="content-wrap template-center personal-template-page">
-      <WorkspacePageHeading title="复用自己的工作框架" description="在编辑器“更多”选择“保存为个人模板”，也可从“我的文档”保存。模板只供本人使用，使用时新建独立文档；修改资料不替换模板正文。">
+      <WorkspacePageHeading title="我的模板" description="把常用文档保存为模板，下次可用它创建一篇独立文档。">
         <Space wrap>
           <Button onClick={() => navigate('/templates')}>内置模板</Button>
           <Button disabled={busy || loading} onClick={() => setRefresh(n => n + 1)}>刷新</Button>
@@ -177,14 +178,21 @@ export default function PersonalTemplates() {
           <Button disabled={busy || loading} onClick={uncertain ? review : () => setRefresh(n => n + 1)}>{uncertain?.kind === 'instance' ? '核对我的文档' : uncertain ? '核对模板列表' : '重试读取'}</Button>
         </Space>} />}
       {notice && <Alert type="success" showIcon message={notice} />}
-      {data && <Typography.Paragraph type="secondary">已保存 {data.usage.count} / {data.countLimit} 份 · 模板正文 {(data.usage.bytes / 1024 / 1024).toFixed(2)} / {(data.byteLimit / 1024 / 1024).toFixed(0)} MiB</Typography.Paragraph>}
-      <Radio.Group className="template-filters" aria-label="个人模板分类" value={category} disabled={busy}
-        options={[{ value: 'all', label: '全部' }, ...Object.entries(categories).map(([value, label]) => ({ value, label }))]} onChange={e => filter(e.target.value, keyword)} />
-      <Input.Search aria-label="筛选个人模板" value={input} maxLength={200} disabled={busy} placeholder="搜索模板名称或说明"
-        onChange={e => setInput(e.target.value)} onSearch={value => filter(category, value.trim())} enterButton="筛选" />
-      {(category !== 'all' || keyword) && <Button className="template-filters" disabled={busy} onClick={() => filter('all', '')}>清除筛选</Button>}
-      <Card title="个人模板" className="template-filters"><List rowKey="id" loading={{ spinning: loading, tip: '正在加载…' }} dataSource={data?.list || []}
-        locale={{ emptyText: !data ? '列表暂不可用' : <ListEmptyState description={keyword || category !== 'all' ? '没有匹配的个人模板' : '还没有个人模板，先从一篇已保存的文档开始'} /> }}
+      {!emptyLibrary && <>
+        {data && <Typography.Paragraph type="secondary">已保存 {data.usage.count} / {data.countLimit} 份 · 模板正文 {(data.usage.bytes / 1024 / 1024).toFixed(2)} / {(data.byteLimit / 1024 / 1024).toFixed(0)} MiB</Typography.Paragraph>}
+        <Radio.Group className="template-filters" aria-label="个人模板分类" value={category} disabled={busy}
+          options={[{ value: 'all', label: '全部' }, ...Object.entries(categories).map(([value, label]) => ({ value, label }))]} onChange={e => filter(e.target.value, keyword)} />
+        <Input.Search aria-label="筛选个人模板" value={input} maxLength={200} disabled={busy} placeholder="搜索模板名称或说明"
+          onChange={e => setInput(e.target.value)} onSearch={value => filter(category, value.trim())} enterButton="筛选" />
+        {(category !== 'all' || keyword) && <Button className="template-filters" disabled={busy} onClick={() => filter('all', '')}>清除筛选</Button>}
+      </>}
+      <Card title={emptyLibrary ? '还没有个人模板' : '个人模板'} className="template-filters">
+        <List rowKey="id" loading={{ spinning: loading, tip: '正在加载…' }} dataSource={data?.list || []}
+        locale={{ emptyText: !data ? '列表暂不可用' : emptyLibrary ? (
+          <ListEmptyState description="在文档的「更多」菜单中，选择「保存为模板」。">
+            <Button type="primary" className="personal-template-start" onClick={() => navigate('/docs')}>去我的文档</Button>
+          </ListEmptyState>
+        ) : <ListEmptyState description="没有匹配的个人模板" /> }}
         renderItem={template => <List.Item actions={[
           <Button key="open" disabled={!ready} onClick={() => open(template)}>预览并使用</Button>,
           <Popconfirm key="delete" overlayClassName="document-action-confirm" title={'删除模板“' + template.name + '”？'}

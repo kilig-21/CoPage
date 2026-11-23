@@ -92,6 +92,7 @@ body .ant-list .ant-list-empty-text { color: var(--cp-muted); }
 .template-center .ant-card-body { padding-top: 22px; }
 .template-center .ant-card { transition: border-color 160ms ease, box-shadow 160ms ease; }
 .template-center .ant-card:hover { border-color: #a6b3e0; box-shadow: 0 6px 20px rgb(35 44 57 / 4%); }
+.personal-template-page .personal-template-start.ant-btn { min-height: 44px; }
 .builtin-templates .page-heading { margin-bottom: 24px; }
 .builtin-templates .page-heading-copy { flex-basis: 164px; }
 .builtin-template-controls { display: grid; gap: 12px; margin-bottom: 16px; }
