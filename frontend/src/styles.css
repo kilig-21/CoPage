@@ -49,9 +49,19 @@ body { margin: 0; min-width: 0; }
 .editor-host.ql-container.ql-snow { min-height: 500px; border: 0; font-family: inherit; font-size: 16px; line-height: 1.8; }
 .editor-host .ql-editor { min-height: 500px; padding: 28px 0 0; }
 /* Quill sets a line height on its child, so inherit each document surface's reading scale explicitly. */
-.editor-host .ql-editor, .document-preview .ql-editor { line-height: inherit; }
-.editor-host .ql-editor :is(h1, h2, h3, h4, h5, h6),
-.document-preview .ql-editor :is(h1, h2, h3, h4, h5, h6) { line-height: 1.4; }
+:is(.editor-host, .document-preview) .ql-editor { line-height: inherit; }
+:is(.editor-host, .document-preview) .ql-editor > :is(h1, h2, h3, h4, h5, h6) {
+  line-height: 1.4;
+  margin-block-end: var(--cp-space-1);
+}
+/* An explicit blank Quill paragraph already separates the sections. */
+:is(.editor-host, .document-preview) .ql-editor > :is(p:not(:has(> br:only-child)), blockquote, ol, ul, pre, .ql-code-block-container)
+  + :is(h1, h2, h3, h4, h5, h6) {
+  margin-block-start: var(--cp-space-4);
+}
+@media screen and (max-width: 640px) {
+  .editor-host.ql-snow .ql-editor > h2 { font-size: 1.375em; }
+}
 .editor-host.ql-container { position: relative; }
 .remote-cursor-layer { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
 .remote-cursor { position: absolute; top: 0; left: 0; border-left: 2px solid var(--remote-cursor-color); pointer-events: none; }
@@ -311,7 +321,7 @@ body { margin: 0; min-width: 0; }
     box-shadow: none !important; border: 0 !important; background: #fff !important; animation: none !important; opacity: 1 !important; visibility: visible !important;
   }
   .document-print-sheet { margin: 0; padding: 0; border: 0; max-height: none; overflow: visible; }
-  .document-print-sheet h1 { break-after: avoid; }
+  .document-print-sheet :is(h1, h2, h3, h4, h5, h6) { break-after: avoid; }
   .document-print-sheet .ql-editor { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .document-print-sheet .ql-editor img { max-height: 245mm; object-fit: contain; break-inside: avoid; }
   .document-print-sheet .ql-editor pre, .document-print-sheet .ql-code-block { white-space: pre-wrap; overflow-wrap: anywhere; }
