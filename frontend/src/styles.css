@@ -379,6 +379,7 @@ body { margin: 0; min-width: 0; }
   .document-rename-modal .ant-alert { flex-wrap: wrap; gap: 8px; }
   .document-rename-modal .ant-alert-content { flex-basis: calc(100% - 28px); }
   .document-rename-modal .ant-alert-action { margin-inline-start: 0; width: 100%; }
+  .document-rename-modal .ant-input,
   .document-rename-modal .ant-alert-action .ant-btn,
   .document-rename-modal .ant-modal-footer .ant-btn { min-height: 44px; }
 }

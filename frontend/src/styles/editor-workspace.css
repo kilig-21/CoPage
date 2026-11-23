@@ -10,9 +10,10 @@
 .editor-brand { display: block; color: var(--cp-muted); font-family: Georgia, serif; font-size: 12px; font-weight: 600; line-height: 16px; }
 .editor-workspace .editor-title { margin: 0; min-width: 0; font-size: 18px; line-height: 26px; }
 .editor-workspace .editor-title-row .editor-title { flex: none; order: initial; }
-.editor-workspace .editor-topbar .editor-title-reveal { display: block; width: 100%; max-width: 100%; height: auto; min-height: 26px;
+.editor-workspace .editor-topbar .editor-title-reveal { display: flex; justify-content: flex-start; gap: 5px; width: 100%; max-width: 100%; height: auto; min-height: 26px;
   padding: 0; text-align: left; font-size: 18px; font-weight: 600; line-height: 26px; border-radius: 3px; }
-.editor-workspace .editor-title-reveal > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor-workspace .editor-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor-workspace .editor-title-edit-icon { flex: none; color: var(--cp-accent); font-size: 13px; }
 .editor-title-popover { max-width: min(320px, calc(100vw - 24px)); }
 .editor-title-popover .ant-popover-inner { max-height: calc(100dvh - 88px); overflow-y: auto; }
 .editor-full-title { margin: 0; color: var(--cp-ink); font-size: var(--cp-type-body); line-height: var(--cp-leading-body); overflow-wrap: anywhere; }

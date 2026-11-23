@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal } from 'antd'
 import { usePageRequest } from '../auth/PageSessionContext'
 import { parseDocumentRenameReply } from '../api/documentRename'
+import { focusDialogControl, useDialogEscapeFallback } from './dialogFocus'
 
-export default function RenameModal({ doc, onClose, onSaved }) {
+export default function RenameModal({ doc, onClose, onSaved, selectInitialTitle = false }) {
   const request = usePageRequest()
   const [title, setTitle] = useState(doc.title)
   const [busy, setBusy] = useState(false)
@@ -11,7 +12,16 @@ export default function RenameModal({ doc, onClose, onSaved }) {
   const [unconfirmed, setUnconfirmed] = useState(false)
   const [notice, setNotice] = useState('')
   const mutation = useRef(null)
+  const titleInput = useRef(null)
   useEffect(() => () => mutation.current?.abort(), [])
+  useDialogEscapeFallback(onClose, () => !busy && !mutation.current)
+
+  function focusTitle(open) {
+    const input = titleInput.current?.input
+    if (!open || !input || document.activeElement === input) return
+    focusDialogControl(input)
+    if (selectInitialTitle && document.activeElement === input) input.select()
+  }
 
   async function save() {
     if (mutation.current || unconfirmed) return
@@ -59,12 +69,13 @@ export default function RenameModal({ doc, onClose, onSaved }) {
   }
 
   return <Modal open className="document-rename-modal" title="重命名文档" onOk={save} onCancel={onClose} confirmLoading={busy}
+    transitionName="" maskTransitionName="" afterOpenChange={focusTitle}
     okButtonProps={{ disabled: unconfirmed }} closable={!busy} maskClosable={!busy} keyboard={!busy}
     cancelButtonProps={{ disabled: busy }}>
     {error && <Alert type="error" showIcon message={error}
       action={unconfirmed && <Button disabled={busy} onClick={checkTitle}>核对当前标题</Button>} />}
     {notice && <Alert type="info" showIcon message={notice} />}
-    <Input autoFocus aria-label="文档标题" maxLength={200} value={title} disabled={busy}
+    <Input ref={titleInput} aria-label="文档标题" maxLength={200} value={title} disabled={busy}
       onChange={event => { setTitle(event.target.value); setNotice('') }}
       onPressEnter={event => { if (!event.nativeEvent.isComposing) save() }} />
   </Modal>

@@ -5,6 +5,7 @@ import { usePageSession } from '../auth/PageSessionContext'
 import { useCreationTrackingWarning } from '../components/useCreationTrackingWarning'
 import { documentHref } from '../navigation/documents'
 import createDocumentRequest from './createDocument'
+import { UNTITLED_DOCUMENT_TITLE } from './documentRename'
 import { requestFailureMessage } from './requestError'
 
 export default function useBlankDocumentCreation() {
@@ -35,7 +36,7 @@ export default function useBlankDocumentCreation() {
     attempt.current = controller
     setCreating(true)
     try {
-      const response = await createDocumentRequest('/doc', { title: '未命名文档' }, {
+      const response = await createDocumentRequest('/doc', { title: UNTITLED_DOCUMENT_TITLE }, {
         signal: controller.signal,
         expectedIdentity: identity,
       })

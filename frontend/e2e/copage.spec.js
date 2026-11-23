@@ -203,6 +203,27 @@ test('create, approximate composition in Quill, and reload the saved document', 
   await expect(editor(page)).toContainText('Saved text 中文组合输入样例')
 })
 
+test('name a new document from the editor title on desktop and narrow screens', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 850 })
+    await page.getByRole('button', { name: '新建文档' }).press('Enter')
+    await expect(saved(page)).toHaveText('所有修改已保存')
+    await page.getByRole('button', { name: '命名文档', exact: true }).press('Enter')
+    const field = page.getByRole('textbox', { name: '文档标题' })
+    await expect(field).toBeFocused()
+    expect(await field.evaluate(input => input.value.slice(input.selectionStart, input.selectionEnd))).toBe('未命名文档')
+    const documentTitle = '写作计划 ' + width
+    await page.keyboard.insertText(documentTitle)
+    await field.press('Enter')
+    await expect(title(page)).toHaveText(documentTitle)
+    await expect(page.getByRole('button', { name: '查看完整标题：' + documentTitle })).toBeFocused()
+    await page.getByRole('button', { name: '返回工作台' }).click()
+    await expect(page.getByRole('link', { name: new RegExp(documentTitle) })).toBeVisible()
+  }
+})
+
 test('object retain is rejected on the wire without advancing document revision', async ({ page, request }) => {
   await login(page, await createAccount(request))
   const docId = await createDocument(page)

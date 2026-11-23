@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowLeftOutlined, CloudOutlined, DownOutlined, FontSizeOutlined, MoreOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, CloudOutlined, DownOutlined, EditOutlined, FontSizeOutlined, MoreOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons'
 import { Alert, Avatar, Button, Dropdown, Layout, Modal, Popover, Space, Tag, Tooltip, Typography } from 'antd'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { documentHref, documentReturn } from '../navigation/documents'
@@ -22,6 +22,7 @@ import DocumentImagesModal from '../components/DocumentImagesModal'
 import LazyUserGuide from '../components/LazyUserGuide'
 import PendingCopyHint from '../components/PendingCopyHint'
 import { usePageRequest } from '../auth/PageSessionContext'
+import { UNTITLED_DOCUMENT_TITLE } from '../api/documentRename'
 import '../styles/editor-workspace.css'
 
 export default function Editor() {
@@ -35,8 +36,9 @@ export default function Editor() {
   const statusRef = useRef(null)
   const toolsButtonRef = useRef(null)
   const shareButtonRef = useRef(null)
+  const titleButtonRef = useRef(null)
   useEditorStickyOffsets(topbarRef, statusRef)
-  const [renaming, setRenaming] = useState(false)
+  const [renameEntry, setRenameEntry] = useState(null)
   const [sharing, setSharing] = useState(false)
   const [managing, setManaging] = useState(null)
   const activeManagement = useRef(null)
@@ -65,6 +67,8 @@ export default function Editor() {
   }, [showFind, findFocusEpoch, revealDocumentMatch])
   const isConnected = connection === '已连接'
   const formatExpanded = expandedFormatDoc === docId
+  const renaming = renameEntry?.docId === docId ? renameEntry.source : null
+  const canNameDocument = permission === 2 && title === UNTITLED_DOCUMENT_TITLE
   managementScope.current = { docId, isOwner, permission }
   templateScope.current = { docId, permission, routeKey: location.key }
   const displayTitle = title || '协同文档 #' + id
@@ -86,7 +90,8 @@ export default function Editor() {
     if (key === 'images') { startDocumentImages(); setShowImages(true); return }
     if (key === 'manage') { openManagement(false); return }
     if (key === 'template') { setSavingTemplate(templateContext()); return }
-    const actions = { rename: setRenaming, history: setShowHistory, copy: setShowCopy,
+    if (key === 'rename') { setRenameEntry({ docId, source: 'menu' }); return }
+    const actions = { history: setShowHistory, copy: setShowCopy,
       export: setShowExport, print: setShowPrint, guide: setShowGuide }
     actions[key]?.(true)
   }
@@ -144,6 +149,11 @@ export default function Editor() {
     setSharing(false)
     queueMicrotask(() => shareButtonRef.current?.focus({ preventScroll: true }))
   }
+  function closeRename() {
+    const trigger = renaming === 'title' ? titleButtonRef : toolsButtonRef
+    setRenameEntry(null)
+    queueMicrotask(() => trigger.current?.focus({ preventScroll: true }))
+  }
   useEffect(() => { setToolsOpen(false); setTitleOpen(false) }, [docId, permission])
   useEffect(() => { changeManagement(null); setSharing(false); setShareError(''); setShowImages(false) }, [docId])
   useEffect(() => { setSavingTemplate(null); setTemplateNotice(null) }, [docId, location.key])
@@ -163,7 +173,7 @@ export default function Editor() {
   }, [isOwner, permission])
   useEffect(() => {
     if (permission <= 0) { setShowHistory(false); setShowCopy(false); setSharing(false); setSavingTemplate(null); setTemplateNotice(null); setShowImages(false) }
-    if (permission !== 2) setRenaming(false)
+    if (permission !== 2) setRenameEntry(null)
   }, [permission])
   useEffect(() => {
     document.title = permission > 0 && title ? `${title} · CoPage` : '文档 · CoPage'
@@ -209,9 +219,16 @@ export default function Editor() {
           <div className="editor-document-context">
             <span className="editor-brand">CoPage</span>
             <h1 className="editor-title"><Popover title="文档标题" content={<p className="editor-full-title">{displayTitle}</p>}
-              trigger="click" open={titleOpen} onOpenChange={setTitleOpen} placement="bottom" overlayClassName="editor-title-popover">
-              <Button className="editor-title-reveal" type="text" aria-label={'查看完整标题：' + displayTitle} aria-expanded={titleOpen}
-                onBlur={() => setTitleOpen(false)} onKeyDown={event => { if (event.key === 'Escape') setTitleOpen(false) }}><span>{displayTitle}</span></Button>
+              trigger="click" open={!canNameDocument && titleOpen} onOpenChange={open => { if (!canNameDocument) setTitleOpen(open) }}
+              placement="bottom" overlayClassName="editor-title-popover">
+              <Button ref={titleButtonRef} className="editor-title-reveal" type="text"
+                aria-label={canNameDocument ? '命名文档' : '查看完整标题：' + displayTitle}
+                aria-haspopup={canNameDocument ? 'dialog' : undefined} aria-expanded={canNameDocument ? undefined : titleOpen}
+                onClick={canNameDocument ? () => setRenameEntry({ docId, source: 'title' }) : undefined}
+                onBlur={() => setTitleOpen(false)} onKeyDown={event => { if (event.key === 'Escape') setTitleOpen(false) }}>
+                <span className="editor-title-text">{displayTitle}</span>
+                {canNameDocument && <EditOutlined className="editor-title-edit-icon" aria-hidden="true" />}
+              </Button>
             </Popover></h1>
           </div>
         </div>
@@ -285,7 +302,8 @@ export default function Editor() {
           closeDocumentImages(); setShowImages(false)
           queueMicrotask(() => toolsButtonRef.current?.focus({ preventScroll: true }))
         }} />}
-      {renaming && permission === 2 && <RenameModal doc={{ id: docId, title }} onSaved={refreshTitle} onClose={() => setRenaming(false)} />}
+      {renaming && permission === 2 && <RenameModal doc={{ id: docId, title }} selectInitialTitle={renaming === 'title'}
+        onSaved={refreshTitle} onClose={closeRename} />}
       {sharing && <ShareModal docId={docId} isOwner={isOwner && permission === 2} managementError={shareError} onClose={closeShare}
         onManage={() => openManagement(true)} />}
       {managing && currentManagement(managing) && <CollaboratorModal doc={{ id: docId, title }} returnToShare={managing.fromShare} onClose={() => closeManagement(managing)} />}
