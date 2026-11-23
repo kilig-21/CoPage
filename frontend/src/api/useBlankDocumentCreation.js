@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { App } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { usePageSession } from '../auth/PageSessionContext'
@@ -10,6 +10,7 @@ import { requestFailureMessage } from './requestError'
 
 export default function useBlankDocumentCreation() {
   const { message } = App.useApp()
+  const feedbackKey = useId()
   const { identity } = usePageSession()
   const warnTracking = useCreationTrackingWarning()
   const location = useLocation()
@@ -23,8 +24,9 @@ export default function useBlankDocumentCreation() {
     return () => {
       attempt.current?.abort()
       attempt.current = null
+      message.destroy(feedbackKey)
     }
-  }, [location.key])
+  }, [location.key, message, feedbackKey])
 
   function openCreatedDocument(data, focusBody = false) {
     navigate(documentHref(data.id, sourcePath), focusBody ? { state: { focusNewDocument: data.id } } : undefined)
@@ -42,13 +44,17 @@ export default function useBlankDocumentCreation() {
         expectedIdentity: identity,
       })
       if (controller.signal.aborted) return
+      message.destroy(feedbackKey)
       warnTracking(response)
       openCreatedDocument(response.data, focusBody)
     } catch (error) {
       if (controller.signal.aborted) return
       const detail = requestFailureMessage(error, '')
       const retry = '创建结果未确认。可以重试本次创建，或先刷新列表核对。相同请求不会重复创建文档。'
-      message.error(error?.code === 400 && detail ? detail : [detail, retry].filter(Boolean).join(' '))
+      message.error({
+        key: feedbackKey,
+        content: error?.code === 400 && detail ? detail : [detail, retry].filter(Boolean).join(' '),
+      })
     } finally {
       if (attempt.current === controller) attempt.current = null
       if (!controller.signal.aborted) setCreating(false)

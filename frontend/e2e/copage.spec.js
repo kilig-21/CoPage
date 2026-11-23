@@ -272,23 +272,34 @@ test('login surfaces Chinese messages for bad credentials, offline, timeout, and
   await login(page, account)
 })
 
-test('a failed document creation uses one toast with the configured Ant Design theme', async ({ page, request }) => {
+test('document creation replaces its failure toast and dismisses it on success', async ({ page, request }) => {
   const contextWarnings = []
   page.on('console', message => {
     if (/static function.*context/i.test(message.text())) contextWarnings.push(message.text())
   })
   await login(page, await createAccount(request))
   await page.getByRole('link', { name: '我的文档' }).click()
-  await page.route(`${backend}/api/doc`, route => route.fulfill({ status: 503, contentType: 'application/json',
-    headers: { 'access-control-allow-origin': new URL(page.url()).origin }, json: { code: 503, message: '服务暂不可用，请稍后重试。' } }), { times: 1 })
-  await page.getByRole('button', { name: /新建文档$/ }).click()
+  let failures = 0
+  await page.route(`${backend}/api/doc`, route => route.fulfill({
+    status: 503,
+    headers: { 'access-control-allow-origin': new URL(page.url()).origin },
+    json: { code: 503, message: ++failures === 1 ? '服务暂不可用，请稍后重试。' : '服务仍在恢复，请稍后重试。' },
+  }), { times: 2 })
+  const create = page.getByRole('button', { name: /新建文档$/ })
+  await create.click()
   const toast = page.locator('.ant-message-error')
   await expect(toast).toHaveCount(1)
   await expect(toast).toContainText('服务暂不可用，请稍后重试。 创建结果未确认。')
   await expect(toast.locator('.anticon')).toHaveCSS('color', 'rgb(180, 35, 24)')
+  await expect(create).not.toHaveClass(/ant-btn-loading/)
+  await create.press('Enter')
+  await expect(toast).toContainText('服务仍在恢复，请稍后重试。 创建结果未确认。')
+  await expect(toast).toHaveCount(1)
+  await expect(create).not.toHaveClass(/ant-btn-loading/)
   expect(contextWarnings).toEqual([])
-  await page.getByRole('button', { name: /新建文档$/ }).click()
+  await create.press('Enter')
   await expect(page).toHaveURL(/\/docs\/\d+(\?|$)/)
+  await expect(toast).toBeHidden({ timeout: 700 })
   await expect(saved(page)).toHaveText('所有修改已保存')
 })
 
