@@ -109,6 +109,8 @@ export default function Projects() {
   const contextKey = JSON.stringify([groupId, contextRefresh])
   const detailKey = JSON.stringify([selected, archived, docPage, docKeyword, refresh, detailRefresh])
   const routeTargetKey = JSON.stringify([scope, groupId, archived, keyword, selected, docKeyword])
+  const currentRoute = useRef(null)
+  currentRoute.current = { params, setParams, pathname: location.pathname, sourcePath, routeTargetKey }
   useEffect(() => {
     const keepWork = automaticPageChange.current?.path === sourcePath && automaticPageChange.current?.target === routeTargetKey
     automaticPageChange.current = null
@@ -131,26 +133,29 @@ export default function Projects() {
     for (const key of Object.keys(next)) if (next[key] === null || next[key] === '') delete next[key]
     setParams(next)
   }
-  const correctPage = useCallback((current, name, value) => {
-    const next = new URLSearchParams(current)
+  const correctPage = useCallback((name, value) => {
+    const { params, setParams, pathname, sourcePath, routeTargetKey } = currentRoute.current
+    const previous = automaticPageChange.current
+    // 两个请求可能在同一次路由提交前都返回越界分页，此时合并这两个更正。
+    const next = new URLSearchParams(previous?.source === sourcePath ? previous.params : params)
     next.set(name, String(value))
     // setSearchParams 的实际跳转只含查询参数，会清除原 hash。
-    automaticPageChange.current = { path: location.pathname + '?' + next.toString(), target: routeTargetKey }
-    return next
-  }, [location.pathname, routeTargetKey])
+    automaticPageChange.current = { path: pathname + '?' + next.toString(), source: sourcePath, target: routeTargetKey, params: next }
+    setParams(next, { replace: true })
+  }, [])
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true); setData(null); setError('')
     request.get('/projects', { params: { scope, groupId, archived, keyword, page, size: SIZE }, signal: controller.signal }).then(response => {
       if (controller.signal.aborted) return
       const last = Math.max(1, Math.ceil(response.data.total / SIZE))
-      if (page > last) { setParams(current => correctPage(current, 'page', last), { replace: true }); return }
+      if (page > last) { correctPage('page', last); return }
       setData(response.data); setDataFrom(listKey)
     }).catch(failure => { if (!controller.signal.aborted) setError([400, 403, 404].includes(failure?.code)
       ? failure.message : '项目列表未能加载，请刷新重试。') })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [scope, groupId, archived, keyword, page, listKey, request, correctPage, setParams])
+  }, [scope, groupId, archived, keyword, page, listKey, request, correctPage])
   useEffect(() => {
     const controller = new AbortController()
     setContext(null); setContextError(''); setContextLoading(Boolean(groupId))
@@ -174,7 +179,7 @@ export default function Projects() {
         if (controller.signal.aborted) return
         const last = Math.max(1, Math.ceil(data.total / SIZE))
         if (docPage > last) {
-          setParams(current => correctPage(current, 'docPage', last), { replace: true })
+          correctPage('docPage', last)
           return
         }
         if (data?.id !== selected) throw new Error('项目资料响应不匹配')
@@ -185,7 +190,7 @@ export default function Projects() {
       } })
       .finally(() => { if (!controller.signal.aborted) { setDetailLoading(false); setDetailSettledFrom(detailKey) } })
     return () => controller.abort()
-  }, [selected, archived, docPage, docKeyword, detailKey, request, correctPage, setParams])
+  }, [selected, archived, docPage, docKeyword, detailKey, request, correctPage])
   const listed = dataFrom === listKey ? data : null
   const ready = Boolean(listed && !loading && !busy && !uncertain)
   const current = detailFrom === detailKey && detail?.id === selected ? detail : null
@@ -323,7 +328,7 @@ export default function Projects() {
       </Card>
       {selected > 0 && !archived && <WorkspaceDetailCard key={selected} id="project-detail" arrival={detailArrival}
         arrivalTarget={arrivingAtAddition ? addResult : returnedDocumentId ? returnedDocumentLink : undefined}
-        waiting={loading || (arrivingAtAddition ? !listed && !error : detailLoading || detailSettledFrom !== detailKey)}
+        waiting={arrivingAtAddition ? loading || (!listed && !error) : detailLoading || detailSettledFrom !== detailKey}
         title={current?.name || (additionNotice && latestAddition.projectName) || '项目资料'}
         loading={detailLoading && !additionNotice} className="project-section"
         extra={<Button disabled={detailLoading || busy} onClick={() => setDetailRefresh(n => n + 1)}>刷新项目资料</Button>}>

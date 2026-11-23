@@ -538,6 +538,87 @@ test('opening group members keeps the list and invitation inbox available', asyn
   }
 })
 
+test('project lists and selected documents load independently at desktop and narrow widths', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  const name = '校园写作项目'
+  const projectId = await createProject(page, request, name)
+  const listPath = '/api/projects'
+  const detailPath = `${listPath}/${projectId}`
+  const open = page.getByRole('button', { name: '查看项目' })
+  const detail = page.getByRole('region', { name })
+  const heading = detail.getByRole('heading', { name, exact: true })
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 760 })
+    await page.goto('/projects')
+    await expect(open).toBeEnabled()
+    const reads = []
+    const record = request => {
+      const url = new URL(request.url())
+      if (request.method() === 'GET' && [listPath, detailPath].includes(url.pathname)) reads.push(url)
+    }
+    page.on('request', record)
+    const detailRoute = `**${detailPath}?*`
+    let release
+    const delayed = new Promise(resolve => { release = resolve })
+    await page.route(detailRoute, async route => {
+      await delayed
+      await route.continue()
+    }, { times: 1 })
+
+    try {
+      await open.press('Enter')
+      await expect(open).toBeEnabled()
+      await expect(open).toHaveAttribute('aria-expanded', 'true')
+      await expect(page.getByRole('region', { name: '项目资料' }).getByRole('heading')).not.toBeFocused()
+    } finally {
+      release()
+    }
+    await expect(heading).toBeFocused()
+    await expect(heading).toBeInViewport()
+    await expect(detail.getByText('还没有你可访问的文档，可以新建一篇或加入已有文档')).toBeVisible()
+
+    const filter = detail.getByRole('textbox', { name: '筛选项目内文档' })
+    await filter.fill('待查文档')
+    await filter.press('Enter')
+    await expect(detail.getByText('没有符合条件且可访问的文档')).toBeVisible()
+    await expect(open).toBeEnabled()
+    const fail = { status: 503, json: { code: 503, message: '暂时无法读取' } }
+    await page.route(detailRoute, route => route.fulfill(fail), { times: 1 })
+    await detail.getByRole('button', { name: '刷新项目资料' }).press('Enter')
+    const failed = page.getByRole('region', { name: '项目资料' })
+    await expect(failed.getByRole('alert')).toBeVisible()
+    await expect(open).toBeEnabled()
+    await failed.getByRole('button', { name: '重试项目资料' }).press('Enter')
+    await expect(detail.getByText('没有符合条件且可访问的文档')).toBeVisible()
+    expect(reads.map(url => url.pathname)).toEqual([detailPath, detailPath, detailPath, detailPath])
+    expect(reads[1].searchParams.get('keyword')).toBe('待查文档')
+    reads.length = 0
+
+    await page.goto(`/projects?project=${projectId}&page=8&docPage=8`)
+    await expect(page).toHaveURL(url => url.searchParams.get('project') === String(projectId) &&
+      url.searchParams.get('page') === '1' && url.searchParams.get('docPage') === '1')
+    await expect(open).toBeEnabled()
+    await expect(heading).toBeVisible()
+    for (const path of [listPath, detailPath]) {
+      expect(reads.filter(url => url.pathname === path).map(url => url.searchParams.get('page'))).toEqual(['8', '1'])
+    }
+    reads.length = 0
+
+    await page.route('**/api/projects?*', route => route.fulfill(fail), { times: 1 })
+    await page.reload()
+    const retryList = page.getByRole('button', { name: '重试项目列表' })
+    await expect(retryList).toBeEnabled()
+    await expect(heading).toBeVisible()
+    await retryList.press('Enter')
+    await expect(open).toBeEnabled()
+    await expect(heading).toBeVisible()
+    expect(reads.filter(url => url.pathname === listPath)).toHaveLength(2)
+    expect(reads.filter(url => url.pathname === detailPath)).toHaveLength(1)
+    page.off('request', record)
+  }
+})
+
 test('the project document picker starts in the filter and returns to its trigger', async ({ page, request }) => {
   await login(page, await createAccount(request))
   const docId = await createDocument(page)
