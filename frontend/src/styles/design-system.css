@@ -73,6 +73,13 @@ body .ant-list .ant-list-empty-text { color: var(--cp-muted); }
 .doc-list-card .ant-list-item { padding-block: 22px; }
 .doc-list-card .ant-list-item-meta-title a { color: var(--cp-ink); font-weight: 600; }
 .doc-list-card .ant-list-item-meta-title a:hover { color: var(--cp-accent); }
+@media (max-width: 640px) {
+  .workbench .cp-recent-document-text > strong,
+  .document-library .doc-list-card .ant-list-item-meta-title a > span:first-child {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    min-width: 0; overflow: hidden;
+  }
+}
 .trash-list-card .ant-pagination { display: flex; flex-wrap: wrap; row-gap: 8px; }
 .trash-list-card .ant-list-item-meta { min-width: 0; }
 .trash-list-card .ant-list-item-meta-description { overflow-wrap: anywhere; }
