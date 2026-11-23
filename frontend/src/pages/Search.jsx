@@ -23,6 +23,7 @@ export default function Search() {
   const page = Number.isInteger(rawPage) && rawPage > 0 && rawPage <= 1000 ? rawPage : 1
   const [input, setInput] = useState(query)
   const searchInput = useRef(null)
+  const resultRegion = useRef(null)
   const [read, setRead] = useState(null)
   const [retry, setRetry] = useState(0)
   const readKey = JSON.stringify([query, page, retry])
@@ -86,17 +87,32 @@ export default function Search() {
   }
   function retrySearch() {
     if (loading || !validQuery) return
+    focusResults()
     discardRead()
     setRetry(value => value + 1)
+  }
+  function focusResults() {
+    const region = resultRegion.current
+    if (!region) return
+    const header = document.querySelector('.workspace-header')
+    const top = window.scrollY + region.getBoundingClientRect().top - (header?.getBoundingClientRect().height ?? 0) - 16
+    region.focus({ preventScroll: true })
+    window.scrollTo({ top: Math.max(0, top), behavior: 'instant' })
+  }
+  function openPage(next) {
+    if (next === page) return
+    focusResults()
+    changePage(next)
   }
   function clearSearch() {
     search('')
     searchInput.current?.focus()
   }
 
+  const foundStatus = total === 0 ? '没有找到相关文档'
+    : total > PAGE_SIZE ? `第 ${page} 页 · 共 ${total} 篇` : `找到 ${total} 篇可访问的文档`
   const resultStatus = loading ? '正在搜索…'
-    : ready ? (total === 0 ? '没有找到相关文档' : `找到 ${total} 篇可访问的文档`)
-      : error ? '' : '可按标题或正文查找有权限访问的文档。'
+    : ready ? foundStatus : error ? '' : '可按标题或正文查找有权限访问的文档。'
 
   return (
     <Layout className="app-shell"><WorkspaceHeader title="搜索" />
@@ -110,14 +126,14 @@ export default function Search() {
         <p role="status">{resultStatus}</p>
         {(query || input) && <Button type="text" onClick={clearSearch}>清除搜索</Button>}
       </div>
-      <section aria-label="搜索结果" aria-busy={loading} className="search-results">
+      <section ref={resultRegion} tabIndex={-1} aria-label="搜索结果" aria-busy={loading} className="search-results">
         {error && <Alert type="error" showIcon message={error}
           action={validQuery && <Button onClick={retrySearch}>重试搜索</Button>} />}
         {loading && <div className="search-loading" aria-hidden="true"><Skeleton title={false} paragraph={{ rows: 2 }} /></div>}
         {ready && total === 0 && <p className="search-empty-hint">试试减少关键词，或换一个文档标题或正文中的词。</p>}
         {ready && total > 10000 && <Typography.Paragraph type="secondary">最多显示前 10000 条结果，试试更具体的关键词。</Typography.Paragraph>}
         {results.length > 0 && <List rowKey="id" dataSource={results}
-          pagination={ready && total > PAGE_SIZE ? { current: page, pageSize: PAGE_SIZE, total: Math.min(total, 10000), showSizeChanger: false, responsive: true, showLessItems: true, onChange: (next) => changePage(next) } : false}
+          pagination={ready && total > PAGE_SIZE ? { current: page, pageSize: PAGE_SIZE, total: Math.min(total, 10000), showSizeChanger: false, responsive: true, showLessItems: true, onChange: openPage } : false}
           renderItem={item => <List.Item className="search-result-item">
             <h2 className="search-result-title"><Link to={documentHref(item.id, sourcePath)} data-document-id={item.id} aria-label={item.title}>
               <span className="search-result-title-text">{searchTitleParts(item.title, query).map((part, index) =>

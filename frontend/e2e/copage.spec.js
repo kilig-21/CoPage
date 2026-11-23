@@ -1188,6 +1188,89 @@ test('search returns a saved document from a body-only keyword', async ({ page, 
   await expect(editor(page)).toContainText(marker)
 })
 
+test('keyboard pagination and retry resume at the search results', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  const token = await page.evaluate(() => localStorage.getItem('collab-token'))
+  const marker = '阅读节策划'
+  for (let index = 1; index <= 12; index += 1) {
+    const response = await request.post(`${backend}/api/doc`, {
+      headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': randomUUID() },
+      data: { title: marker + ' ' + String(index).padStart(2, '0') },
+    })
+    expect(response.ok()).toBe(true)
+    expect((await response.json()).code).toBe(0)
+  }
+
+  const path = '/search?q=' + encodeURIComponent(marker)
+  const onSecondPage = url => url.pathname === '/api/search' && url.searchParams.get('page') === '2'
+  const next = page.locator('li[title="下一页"]')
+  const results = page.getByRole('region', { name: '搜索结果' })
+  const query = page.getByRole('textbox', { name: '搜索标题和正文' })
+  const first = results.getByRole('heading').first().getByRole('link')
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 760 })
+    await page.goto(path)
+    await expect(next).toBeVisible()
+    let release
+    const delayed = new Promise(resolve => { release = resolve })
+    await page.route(onSecondPage, async route => {
+      await delayed
+      await route.fulfill({ status: 503, json: { code: 503, message: '搜索服务暂时不可用' } })
+    }, { times: 1 })
+
+    try {
+      await next.scrollIntoViewIfNeeded()
+      await next.press('Enter')
+      await expect(results).toBeFocused()
+      await expect(results).toHaveAttribute('aria-busy', 'true')
+      await expect(page.getByRole('status')).toHaveText('正在搜索…')
+      await expect(first).toHaveCount(0)
+    } finally {
+      release()
+    }
+    await expect(results.getByRole('alert')).toBeVisible()
+    await expect(results).toBeFocused()
+    await page.keyboard.press('Tab')
+    const retry = results.getByRole('button', { name: '重试搜索' })
+    await expect(retry).toBeFocused()
+    await retry.press('Enter')
+    await expect(page.getByRole('status')).toContainText('第 2 页')
+    await expect(first).toBeInViewport({ ratio: 1 })
+    await expect(results).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(first).toBeFocused()
+    const returnedName = await first.getAttribute('aria-label')
+    await first.press('Enter')
+    await expect(editor(page)).toBeVisible()
+    await page.getByRole('button', { name: '返回搜索结果' }).press('Enter')
+    await expect(page).toHaveURL(url => url.searchParams.get('page') === '2')
+    await expect(results.getByRole('link', { name: returnedName, exact: true })).toBeFocused()
+
+    await page.goto(path)
+    await expect(next).toBeVisible()
+    let resume
+    const paused = new Promise(resolve => { resume = resolve })
+    await page.route(onSecondPage, async route => {
+      await paused
+      await route.continue()
+    }, { times: 1 })
+    try {
+      await next.press('Enter')
+      await expect(results).toBeFocused()
+      await query.focus()
+    } finally {
+      resume()
+    }
+    await expect(first).toBeVisible()
+    await expect(query).toBeFocused()
+    await query.fill('没有匹配的合成搜索词')
+    await query.press('Enter')
+    await expect(page.getByRole('status')).toHaveText('没有找到相关文档')
+    await expect(query).toBeFocused()
+  }
+})
+
 test('document menus and deletion confirmation stay on screen with reduced motion', async ({ page, request }) => {
   await login(page, await createAccount(request))
   await createDocument(page)
