@@ -9,9 +9,16 @@ import { useCreationTrackingWarning } from '../components/useCreationTrackingWar
 import WorkspaceHeader from '../components/WorkspaceHeader'
 import WorkspacePageHeading from '../components/WorkspacePageHeading'
 import DocumentPreview from '../components/DocumentPreview'
+import { useDialogEscapeFallback } from '../components/dialogFocus'
 import { templateCategories as categories } from '../templates/categories'
 
 const SIZE = 20
+
+function restoreActionFocus(trigger) {
+  requestAnimationFrame(() => {
+    if (trigger?.isConnected && document.activeElement === document.body) trigger.focus({ preventScroll: true })
+  })
+}
 export default function PersonalTemplates() {
   const warnTracking = useCreationTrackingWarning()
   const pageSession = usePageSession()
@@ -47,11 +54,21 @@ export default function PersonalTemplates() {
   const selection = useRef(null)
   const detailRequest = useRef(null)
   const feedbackRef = useRef(null)
+  const previewTrigger = useRef(null)
+  const deleteTrigger = useRef(null)
   function closeTemplate() {
+    previewTrigger.current = null
     selection.current = null
     detailRequest.current?.abort(); detailRequest.current = null
     setSelected(null); setEditing(null); setDetail(null); setDetailError(''); setDetailLoading(false); setTitle('')
   }
+  function dismissTemplate() {
+    if (busy || mutation.current) return
+    const trigger = previewTrigger.current
+    closeTemplate()
+    restoreActionFocus(trigger)
+  }
+  useDialogEscapeFallback(dismissTemplate, () => Boolean(selected) && !busy && !mutation.current, previewTrigger)
   useEffect(() => {
     if (instance.current) {
       setUncertain({ kind: 'instance', ...instance.current })
@@ -150,7 +167,8 @@ export default function PersonalTemplates() {
       { title: target.title, expectedVersion: target.expectedVersion }, { signal, expectedIdentity: creationIdentity.current }),
       result => navigate(documentHref(result.id, sourcePath)), target)
   }
-  const open = template => {
+  const open = (template, trigger) => {
+    previewTrigger.current = trigger
     detailRequest.current?.abort(); detailRequest.current = null
     const session = { templateId: template.id, titleInitialized: false }
     selection.current = session
@@ -194,19 +212,22 @@ export default function PersonalTemplates() {
           </ListEmptyState>
         ) : <ListEmptyState description="没有匹配的个人模板" /> }}
         renderItem={template => <List.Item actions={[
-          <Button key="open" disabled={!ready} onClick={() => open(template)}>预览并使用</Button>,
+          <Button key="open" aria-label={'预览并使用「' + template.name + '」'} disabled={!ready}
+            onClick={event => open(template, event.currentTarget)}>预览并使用</Button>,
           <Popconfirm key="delete" overlayClassName="document-action-confirm" title={'删除模板“' + template.name + '”？'}
             description="删除后无法恢复此模板，并释放模板容量；来源及已创建的文档保留。" disabled={!ready}
+            onCancel={() => deleteTrigger.current?.focus({ preventScroll: true })}
             onConfirm={() => mutate('delete', signal => request.delete('/personal-templates/' + template.id, { signal, params: { expectedVersion: template.version } }), () => { closeTemplate(); setNotice('模板已删除，原文档保留'); setRefresh(n => n + 1) }, { name: template.name, category: template.category })}>
-            <Button disabled={!ready} danger>删除模板</Button></Popconfirm>,
+            <Button aria-label={'删除模板「' + template.name + '」'} disabled={!ready} danger
+              onClick={event => { deleteTrigger.current = event.currentTarget }}>删除模板</Button></Popconfirm>,
         ]}><List.Item.Meta title={template.name} description={<Space wrap><Tag>{categories[template.category]}</Tag><span>{template.description || '未填写说明'}</span><span>{template.updateTime}</span></Space>} /></List.Item>} />
         {data?.total > SIZE && <Pagination current={page} total={data.total} pageSize={SIZE} showSizeChanger={false} disabled={!ready} onChange={next => filter(category, keyword, next)} />}
       </Card>
     </main>
     {selected && <Modal open title={(currentEditing ? '修改模板资料：' : '使用模板：') + (currentDetail?.name || selected.name)} className="personal-template-modal" width={720}
-      closable={!busy} maskClosable={!busy} keyboard={!busy} onCancel={busy ? undefined : closeTemplate}
+      closable={!busy} maskClosable={!busy} keyboard={!busy} onCancel={dismissTemplate}
       footer={[
-        <Button key="close" disabled={busy} onClick={closeTemplate}>关闭</Button>,
+        <Button key="close" disabled={busy} onClick={dismissTemplate}>关闭</Button>,
         uncertain && <Button key="review" disabled={busy} onClick={review}>{uncertain.kind === 'instance' ? '核对我的文档' : '核对模板列表'}</Button>,
         currentDetail && !currentEditing && <Button key="edit" disabled={!ready || !detailReady} onClick={() => {
           if (!detailReady || !ready || selection.current !== selected.session) return

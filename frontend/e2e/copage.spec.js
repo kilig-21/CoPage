@@ -245,6 +245,45 @@ test('a built-in template can be previewed and dismissed from the first screen',
   }
 })
 
+test('personal template actions distinguish each row and keep keyboard focus on dismissal', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  const docId = await createDocument(page)
+  await append(page, 'Reusable template fixture')
+  const token = await page.evaluate(() => localStorage.getItem('collab-token'))
+  for (const name of ['校刊采访记录', '校园场地手记']) {
+    const reply = await request.post(`${backend}/api/personal-templates`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: { docId, name, description: '', category: 'collaboration' },
+    })
+    expect(reply.status()).toBe(200)
+    expect((await reply.json()).code).toBe(0)
+  }
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 850 })
+    await page.goto('/templates?source=personal')
+    const preview = page.getByRole('button', { name: '预览并使用「校刊采访记录」', exact: true })
+    await expect(page.getByRole('button', { name: '预览并使用「校园场地手记」', exact: true })).toBeVisible()
+    await preview.press('Enter')
+    const dialog = page.getByRole('dialog', { name: '使用模板：校刊采访记录' })
+    await dialog.getByRole('textbox', { name: '个人模板新文档标题' }).press('Escape')
+    await expect(dialog).toBeHidden()
+    await expect(preview).toBeFocused()
+
+    await page.keyboard.press('Tab')
+    const remove = page.getByRole('button', { name: '删除模板「校刊采访记录」', exact: true })
+    await expect(remove).toBeFocused()
+    await page.keyboard.press('Enter')
+    const confirm = page.locator('.document-action-confirm')
+    await expect(confirm.getByText('删除模板“校刊采访记录”？', { exact: true })).toBeVisible()
+    await confirm.getByRole('button', { name: /^取\s*消$/ }).press('Enter')
+    await expect(confirm).toBeHidden()
+    await expect(remove).toBeFocused()
+    await expect(preview).toBeVisible()
+  }
+})
+
 test('the complete title opens in the viewport with reduced motion enabled', async ({ page, request }) => {
   await login(page, await createAccount(request))
   await createDocument(page)
