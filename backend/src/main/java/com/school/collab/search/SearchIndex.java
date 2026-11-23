@@ -30,6 +30,7 @@ public class SearchIndex {
     private final DocumentRepository documents;
     private final ObjectMapper mapper;
     private final ElasticsearchTransport transport;
+    private final Object pendingLock = new Object();
     private volatile boolean ready;
     private long pendingAfter;
 
@@ -92,21 +93,26 @@ public class SearchIndex {
             ready = false;
             ensureIndex();
             int rebuilt = advanceRebuild();
-            int repaired = 0;
-            var pending = documents.pendingIndexIdsAfter(pendingAfter, BATCH_SIZE);
-            for (long id : pending) {
-                // 即使某条失败，下轮也可继续处理其他文档。失败行保持待处理，游标循环后重试。
-                pendingAfter = id;
-                write(id, false);
-                repaired++;
-            }
-            if (pending.size() < BATCH_SIZE) pendingAfter = 0;
+            int repaired = repairPending();
             if (rebuilt + repaired > 0) {
                 log.info("ES 增量巡检完成, rebuilt={}, repaired={}, elapsedMs={}",
                         rebuilt, repaired, Duration.ofNanos(System.nanoTime() - started).toMillis());
             }
         } catch (RuntimeException exception) {
             log.warn("ES 索引巡检暂时失败，下轮重试", exception);
+        }
+    }
+
+    int repairPending() {
+        synchronized (pendingLock) {
+            var pending = documents.pendingIndexIdsAfter(pendingAfter, BATCH_SIZE);
+            for (long id : pending) {
+                // 失败行由 MySQL 保留为待处理，游标循环后重试。
+                pendingAfter = id;
+                write(id, false);
+            }
+            if (pending.size() < BATCH_SIZE) pendingAfter = 0;
+            return pending.size();
         }
     }
 

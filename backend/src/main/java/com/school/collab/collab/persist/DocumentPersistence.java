@@ -9,6 +9,7 @@ import com.school.collab.ot.DeltaJson;
 import com.school.collab.storage.ImageAssetRepository;
 import com.school.collab.storage.ImageGrants;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,16 +25,19 @@ public class DocumentPersistence {
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
     private final ImageGrants imageGrants;
+    private final ApplicationEventPublisher events;
 
     public DocumentPersistence(JdbcTemplate jdbc, ObjectMapper mapper) {
-        this(jdbc, mapper, new ImageGrants(new ImageAssetRepository(jdbc), mapper));
+        this(jdbc, mapper, new ImageGrants(new ImageAssetRepository(jdbc), mapper), ignored -> { });
     }
 
     @Autowired
-    public DocumentPersistence(JdbcTemplate jdbc, ObjectMapper mapper, ImageGrants imageGrants) {
+    public DocumentPersistence(JdbcTemplate jdbc, ObjectMapper mapper, ImageGrants imageGrants,
+                               ApplicationEventPublisher events) {
         this.jdbc = jdbc;
         this.mapper = mapper;
         this.imageGrants = imageGrants;
+        this.events = events;
     }
 
     public Receipt receipt(long docId, long userId, String clientId, String opId) {
@@ -177,7 +181,10 @@ public class DocumentPersistence {
         }
         jdbc.update("INSERT INTO doc_operation (doc_id, revision, op, user_id) VALUES (?, ?, ?, ?)",
                 docId, expectedRevision + 1, operationJson, userId);
+        events.publishEvent(new ContentChanged());
     }
+
+    public record ContentChanged() { }
 
     /** Check a generated restore before applying a potentially fragmented
      * operation; persistence still enforces the same limits transactionally. */

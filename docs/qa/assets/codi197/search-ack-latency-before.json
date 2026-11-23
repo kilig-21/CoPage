@@ -1,0 +1,80 @@
+{
+  "phase": "before",
+  "count": 8,
+  "p50Ms": 3105,
+  "p95Ms": 5626,
+  "samples": [
+    {
+      "sample": 1,
+      "revision": 4,
+      "offset": 0,
+      "ackWaitMs": 15,
+      "initialTotal": 0,
+      "searchableMs": 4989,
+      "polls": 35
+    },
+    {
+      "sample": 2,
+      "revision": 5,
+      "offset": 630,
+      "ackWaitMs": 12,
+      "initialTotal": 0,
+      "searchableMs": 4386,
+      "polls": 32
+    },
+    {
+      "sample": 3,
+      "revision": 6,
+      "offset": 1260,
+      "ackWaitMs": 20,
+      "initialTotal": 0,
+      "searchableMs": 3777,
+      "polls": 28
+    },
+    {
+      "sample": 4,
+      "revision": 7,
+      "offset": 1890,
+      "ackWaitMs": 13,
+      "initialTotal": 0,
+      "searchableMs": 3105,
+      "polls": 23
+    },
+    {
+      "sample": 5,
+      "revision": 8,
+      "offset": 2520,
+      "ackWaitMs": 16,
+      "initialTotal": 0,
+      "searchableMs": 2395,
+      "polls": 18
+    },
+    {
+      "sample": 6,
+      "revision": 9,
+      "offset": 3150,
+      "ackWaitMs": 15,
+      "initialTotal": 0,
+      "searchableMs": 1839,
+      "polls": 14
+    },
+    {
+      "sample": 7,
+      "revision": 10,
+      "offset": 3780,
+      "ackWaitMs": 12,
+      "initialTotal": 0,
+      "searchableMs": 1132,
+      "polls": 9
+    },
+    {
+      "sample": 8,
+      "revision": 11,
+      "offset": 4410,
+      "ackWaitMs": 15,
+      "initialTotal": 0,
+      "searchableMs": 5626,
+      "polls": 41
+    }
+  ]
+}

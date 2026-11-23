@@ -1,0 +1,80 @@
+{
+  "phase": "after",
+  "count": 8,
+  "p50Ms": 592,
+  "p95Ms": 1165,
+  "samples": [
+    {
+      "sample": 1,
+      "revision": 12,
+      "offset": 0,
+      "ackWaitMs": 133,
+      "initialTotal": 0,
+      "searchableMs": 379,
+      "polls": 3
+    },
+    {
+      "sample": 2,
+      "revision": 13,
+      "offset": 630,
+      "ackWaitMs": 26,
+      "initialTotal": 0,
+      "searchableMs": 305,
+      "polls": 3
+    },
+    {
+      "sample": 3,
+      "revision": 14,
+      "offset": 1260,
+      "ackWaitMs": 19,
+      "initialTotal": 0,
+      "searchableMs": 725,
+      "polls": 6
+    },
+    {
+      "sample": 4,
+      "revision": 15,
+      "offset": 1890,
+      "ackWaitMs": 15,
+      "initialTotal": 0,
+      "searchableMs": 1165,
+      "polls": 9
+    },
+    {
+      "sample": 5,
+      "revision": 16,
+      "offset": 2520,
+      "ackWaitMs": 15,
+      "initialTotal": 0,
+      "searchableMs": 437,
+      "polls": 4
+    },
+    {
+      "sample": 6,
+      "revision": 17,
+      "offset": 3150,
+      "ackWaitMs": 18,
+      "initialTotal": 0,
+      "searchableMs": 866,
+      "polls": 7
+    },
+    {
+      "sample": 7,
+      "revision": 18,
+      "offset": 3780,
+      "ackWaitMs": 28,
+      "initialTotal": 0,
+      "searchableMs": 1133,
+      "polls": 9
+    },
+    {
+      "sample": 8,
+      "revision": 19,
+      "offset": 4410,
+      "ackWaitMs": 20,
+      "initialTotal": 0,
+      "searchableMs": 592,
+      "polls": 5
+    }
+  ]
+}

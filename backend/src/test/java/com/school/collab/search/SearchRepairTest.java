@@ -107,6 +107,25 @@ class SearchRepairTest {
     }
 
     @Test
+    void periodicRepairRecoversAPendingWriteAfterWakeupFails() {
+        var failing = new AtomicBoolean(true);
+        server.createContext(DOC_PATH + "7", call -> reply(call, failing.get() ? 503 : 200, "{}"));
+        server.createContext(CHECKPOINT, call -> reply(call, 200, "{\"_source\":{\"complete\":true}}"));
+        when(documents.pendingIndexIdsAfter(0, 32)).thenReturn(List.of(7L));
+        when(documents.pendingIndexIdsAfter(7, 32)).thenReturn(List.of());
+        when(documents.findForIndex(7)).thenReturn(Optional.of(row(7, 2, false)));
+
+        assertThrows(IllegalStateException.class, index::repairPending);
+        verify(documents, never()).indexed(anyLong(), anyLong());
+
+        failing.set(false);
+        index.rebuild();
+        index.rebuild();
+
+        verify(documents).indexed(7, 2);
+    }
+
+    @Test
     void scheduledMaintenanceHasIndependentCapacity() {
         new ApplicationContextRunner().withInitializer(new ConfigDataApplicationContextInitializer()).run(app ->
                 assertEquals(4, app.getEnvironment().getProperty("spring.task.scheduling.pool.size", Integer.class)));
