@@ -53,7 +53,7 @@ export default function Projects() {
   const location = useLocation()
   const sourcePath = location.pathname + location.search + location.hash
   const selected = idValue(params.get('project'))
-  const [detailArrival, setDetailArrival] = useState(0)
+  const [detailArrival, setDetailArrival] = useState(null)
   const groupId = idValue(params.get('groupId'))
   const page = Math.min(idValue(params.get('page')) || 1, 1000000)
   const scope = ['personal', 'group'].includes(params.get('scope')) ? params.get('scope') : 'all'
@@ -85,6 +85,7 @@ export default function Projects() {
   const fieldsTrigger = useRef(null)
   const [adding, setAdding] = useState(false)
   const addDocumentTrigger = useRef(null)
+  const addResult = useRef(null)
   const [newDocument, setNewDocument] = useState(null)
   const [documentBusy, setDocumentBusy] = useState(false)
   const operation = useProjectOperation(target => {
@@ -95,6 +96,10 @@ export default function Projects() {
   const busy = operation.busy || documentBusy
   const uncertain = Boolean(operation.uncertain)
   const operationError = operation.error
+  const latestAddition = operation.notice?.addition
+  const additionNotice = latestAddition?.projectId === selected && !archived && ![401, 403, 404].includes(detailErrorCode)
+    ? operation.notice : null
+  const arrivingAtAddition = detailArrival?.target === 'addition' && Boolean(additionNotice)
   const creations = useProjectCreations(busy)
   const automaticPageChange = useRef(null)
   const waitingConfirmation = useRef(null)
@@ -199,7 +204,7 @@ export default function Projects() {
     if (available) return operation.run(target, action, onSuccess)
   }
   const openCreated = result => {
-    setDetailArrival(n => n + 1)
+    setDetailArrival({ target: 'heading' })
     setFields(null)
     setParams({ project: String(result.id), ...(result.groupId ? { groupId: String(result.groupId), scope: 'group' } : { scope: 'personal' }) })
   }
@@ -265,9 +270,9 @@ export default function Projects() {
             <Button disabled={busy}>结束本次等待</Button></Popconfirm>}
           {operation.uncertain.kind === 'create' && operation.uncertain.requestId && <Button disabled={busy}
             onClick={() => { operation.pauseCreation(operation.uncertain); setFields(null) }}>稍后确认</Button>}</Space>} />}
-      {operation.notice && <Alert className="project-read-alert" type={operation.notice.type} showIcon message={operation.notice.message}
+      {operation.notice && !latestAddition && <Alert className="project-read-alert" type={operation.notice.type} showIcon message={operation.notice.message}
         action={operation.notice.target && <Button disabled={busy} onClick={() => {
-          setDetailArrival(n => n + 1)
+          setDetailArrival({ target: 'heading' })
           const target = operation.notice.target, result = operation.notice.data
           const wasArchived = result.archived ?? result.projectArchived
           const originalGroup = result.groupId ?? target.groupId
@@ -307,7 +312,7 @@ export default function Projects() {
               <Button disabled={!ready}>恢复项目</Button></Popconfirm>,
           ] : [] : [<Button key="open" disabled={!ready} aria-expanded={selected === project.id}
             aria-controls={selected === project.id ? 'project-detail' : undefined}
-            onClick={() => { setDetailArrival(n => n + 1); navigate({ project: String(project.id) }) }}>查看项目</Button>]}>
+            onClick={() => { setDetailArrival({ target: 'heading' }); navigate({ project: String(project.id) }) }}>查看项目</Button>]}>
             <List.Item.Meta title={project.name} description={<Space wrap className="organization-list-summary"><Tag>{project.groupId ? '小组：' + project.groupName : '个人项目'}</Tag>
               <span>{project.visibleDocumentCount} 篇可访问文档</span><span>{project.description || '尚未填写简介'}</span></Space>} />
           </List.Item>} />
@@ -315,8 +320,18 @@ export default function Projects() {
           disabled={!ready} onChange={next => navigate({ page: String(next) })} />}
       </Card>
       {selected > 0 && !archived && <WorkspaceDetailCard key={selected} id="project-detail" arrival={detailArrival}
-        waiting={loading || detailLoading || detailSettledFrom !== detailKey} title={current?.name || '项目资料'} loading={detailLoading} className="project-section"
+        arrivalTarget={arrivingAtAddition ? addResult : undefined}
+        waiting={loading || (arrivingAtAddition ? !listed && !error : detailLoading || detailSettledFrom !== detailKey)}
+        title={current?.name || (additionNotice && latestAddition.projectName) || '项目资料'}
+        loading={detailLoading && !additionNotice} className="project-section"
         extra={<Button disabled={detailLoading || busy} onClick={() => setDetailRefresh(n => n + 1)}>刷新项目资料</Button>}>
+        {additionNotice && <div ref={addResult} className="project-add-feedback" tabIndex={-1} role="region" aria-label="加入文档结果">
+          <Alert className="project-read-alert" type={additionNotice.type} showIcon message={additionNotice.message}
+            description={<>{latestAddition.title} · 文档 #{latestAddition.docId}</>}
+            action={<Link className="document-open-link" to={documentHref(latestAddition.docId, sourcePath)}
+              aria-label={`打开文档「${latestAddition.title}」（文档 #${latestAddition.docId}）`}>打开文档</Link>} />
+        </div>}
+        {additionNotice && detailLoading && <Typography.Paragraph role="status">正在刷新项目资料…</Typography.Paragraph>}
         {detailError && <Alert className="project-read-alert" type="error" showIcon message={detailError}
           action={<Button disabled={detailLoading || busy} onClick={() => setDetailRefresh(n => n + 1)}>重试项目资料</Button>} />}
         {current && <>
@@ -366,7 +381,10 @@ export default function Projects() {
       }} />}
     {adding && current && <ProjectDocumentsModal key={current.id} project={current} from={sourcePath} busy={busy} uncertain={uncertain}
       triggerRef={addDocumentTrigger} error={operationError} onClose={() => closeProjectDialog(addDocumentTrigger, () => setAdding(false))} onReview={review}
-      onAdd={doc => mutate({ kind: 'add', projectId: current.id, groupId: current.groupId, docId: doc.id, title: doc.title }, config =>
-        request.post('/projects/' + current.id + '/documents', { docId: doc.id }, config), () => setAdding(false))} />}
+      onAdd={doc => mutate({ kind: 'add', projectId: current.id, projectName: current.name, groupId: current.groupId, docId: doc.id, title: doc.title }, config =>
+        request.post('/projects/' + current.id + '/documents', { docId: doc.id }, config), () => {
+        setAdding(false)
+        setDetailArrival({ target: 'addition' })
+      })} />}
   </Layout>
 }

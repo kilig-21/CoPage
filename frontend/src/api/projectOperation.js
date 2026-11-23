@@ -99,7 +99,8 @@ export function createProjectOperation({ readIdentity, readState, changed = () =
       if (target.kind === 'create') pending.delete(owner)
       emit({ uncertain: null, reviewFailed: false, notice: { type: response.creationTrackingWarning ? 'warning' : 'success',
         message: response.creationTrackingWarning || (target.kind === 'create' && retryCreation ? '已确认原项目创建，编号 #' + response.data.id :
-          target.kind === 'add' && !response.data.changed ? '文档已在项目中' : labels[target.kind]) } })
+          target.kind === 'add' && !response.data.changed ? '文档已在项目中' : labels[target.kind]),
+        ...(target.kind === 'add' ? { addition: target } : {}) } })
       onSuccess?.(response.data)
       confirmed(target)
     } catch (failure) {

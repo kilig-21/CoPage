@@ -36,6 +36,18 @@ async function createDocument(page) {
   return id
 }
 
+async function createProject(page, request, name) {
+  const token = await page.evaluate(() => localStorage.getItem('collab-token'))
+  const reply = await request.post(`${backend}/api/projects`, {
+    headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': randomUUID() },
+    data: { name, description: '', groupId: 0 },
+  })
+  expect(reply.status()).toBe(200)
+  const project = await reply.json()
+  expect(project.code).toBe(0)
+  return project.data.id
+}
+
 async function tool(page, label) {
   await page.getByRole('button', { name: '更多文档操作' }).click()
   await page.getByRole('menuitem', { name: label, exact: true }).click()
@@ -289,18 +301,11 @@ test('the project document picker starts in the filter and returns to its trigge
   const docId = await createDocument(page)
   const docTitle = '场地交接记录'
   await rename(page, docTitle)
-  const token = await page.evaluate(() => localStorage.getItem('collab-token'))
-  const reply = await request.post(`${backend}/api/projects`, {
-    headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': randomUUID() },
-    data: { name: '校刊资料', description: '', groupId: 0 },
-  })
-  expect(reply.status()).toBe(200)
-  const project = await reply.json()
-  expect(project.code).toBe(0)
+  const projectId = await createProject(page, request, '校刊资料')
 
   for (const width of [1280, 320]) {
     await page.setViewportSize({ width, height: width === 320 ? 640 : 850 })
-    await page.goto(`/projects?project=${project.data.id}`)
+    await page.goto(`/projects?project=${projectId}`)
     const trigger = page.getByRole('button', { name: '加入已有文档', exact: true })
     await trigger.press('Enter')
     const picker = page.getByRole('dialog', { name: '加入已有文档' })
@@ -318,6 +323,37 @@ test('the project document picker starts in the filter and returns to its trigge
     await page.keyboard.press('Escape')
     await expect(picker).toBeHidden()
     await expect(trigger).toBeFocused()
+  }
+})
+
+test('adding a document confirms its identity in project details with the existing filter', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  const docId = await createDocument(page)
+  const docTitle = '校刊定稿'
+  await rename(page, docTitle)
+  const docKeyword = '活动日程'
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: width === 320 ? 640 : 850 })
+    const projectId = await createProject(page, request, `校刊资料 ${width}`)
+    await page.goto('/projects?' + new URLSearchParams({ project: String(projectId), docKeyword }))
+    await page.getByRole('button', { name: '加入已有文档', exact: true }).press('Enter')
+    const picker = page.getByRole('dialog', { name: '加入已有文档' })
+    await picker.getByRole('button', { name: `加入项目「${docTitle}」（文档 #${docId}）`, exact: true }).press('Enter')
+
+    const result = page.getByRole('region', { name: '加入文档结果' })
+    await expect(result).toContainText('文档已加入项目')
+    await expect(result).toContainText(`文档 #${docId}`)
+    await expect(result).toBeFocused()
+    await expect(result).toBeInViewport({ ratio: 1 })
+    await expect(page.getByRole('textbox', { name: '筛选项目内文档' })).toHaveValue(docKeyword)
+    await expect(page.getByText('没有符合条件且可访问的文档')).toBeVisible()
+
+    await page.keyboard.press('Tab')
+    await expect(result.getByRole('link', { name: `打开文档「${docTitle}」（文档 #${docId}）` })).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(page).toHaveURL(new RegExp(`/docs/${docId}(\\?|$)`))
+    await expect(title(page)).toHaveText(docTitle)
   }
 })
 

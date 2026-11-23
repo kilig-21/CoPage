@@ -24,6 +24,10 @@
 .project-document-picker.ant-list .ant-list-item .ant-list-item-action { display: flex; gap: 8px; }
 .project-document-picker .ant-list-item .ant-list-item-action > li { padding: 0; }
 .project-document-picker .ant-list-item-action-split { display: none; }
+.project-add-feedback .ant-alert { padding: 12px 16px; background: var(--cp-surface);
+  border-color: var(--cp-line); border-inline-start: 3px solid var(--cp-status-success); }
+.project-add-feedback .ant-alert-icon { font-size: 18px; margin-inline-end: 8px; }
+.project-add-feedback:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 3px; border-radius: 8px; }
 @media (max-width: 640px), (max-height: 640px) {
   .project-fields-modal { top: 24px; padding-bottom: 24px; }
   .project-fields-modal .ant-modal-content { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); }
