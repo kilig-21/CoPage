@@ -75,6 +75,32 @@ test('login, logout, and protected route redirect', async ({ page, request }) =>
   await expect(page).toHaveURL(/\/login(?:\?|$)/)
 })
 
+test('narrow navigation keeps primary links visible and keyboard access to other pages', async ({ page, request }) => {
+  await page.setViewportSize({ width: 320, height: 850 })
+  await login(page, await createAccount(request))
+  const navigation = page.getByRole('navigation', { name: '应用导航' })
+
+  for (const route of ['/home', '/search']) {
+    await page.goto(route)
+    for (const name of ['工作台', '我的文档', '搜索']) {
+      await expect(navigation.getByRole('link', { name, exact: true })).toBeInViewport({ ratio: 1 })
+    }
+  }
+
+  const more = navigation.getByRole('button', { name: '更多页面' })
+  await more.press('Enter')
+  await page.keyboard.press('Tab')
+  await expect(navigation.getByRole('link', { name: '我的小组' })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(more).toBeFocused()
+  await expect(more).toHaveAttribute('aria-expanded', 'false')
+
+  await more.press('Enter')
+  await navigation.getByRole('link', { name: '回收站' }).press('Enter')
+  await expect(page).toHaveURL(/\/trash$/)
+  await expect(navigation.getByRole('button', { name: '更多页面，当前是回收站' })).toHaveAttribute('aria-expanded', 'false')
+})
+
 test('share and collaborator dialogs keep keyboard focus at desktop and narrow widths', async ({ page, request }) => {
   await login(page, await createAccount(request))
   await createDocument(page)
