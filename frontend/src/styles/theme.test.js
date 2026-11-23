@@ -22,6 +22,7 @@ test('CSS and Ant Design share the same palette and control sizing', () => {
   assert.equal(variables.get('--cp-accent'), token.colorPrimary)
   assert.equal(variables.get('--cp-ink'), token.colorText)
   assert.equal(variables.get('--cp-muted'), token.colorTextSecondary)
+  assert.equal(variables.get('--cp-muted'), token.colorTextPlaceholder)
   assert.equal(variables.get('--cp-surface'), token.colorBgContainer)
   assert.equal(variables.get('--cp-radius-panel'), `${token.borderRadius}px`)
   assert.equal(variables.get('--cp-control-height'), `${token.controlHeight}px`)

@@ -28,6 +28,7 @@ export const antTheme = {
     colorText: palette.ink,
     colorTextSecondary: palette.muted,
     colorTextDescription: palette.muted,
+    colorTextPlaceholder: palette.muted,
     colorBgLayout: palette.paper,
     colorBgContainer: palette.surface,
     colorBgElevated: palette.surface,
