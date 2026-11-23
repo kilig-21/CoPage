@@ -61,6 +61,7 @@
 .cp-workbench-drafts p { flex: 1 1 200px; display: grid; gap: 4px; margin: 0; color: var(--cp-muted); }
 .cp-workbench-drafts strong { color: var(--cp-ink); }
 .cp-workbench-drafts .ant-btn { min-height: 44px; }
+.cp-workbench-draft-error { width: 100%; margin-top: 12px; overflow-wrap: anywhere; }
 .cp-workbench-secondary > :only-child { grid-column: 1 / -1; }
 .workbench > .document-creation-review,
 .workbench > .lifecycle-review-alert { margin-bottom: 24px; }

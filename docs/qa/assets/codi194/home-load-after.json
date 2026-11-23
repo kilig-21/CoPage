@@ -1,0 +1,62 @@
+[
+    {
+        "width":  1280,
+        "homeAndLogin":  {
+                             "count":  28,
+                             "encodedBytes":  355809,
+                             "decodedBytes":  1057733,
+                             "transferBytes":  364209
+                         },
+        "homeRoute":  {
+                          "count":  16,
+                          "encodedBytes":  80946,
+                          "decodedBytes":  230088,
+                          "transferBytes":  85746
+                      },
+        "initialDelta":  null,
+        "drawerAfterClick":  {
+                                 "count":  6,
+                                 "encodedBytes":  23466,
+                                 "decodedBytes":  63242,
+                                 "transferBytes":  25266
+                             },
+        "drawerAssets":  [
+                             "AccountDraftsDrawer-pnEni-yI.js",
+                             "AccountDraftsDrawer-vP9vF8hq.css",
+                             "Delta-BpkRZmkq.js",
+                             "index-Cs4USNM1.js",
+                             "index-CUYbJ4WP.js",
+                             "ListEmptyState-Cw_g_eGM.js"
+                         ]
+    },
+    {
+        "width":  320,
+        "homeAndLogin":  {
+                             "count":  28,
+                             "encodedBytes":  355809,
+                             "decodedBytes":  1057733,
+                             "transferBytes":  364209
+                         },
+        "homeRoute":  {
+                          "count":  16,
+                          "encodedBytes":  80946,
+                          "decodedBytes":  230088,
+                          "transferBytes":  85746
+                      },
+        "initialDelta":  null,
+        "drawerAfterClick":  {
+                                 "count":  6,
+                                 "encodedBytes":  23466,
+                                 "decodedBytes":  63242,
+                                 "transferBytes":  25266
+                             },
+        "drawerAssets":  [
+                             "AccountDraftsDrawer-pnEni-yI.js",
+                             "AccountDraftsDrawer-vP9vF8hq.css",
+                             "Delta-BpkRZmkq.js",
+                             "index-Cs4USNM1.js",
+                             "index-CUYbJ4WP.js",
+                             "ListEmptyState-Cw_g_eGM.js"
+                         ]
+    }
+]

@@ -1,0 +1,62 @@
+[
+    {
+        "width":  1280,
+        "homeAndLogin":  {
+                             "count":  31,
+                             "encodedBytes":  376642,
+                             "decodedBytes":  1118054,
+                             "transferBytes":  385942
+                         },
+        "homeRoute":  {
+                          "count":  19,
+                          "encodedBytes":  101790,
+                          "decodedBytes":  290472,
+                          "transferBytes":  107490
+                      },
+        "initialDelta":  {
+                             "name":  "Delta-BI1wBPez.js",
+                             "encodedBodySize":  12083,
+                             "decodedBodySize":  36834,
+                             "transferSize":  12383
+                         },
+        "drawerAfterClick":  {
+                                 "count":  0,
+                                 "encodedBytes":  0,
+                                 "decodedBytes":  0,
+                                 "transferBytes":  0
+                             },
+        "drawerAssets":  [
+
+                         ]
+    },
+    {
+        "width":  320,
+        "homeAndLogin":  {
+                             "count":  31,
+                             "encodedBytes":  376642,
+                             "decodedBytes":  1118054,
+                             "transferBytes":  385942
+                         },
+        "homeRoute":  {
+                          "count":  19,
+                          "encodedBytes":  101790,
+                          "decodedBytes":  290472,
+                          "transferBytes":  107490
+                      },
+        "initialDelta":  {
+                             "name":  "Delta-BI1wBPez.js",
+                             "encodedBodySize":  12083,
+                             "decodedBodySize":  36834,
+                             "transferSize":  12383
+                         },
+        "drawerAfterClick":  {
+                                 "count":  0,
+                                 "encodedBytes":  0,
+                                 "decodedBytes":  0,
+                                 "transferBytes":  0
+                             },
+        "drawerAssets":  [
+
+                         ]
+    }
+]

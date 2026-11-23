@@ -9,7 +9,6 @@ import { parseAccountProfile } from '../auth/accountProfile'
 import { hasAccountDraftRecords } from '../editor/accountDrafts'
 import WorkspaceOverview from '../components/WorkspaceOverview'
 import WorkspaceHeader from '../components/WorkspaceHeader'
-import AccountDraftsDrawer from '../components/AccountDraftsDrawer'
 import DocumentLifecycleFeedback from '../components/DocumentLifecycleFeedback'
 import PendingDocumentCreations from '../components/PendingDocumentCreations'
 import useBlankDocumentCreation from '../api/useBlankDocumentCreation'
@@ -33,23 +32,38 @@ export default function Home() {
   const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
   const lifecycle = useDocumentLifecycle({ onConfirmed: () => setRefresh(value => value + 1) })
-  const [showDrafts, setShowDrafts] = useState(false)
+  const [DraftsDrawer, setDraftsDrawer] = useState(null)
+  const [draftsStatus, setDraftsStatus] = useState('idle')
   const [draftSession, setDraftSession] = useState(null)
   const hasLocalDrafts = draftSession === session
   const draftsTrigger = useRef(null)
+  const draftsRetry = useRef(null)
   const main = useRef(null)
-  function openDrafts(event) {
+  async function openDrafts(event) {
+    if (draftsStatus === 'loading' || !session.current()) return
     draftsTrigger.current = event.currentTarget
-    setShowDrafts(true)
+    setDraftsStatus('loading')
+    try {
+      const { default: Drawer } = await import('../components/AccountDraftsDrawer')
+      if (session.current()) setDraftsDrawer(() => Drawer)
+      setDraftsStatus('idle')
+    } catch {
+      setDraftsStatus(session.current() ? 'failed' : 'idle')
+    }
   }
   function closeDrafts() {
-    setShowDrafts(false)
+    setDraftsDrawer(null)
     queueMicrotask(() => {
       const trigger = draftsTrigger.current
       const target = trigger?.isConnected ? trigger : main.current
       target?.focus({ preventScroll: true })
     })
   }
+  useEffect(() => {
+    if (draftsStatus === 'failed' && document.activeElement === draftsTrigger.current) {
+      draftsRetry.current?.focus()
+    }
+  }, [draftsStatus])
   useEffect(() => {
     function updateDraftPresence() {
       try {
@@ -90,6 +104,14 @@ export default function Home() {
     }).finally(() => { if (!controller.signal.aborted) setProfileLoading(false) })
     return () => controller.abort()
   }, [profileRefresh, request])
+  const draftsAction = <>
+    <Button loading={draftsStatus === 'loading'} aria-busy={draftsStatus === 'loading'} onClick={openDrafts}>
+      {draftsStatus === 'loading' ? '正在打开草稿…' : '查看本地草稿'}
+    </Button>
+    {draftsStatus === 'failed' && <Alert className="cp-workbench-draft-error" type="warning" showIcon
+      message="暂时无法打开草稿清单" description="刷新页面后重试，本地记录会保留。"
+      action={<Button ref={draftsRetry} onClick={() => window.location.reload()}>刷新页面</Button>} />}
+  </>
   return <Layout className="app-shell">
     <WorkspaceHeader title="工作台" />
     <main ref={main} id="workspace-main" tabIndex={-1} className="content-wrap workbench">
@@ -105,7 +127,7 @@ export default function Home() {
       </header>
       {hasLocalDrafts && <section className="cp-workbench-drafts" aria-label="本地草稿提醒">
         <p role="status"><strong>有本地草稿</strong><span>可核对此浏览器保存的记录，或下载副本。</span></p>
-        <Button onClick={openDrafts}>查看本地草稿</Button>
+        {draftsAction}
       </section>}
       {profileError && <Alert type="warning" showIcon message={profileError}
         action={<Button disabled={profileLoading} onClick={() => setProfileRefresh(value => value + 1)}>重试账号资料</Button>} />}
@@ -150,11 +172,11 @@ export default function Home() {
         {!hasLocalDrafts && <aside className="cp-workbench-tools" aria-label="资料工具">
           <section className="cp-workbench-tool"><Typography.Title level={3}>本地草稿</Typography.Title>
             <Typography.Paragraph type="secondary">继续处理保存在这个浏览器里的草稿，或下载副本。</Typography.Paragraph>
-            <Button onClick={openDrafts}>查看本地草稿</Button>
+            {draftsAction}
           </section>
         </aside>}
       </div>
     </main>
-    {showDrafts && <AccountDraftsDrawer sourcePath={sourcePath} onClose={closeDrafts} />}
+    {DraftsDrawer && <DraftsDrawer sourcePath={sourcePath} onClose={closeDrafts} />}
   </Layout>
 }
