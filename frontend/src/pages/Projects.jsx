@@ -54,6 +54,8 @@ export default function Projects() {
   const sourcePath = location.pathname + location.search + location.hash
   const selected = idValue(params.get('project'))
   const [detailArrival, setDetailArrival] = useState(null)
+  const returnedDocumentId = detailArrival ? null : location.state?.returnDocumentId
+  const returnedDocumentLink = useRef(null)
   const groupId = idValue(params.get('groupId'))
   const page = Math.min(idValue(params.get('page')) || 1, 1000000)
   const scope = ['personal', 'group'].includes(params.get('scope')) ? params.get('scope') : 'all'
@@ -320,7 +322,7 @@ export default function Projects() {
           disabled={!ready} onChange={next => navigate({ page: String(next) })} />}
       </Card>
       {selected > 0 && !archived && <WorkspaceDetailCard key={selected} id="project-detail" arrival={detailArrival}
-        arrivalTarget={arrivingAtAddition ? addResult : undefined}
+        arrivalTarget={arrivingAtAddition ? addResult : returnedDocumentId ? returnedDocumentLink : undefined}
         waiting={loading || (arrivingAtAddition ? !listed && !error : detailLoading || detailSettledFrom !== detailKey)}
         title={current?.name || (additionNotice && latestAddition.projectName) || '项目资料'}
         loading={detailLoading && !additionNotice} className="project-section"
@@ -355,7 +357,8 @@ export default function Projects() {
                 description="只移除当前关联，保留原文档和成员权限。" disabled={!detailReady} onConfirm={() => mutate({ kind: 'remove', projectId: current.id, groupId: current.groupId, docId: doc.id, title: doc.title, associationId: doc.associationId }, config =>
                   request.delete('/projects/' + current.id + '/documents/' + doc.id, { ...config, params: { associationId: doc.associationId } }))}>
                 <Button disabled={!detailReady} danger>移出项目</Button></Popconfirm>,
-            ].filter(Boolean)}><List.Item.Meta title={<Link to={documentHref(doc.id, sourcePath)}>{doc.title}</Link>}
+            ].filter(Boolean)}><List.Item.Meta title={<Link ref={doc.id === returnedDocumentId ? returnedDocumentLink : undefined}
+              to={documentHref(doc.id, sourcePath)}>{doc.title}</Link>}
               description={<Space wrap><Tag>{doc.isOwner === true ? '所有者' : doc.permission === 2 ? '可编辑' : doc.permission === 1 ? '只读' : '打开后查看权限'}</Tag>
                 <span>文档 #{doc.id}</span>
                 <span>所有者：{typeof doc.ownerName === 'string' && doc.ownerName.trim() ? doc.ownerName : '用户 #' + doc.ownerId}</span>

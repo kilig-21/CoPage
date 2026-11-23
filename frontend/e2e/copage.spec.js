@@ -357,6 +357,40 @@ test('adding a document confirms its identity in project details with the existi
   }
 })
 
+test('returning from the editor focuses the same project document among identical titles', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  const docTitle = '同名交接记录'
+  const docId = await createDocument(page)
+  await rename(page, docTitle)
+  await page.goto('/home')
+  const twinId = await createDocument(page)
+  await rename(page, docTitle)
+  const projectId = await createProject(page, request, '校刊项目')
+  const token = await page.evaluate(() => localStorage.getItem('collab-token'))
+  for (const id of [docId, twinId]) {
+    const reply = await request.post(`${backend}/api/projects/${projectId}/documents`, {
+      headers: { Authorization: `Bearer ${token}` }, data: { docId: id },
+    })
+    expect((await reply.json()).code).toBe(0)
+  }
+  const source = '/projects?' + new URLSearchParams({ project: String(projectId), docKeyword: '交接' })
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: width === 320 ? 640 : 850 })
+    await page.goto(source)
+    const titles = page.locator('#project-detail .ant-list-item-meta-title')
+    const original = titles.getByRole('link', { name: docTitle, exact: true })
+      .and(page.locator(`a[href^="/docs/${docId}?"]`))
+    await expect(titles.getByRole('link', { name: docTitle, exact: true })).toHaveCount(2)
+    await original.press('Enter')
+    await expect(page).toHaveURL(new RegExp(`/docs/${docId}(\\?|$)`))
+    await page.getByRole('button', { name: '返回项目', exact: true }).press('Enter')
+    await expect(page.getByRole('textbox', { name: '筛选项目内文档' })).toHaveValue('交接')
+    await expect(original).toBeFocused()
+    await expect(original).toBeInViewport({ ratio: 1 })
+  }
+})
+
 test('the complete title opens in the viewport with reduced motion enabled', async ({ page, request }) => {
   await login(page, await createAccount(request))
   await createDocument(page)
