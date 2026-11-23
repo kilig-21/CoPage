@@ -226,6 +226,26 @@ test('name a new document from the editor title on desktop and narrow screens', 
   }
 })
 
+test('the complete title opens in the viewport with reduced motion enabled', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  await createDocument(page)
+  const documentTitle = '校园阅读节｜长篇场地巡查手记'.repeat(6)
+  await rename(page, documentTitle)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 850 })
+    const trigger = page.getByRole('button', { name: '查看完整标题：' + documentTitle })
+    await trigger.press('Enter')
+    const fullTitle = page.locator('.editor-full-title')
+    await expect(fullTitle).toHaveText(documentTitle)
+    await expect(fullTitle).toBeInViewport({ ratio: 1 })
+    await trigger.press('Escape')
+    await expect(fullTitle).toBeHidden()
+    await expect(trigger).toBeFocused()
+  }
+})
+
 test('formatting a selection deep in a document keeps it in view at desktop and narrow widths', async ({ page, request }) => {
   await login(page, await createAccount(request))
   await createDocument(page)

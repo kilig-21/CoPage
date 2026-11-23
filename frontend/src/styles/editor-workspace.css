@@ -16,6 +16,9 @@
 .editor-workspace .editor-title-edit-icon { flex: none; color: var(--cp-accent); font-size: 13px; }
 .editor-title-popover { max-width: min(320px, calc(100vw - 24px)); }
 .editor-title-popover .ant-popover-inner { max-height: calc(100dvh - 88px); overflow-y: auto; }
+@media (prefers-reduced-motion: reduce) {
+  .editor-title-popover { transition-property: none !important; }
+}
 .editor-full-title { margin: 0; color: var(--cp-ink); font-size: var(--cp-type-body); line-height: var(--cp-leading-body); overflow-wrap: anywhere; }
 .editor-workspace .editor-topbar .ant-btn { min-height: var(--cp-control-height); }
 .editor-workspace .editor-actions { flex-shrink: 0; }
@@ -45,11 +48,16 @@
 .editor-workspace .editor-topbar .ant-btn:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 2px; }
 @media (max-width: 640px) {
   .editor-workspace { --editor-bar-height: 60px; }
-  .editor-workspace .editor-topbar { gap: 8px; padding: 8px 12px; }
-  .editor-workspace .editor-title-row { gap: 8px; }
+  .editor-workspace .editor-topbar { gap: 6px; padding: 8px 12px; }
+  .editor-workspace .editor-title-row { gap: 6px; }
+  .editor-workspace .editor-brand,
   .editor-workspace .editor-topbar .editor-action-label { display: none; }
   .editor-workspace .editor-topbar .ant-btn:not(.editor-title-reveal) { width: 44px; min-width: 44px; height: 44px; padding: 0; gap: 0; }
-  .editor-workspace .editor-topbar .editor-title-reveal { min-height: 26px; font-size: 16px; }
+  .editor-workspace .editor-topbar .editor-title-reveal { min-height: 44px; font-size: 16px; line-height: 20px; }
+  .editor-workspace .editor-title-text {
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    white-space: normal; overflow-wrap: anywhere;
+  }
   .editor-workspace .editor-wrap { width: calc(100% - 24px); padding: 12px 0 36px; }
   .editor-workspace .editor-canvas { padding: 16px; }
   .editor-workspace .editor-host .ql-editor { padding-top: 20px; }
