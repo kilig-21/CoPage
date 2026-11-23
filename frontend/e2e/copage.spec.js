@@ -73,6 +73,8 @@ test('login, logout, and protected route redirect', async ({ page, request }) =>
   await expect(page).toHaveURL(/\/login(?:\?|$)/)
   await page.goto('/docs')
   await expect(page).toHaveURL(/\/login(?:\?|$)/)
+  await expect(page.getByLabel('用户名')).toBeVisible()
+  await expect(page.getByRole('group', { name: '本地演示账号' })).toHaveCount(0)
 })
 
 test('narrow navigation keeps primary links visible and keyboard access to other pages', async ({ page, request }) => {

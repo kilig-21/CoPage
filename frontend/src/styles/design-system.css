@@ -127,6 +127,16 @@ body .ant-list .ant-list-empty-text { color: var(--cp-muted); }
 .auth-card .ant-btn-primary { min-height: 44px; }
 .auth-card .ant-alert { margin: 16px 0; }
 .auth-card .ant-btn-link { margin-top: 10px; padding-inline: 4px; }
+.auth-demo { padding: 12px; border: 1px solid var(--cp-line); border-radius: var(--cp-radius-control); background: var(--cp-paper); }
+.auth-demo-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; margin-bottom: 8px; font-size: var(--cp-type-meta); }
+.auth-demo-heading strong { color: var(--cp-ink); }
+.auth-demo-heading span { color: var(--cp-muted); }
+.auth-demo-accounts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.auth-demo-accounts .ant-btn { min-height: 44px; color: var(--cp-accent); }
+.auth-demo-accounts .ant-btn:disabled { color: var(--cp-muted); }
+.auth-demo-accounts .ant-btn:focus-visible, .auth-card .ant-btn-primary:focus-visible {
+  outline: 2px solid var(--cp-accent); outline-offset: 2px;
+}
 .editor-topbar .ant-btn { height: 32px; font-size: 14px; padding-inline: 12px; }
 .editor-canvas { border-color: var(--cp-line); box-shadow: var(--cp-shadow-paper); }
 
@@ -180,12 +190,12 @@ body .ant-list .ant-list-empty-text { color: var(--cp-muted); }
   .workspace-account { min-width: 44px; justify-content: center; padding-inline: 10px; }
   .workspace-utilities .ant-btn { min-width: 44px; padding-inline: 10px; gap: 0; }
   .page-heading-actions .ant-btn { min-height: 44px; }
-  .auth-page { display: block; padding: 32px 20px 40px; }
-  .auth-brand { margin-bottom: 28px; font-size: 27px; }
-  .auth-story h1 { max-width: 100%; margin-bottom: 16px; font-size: 32px; }
-  .auth-story > p { font-size: 15px; line-height: 1.8; }
+  .auth-page { display: block; padding: 24px 16px 40px; }
+  .auth-brand { margin-bottom: 16px; font-size: 25px; }
+  .auth-story h1 { max-width: 100%; margin: 0; font-size: clamp(24px, 6vw, 32px); text-wrap: balance; }
+  .auth-story h1 br, .auth-story > p { display: none; }
   .auth-capabilities { display: none; }
-  .auth-card { margin-top: var(--cp-space-6); }
+  .auth-card { margin-top: var(--cp-space-5); }
   .auth-card .ant-card-body { padding: var(--cp-space-5); }
   .doc-list-card .ant-list-item { padding-block: 18px; }
   .content-wrap .ant-btn, .document-open-link { min-height: 44px; }

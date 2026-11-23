@@ -8,6 +8,8 @@ import PasswordInput from '../components/PasswordInput'
 import { captureLoginIdentity, safeReturnPath, saveSession } from '../auth/session'
 import { confirmRegistrationReply, isDefinitiveRegistrationRejection, parseLoginReply } from '../auth/replies'
 
+const demoAccounts = ['testA', 'testB']
+
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -15,6 +17,7 @@ export default function Login() {
   const [registering, setRegistering] = useState(false)
   const [showGuide, setShowGuide] = useState(false)
   const guideTrigger = useRef(null)
+  const submitButton = useRef(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -64,6 +67,12 @@ export default function Login() {
     }
   }
 
+  function fillDemoAccount(username) {
+    form.setFieldsValue({ username, password: '123456' })
+    setError('')
+    submitButton.current?.focus()
+  }
+
   return (
     <main className="auth-page">
       <section className="auth-story" aria-label="CoPage 协同文档">
@@ -91,6 +100,13 @@ export default function Login() {
             form.setFieldsValue({ confirmPassword: '', nickname: '' })
           }}>转到登录确认</Button>} />}
         {notice && <Alert type={noticeType} showIcon message={notice} />}
+        {import.meta.env.DEV && !registering && <div className="auth-demo" role="group" aria-label="本地演示账号">
+          <div className="auth-demo-heading"><strong>本地演示</strong><span>共用密码 123456</span></div>
+          <div className="auth-demo-accounts">
+            {demoAccounts.map(username => <Button key={username} disabled={submitting}
+              aria-label={'填入演示账号 ' + username} onClick={() => fillDemoAccount(username)}>{username}</Button>)}
+          </div>
+        </div>}
         <Form form={form} layout="vertical" onFinish={onFinish} disabled={submitting}>
           <Form.Item label="用户名" name="username" normalize={value => value.trim()} rules={[
             { required: true, message: '请输入用户名' }, { min: 3, max: 50, message: '用户名需要 3～50 个字符' }]}>
@@ -110,14 +126,10 @@ export default function Login() {
             { required: true, message: '请再次输入密码' }, ({ getFieldValue }) => ({ validator: (_, value) =>
               !value || value === getFieldValue('password') ? Promise.resolve() : Promise.reject(new Error('两次密码不一致')) }),
           ]}><PasswordInput visibilityLabel="确认密码" autoComplete="new-password" /></Form.Item>}
-          <Button type="primary" htmlType="submit" loading={submitting} block>
+          <Button ref={submitButton} type="primary" htmlType="submit" loading={submitting} block>
             {registering ? '注册账号' : '登录'}
           </Button>
         </Form>
-        {import.meta.env.DEV && !registering && <Typography.Paragraph className="auth-tip" type="secondary">
-          本地演示账号：testA / testB，密码均为 123456。<Button type="link" disabled={submitting}
-            onClick={() => form.setFieldsValue({ username: 'testA', password: '123456' })}>填入演示账号</Button>
-        </Typography.Paragraph>}
         <Button type="link" disabled={submitting} onClick={() => {
           const username = form.getFieldValue('username'); form.resetFields(); form.setFieldsValue({ username });
           setError(''); setNotice(''); setRegistrationUncertain(false); setRegistering(value => !value)

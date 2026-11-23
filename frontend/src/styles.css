@@ -25,7 +25,6 @@ body { margin: 0; min-width: 0; }
 .page-heading { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between; margin-bottom: 28px; }
 .page-heading .ant-typography { margin: 0; }
 .doc-icon { font-size: 22px; padding-top: var(--cp-space-1); }
-.auth-tip { margin: 20px 0 8px !important; }
 .editor-wrap { width: min(1000px, 92vw); }
 .editor-canvas { margin-top: var(--cp-space-4); min-height: 600px; padding: var(--cp-space-8) 72px; background: var(--cp-surface); border: 1px solid var(--cp-line); border-radius: var(--cp-radius-panel); }
 .editor-alert { margin-top: 16px; }
