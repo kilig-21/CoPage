@@ -30,8 +30,19 @@ export default function Trash() {
   currentKey.current=listKey
   const listReady=loadedFrom===listKey&&!loading&&!error
   const reading=loading||(!error&&loadedFrom!==listKey)
+  const restoreControl=useRef(null)
+  const [focusResult,setFocusResult]=useState(false)
   const restoration=useDocumentLifecycle({operation:'restore',ready:listReady,
-    onConfirmed:()=>setRefresh(n=>n+1)})
+    onConfirmed:()=>{
+      setFocusResult(document.activeElement===restoreControl.current)
+      setRefresh(n=>n+1)
+    }})
+  async function restore(doc,event){
+    if(restoration.blocked)return
+    restoreControl.current=event?.currentTarget??null
+    try{await restoration.run(doc)}
+    finally{restoreControl.current=null}
+  }
   useEffect(()=>setInput(keyword),[keyword])
   const applyFilter=value=>{
     if(restoration.busy)return
@@ -71,12 +82,12 @@ export default function Trash() {
         {keyword&&<Button disabled={restoration.busy} onClick={()=>applyFilter('')}>清除查找</Button>}
       </Space>
       {error&&<Alert type="error" showIcon message={error} action={<Button disabled={loading} onClick={()=>setRefresh(n=>n+1)}>重试</Button>} />}
-      <DocumentLifecycleFeedback lifecycle={restoration} returnTo={sourcePath} />
+      <DocumentLifecycleFeedback lifecycle={restoration} returnTo={sourcePath} focusResult={focusResult} />
       <Card className="trash-list-card"><List rowKey="id" loading={{ spinning: reading, tip: '正在加载…' }} dataSource={listReady?docs:[]}
         locale={{emptyText:error?'列表暂不可用':<ListEmptyState description={keyword?'没有匹配标题的已删除文档，试试其他关键词或清除查找':'回收站是空的'} />}}
         renderItem={doc=><List.Item actions={[<Popconfirm key="restore" overlayClassName="document-action-confirm trash-restore-confirm" title={`恢复“${doc.title}”（文档 #${doc.id}）？`}
           description="恢复后，原协作者将重新获得原来的权限。" okText="确认恢复" cancelText="取消"
-          disabled={restoration.blocked} onConfirm={()=>restoration.run(doc)}>
+          disabled={restoration.blocked} onConfirm={event=>restore(doc,event)}>
           <Button aria-label={`恢复文档 #${doc.id}：${doc.title}`} disabled={restoration.blocked} loading={restoration.pendingId===doc.id}>恢复文档</Button></Popconfirm>]}>
           <List.Item.Meta title={doc.title} description={<Space wrap><Typography.Text type="secondary">文档 #{doc.id}</Typography.Text><Typography.Text type="secondary">删除时间：{doc.deletedAt}</Typography.Text></Space>} />
         </List.Item>} />

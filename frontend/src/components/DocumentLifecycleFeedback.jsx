@@ -2,17 +2,20 @@ import { useLayoutEffect, useRef } from 'react'
 import { Alert, Button, Popconfirm, Space } from 'antd'
 import { Link } from 'react-router-dom'
 import { documentHref } from '../navigation/documents'
+import { focusWorkspaceRegion } from '../navigation/focusWorkspaceRegion'
 
-export default function DocumentLifecycleFeedback({ lifecycle, returnTo }) {
+export default function DocumentLifecycleFeedback({ lifecycle, returnTo, focusResult = false }) {
   const { record, error, storageFailed, busy, checking, review, reviewFailed, endWaiting, notice, retryStorage } = lifecycle
   const confirmedRecord = useRef(null)
   const result = useRef(null)
   const restoreFocus = useRef(false)
   useLayoutEffect(() => {
-    if (!notice || !restoreFocus.current) return
+    if (!notice || (!restoreFocus.current && !focusResult)) return
     restoreFocus.current = false
-    if (document.activeElement === document.body) result.current?.focus({ preventScroll: true })
-  }, [notice])
+    if (document.activeElement !== document.body) return
+    if (focusResult) focusWorkspaceRegion(result.current)
+    else result.current?.focus({ preventScroll: true })
+  }, [notice, focusResult])
   const target = record?.target
   const verb = target?.operation === 'delete' ? '删除' : '恢复'
   const canEnd = Boolean(record && (!target || reviewFailed))

@@ -1458,22 +1458,97 @@ test('document menus and deletion confirmation stay on screen with reduced motio
 
 test('trash removes a document from the list and restores the same document and content', async ({ page, request }) => {
   await login(page, await createAccount(request))
-  const docId = await createDocument(page)
-  const docTitle = 'Trash fixture ' + fresh()
-  await rename(page, docTitle)
-  await append(page, 'Recover me from trash')
-  await page.getByRole('button', { name: '返回文档列表' }).click()
-  const entry = page.getByRole('link', { name: docTitle, exact: true })
-  const row = page.locator('.ant-list-item').filter({ has: entry })
-  await row.getByRole('button', { name: /^删\s*除$/ }).click()
-  await page.getByRole('button', { name: /^确\s*定$/ }).click()
-  await expect(entry).toBeHidden()
-  await page.getByRole('link', { name: '回收站', exact: true }).click()
-  await page.getByRole('button', { name: `恢复文档 #${docId}：${docTitle}` }).click()
-  await page.getByRole('button', { name: '确认恢复' }).click()
-  await page.getByRole('link', { name: '打开文档' }).click()
-  await expect(page).toHaveURL(new RegExp(`/docs/${docId}(\\?|$)`))
-  await expect(editor(page)).toHaveText('Recover me from trash')
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 760 })
+    const docId = await createDocument(page)
+    const docTitle = 'Trash fixture ' + fresh()
+    await rename(page, docTitle)
+    await append(page, 'Recover me from trash')
+    await page.getByRole('button', { name: '返回文档列表' }).press('Enter')
+    const entry = page.getByRole('link', { name: docTitle, exact: true })
+    const row = page.locator('.ant-list-item').filter({ has: entry })
+    await row.getByRole('button', { name: /^删\s*除$/ }).click()
+    await page.getByRole('button', { name: /^确\s*定$/ }).click()
+    await expect(entry).toBeHidden()
+
+    await page.goto('/trash')
+    const restore = page.getByRole('button', { name: `恢复文档 #${docId}：${docTitle}` })
+    await restore.press('Enter')
+    const confirm = page.getByRole('button', { name: '确认恢复' })
+    let release
+    const held = new Promise(resolve => { release = resolve })
+    await page.route(`**/api/doc/${docId}/restore`, async route => {
+      await held
+      await route.continue()
+    }, { times: 1 })
+    try {
+      await confirm.press('Enter')
+      await expect(confirm).toBeFocused()
+      await expect(page.getByRole('link', { name: '打开文档' })).toHaveCount(0)
+    } finally {
+      release()
+    }
+    const restored = page.getByRole('link', { name: '打开文档' })
+    await expect(restored).toBeFocused()
+    await expect(restored).toBeInViewport({ ratio: 1 })
+    await expect(page.getByText('回收站是空的')).toBeVisible()
+    await page.keyboard.press('Enter')
+    await expect(page).toHaveURL(new RegExp(`/docs/${docId}(\\?|$)`))
+    await expect(editor(page)).toHaveText('Recover me from trash')
+    await page.getByRole('button', { name: '返回回收站' }).press('Enter')
+    await expect(page.getByText('回收站是空的')).toBeVisible()
+  }
+})
+
+test('restoring a document respects later focus and still allows confirmation after an unknown reply', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  await page.setViewportSize({ width: 320, height: 640 })
+  const token = await page.evaluate(() => localStorage.getItem('collab-token'))
+  const workbench = page.getByRole('navigation', { name: '应用导航' }).getByRole('link', { name: '工作台' })
+  const restored = page.getByRole('link', { name: '打开文档' })
+
+  for (const loseReply of [false, true]) {
+    const name = '活动记录'
+    const headers = { Authorization: `Bearer ${token}`, 'Idempotency-Key': randomUUID() }
+    const created = await request.post(`${backend}/api/doc`, { headers, data: { title: name } })
+    expect(created.ok()).toBe(true)
+    const { data } = await created.json()
+    const removed = await request.delete(`${backend}/api/doc/${data.id}`, { headers })
+    expect((await removed.json()).code).toBe(0)
+
+    await page.goto('/trash')
+    await page.getByRole('button', { name: `恢复文档 #${data.id}：${name}` }).press('Enter')
+    let release
+    const held = new Promise(resolve => { release = resolve })
+    const restorePath = `/api/doc/${data.id}/restore`
+    const sent = page.waitForRequest(req => new URL(req.url()).pathname === restorePath)
+    await page.route(`**${restorePath}`, async route => {
+      await held
+      if (!loseReply) { await route.continue(); return }
+      const response = await route.fetch()
+      expect((await response.json()).code).toBe(0)
+      await route.fulfill({ status: 503, json: { code: 503, message: '暂未收到恢复结果' } })
+    }, { times: 1 })
+    try {
+      await page.getByRole('button', { name: '确认恢复' }).press('Enter')
+      await sent
+      await workbench.focus()
+      await expect(workbench).toBeFocused()
+    } finally {
+      release()
+    }
+    if (loseReply) {
+      const review = page.getByRole('button', { name: '核对恢复结果' })
+      await expect(review).toBeVisible()
+      await expect(restored).toHaveCount(0)
+      await review.press('Enter')
+      await expect(restored).toBeFocused()
+    } else {
+      await expect(restored).toBeVisible()
+      await expect(workbench).toBeFocused()
+    }
+    await expect(restored).toHaveAttribute('href', `/docs/${data.id}?returnTo=%2Ftrash`)
+  }
 })
 
 test('print preview follows the active image node and recovers from a failed image read', async ({ page, request }) => {
