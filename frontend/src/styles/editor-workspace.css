@@ -42,8 +42,33 @@
   max-height: calc(100dvh - var(--editor-topbar-offset, var(--editor-bar-height)) - var(--editor-status-height, 32px) - 88px);
   overflow-y: auto; overscroll-behavior: contain; }
 .editor-workspace .editor-alert { overflow-wrap: anywhere; }
+.editor-workspace :is(.editor-status-row, .editor-canvas)[hidden] { display: none; }
+.editor-load-failure {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--cp-space-4); align-items: start;
+  margin-top: var(--cp-space-3); padding: var(--cp-space-6); background: var(--cp-surface);
+  border: 1px solid var(--cp-line); border-radius: var(--cp-radius-panel);
+}
+.editor-load-failure-icon {
+  grid-row: 1 / span 3; display: grid; place-items: center; width: 40px; height: 40px; font-size: 18px;
+  color: var(--cp-accent); background: var(--cp-paper); border-radius: var(--cp-radius-control);
+}
+.editor-load-failure-copy {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--cp-space-4);
+  color: var(--cp-muted); overflow-wrap: anywhere; line-height: var(--cp-leading-body);
+}
+.editor-load-failure-copy h2 { margin: 3px 0 var(--cp-space-2); color: var(--cp-ink); font-size: 22px; line-height: 1.35; }
+.editor-load-failure-copy p { margin: 0; }
+.editor-load-account { color: var(--cp-ink); padding-bottom: var(--cp-space-2); }
+.editor-load-retry.ant-btn { min-height: 44px; justify-self: start; }
 .editor-workspace .editor-topbar .ant-btn:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 2px; }
 @media (max-width: 640px) {
+  .editor-load-failure { grid-template-columns: minmax(0, 1fr); gap: var(--cp-space-3); padding: var(--cp-space-4); }
+  .editor-load-failure-copy { gap: var(--cp-space-2); align-items: center; }
+  .editor-load-failure-icon { grid-row: 1; width: 32px; height: 32px; }
+  .editor-load-failure-copy h2 { margin: 0; font-size: 18px; }
+  .editor-load-failure-copy p { grid-column: 1 / -1; }
+  .editor-load-account { padding-bottom: 0; }
+  .editor-load-account strong { display: block; }
   .editor-workspace { --editor-bar-height: 60px; }
   .editor-workspace .editor-topbar { gap: 6px; padding: 8px 12px; }
   .editor-workspace .editor-title-row { gap: 6px; }

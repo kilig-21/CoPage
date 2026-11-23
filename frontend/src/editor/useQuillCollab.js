@@ -35,6 +35,7 @@ export default function useQuillCollab(docId) {
   const [connection, setConnection] = useState('未连接')
   const [users, setUsers] = useState([])
   const [error, setError] = useState('')
+  const [loadErrorCode, setLoadErrorCode] = useState(null)
   const [title, setTitle] = useState('')
   const [saveStatus, setSaveStatus] = useState('等待同步')
   const [titleError, setTitleError] = useState('')
@@ -74,6 +75,7 @@ export default function useQuillCollab(docId) {
     setSkippedDraftNotice(false)
     setUsers([])
     setError('')
+    setLoadErrorCode(null)
     setPermission(0)
     setIsOwner(false)
     setDocumentFindState(EMPTY_DOCUMENT_FIND)
@@ -734,10 +736,11 @@ export default function useQuillCollab(docId) {
       .catch((loadError) => {
         if (!active) return
         const failureMessage = loadError?.code === 403
-          ? '当前账号无法打开这篇文档。请核对登录账号，或请分享者确认逐篇授权后重试。'
+          ? '请让分享者为当前账号授权这篇文档，然后重试。'
           : loadError?.code === 404
-            ? '这篇文档暂时无法打开，可能已被删除。请返回核对，文档所有者可到回收站查看。'
+            ? '请检查链接是否完整。文档可能已被删除，所有者可在回收站查看。'
             : requestFailureMessage(loadError, '文档加载失败')
+        setLoadErrorCode(loadError?.code ?? null)
         setConnection('加载失败')
         lastSaveStatus = '未能加载文档'
         setSaveStatus(lastSaveStatus)
@@ -804,7 +807,7 @@ export default function useQuillCollab(docId) {
   }, [docId, loadAttempt, pageSession, request])
 
   return {
-    editorHostRef, toolbarHostRef, connection, users, error, title, permission, isOwner, recoveryDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, saveStatus, titleError,
+    editorHostRef, toolbarHostRef, connection, users, error, loadErrorCode, title, permission, isOwner, recoveryDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, saveStatus, titleError,
     dismissSkippedDraftNotice: () => skippedDraftNoticeRef.current?.dismiss(),
     refreshTitle: () => refreshTitleRef.current?.(),
     retryLoad: () => { if (connection === '加载失败') setLoadAttempt(value => value + 1) },

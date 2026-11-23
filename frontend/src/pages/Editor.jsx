@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowLeftOutlined, CloudOutlined, DownOutlined, EditOutlined, FontSizeOutlined, MoreOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons'
+import { ArrowLeftOutlined, CloudOutlined, DownOutlined, EditOutlined, ExclamationCircleOutlined, FontSizeOutlined, LockOutlined, MoreOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons'
 import { Alert, Avatar, Button, Dropdown, Layout, Modal, Popover, Space, Tag, Tooltip, Typography } from 'antd'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { documentHref, documentReturn } from '../navigation/documents'
@@ -21,12 +21,13 @@ import DocumentFindPanel from '../components/DocumentFindPanel'
 import DocumentImagesModal from '../components/DocumentImagesModal'
 import LazyUserGuide from '../components/LazyUserGuide'
 import PendingCopyHint from '../components/PendingCopyHint'
-import { usePageRequest } from '../auth/PageSessionContext'
+import { usePageSession } from '../auth/PageSessionContext'
 import { UNTITLED_DOCUMENT_TITLE } from '../api/documentRename'
 import '../styles/editor-workspace.css'
 
 export default function Editor() {
-  const request = usePageRequest()
+  const pageSession = usePageSession()
+  const { request } = pageSession
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -60,13 +61,18 @@ export default function Editor() {
   const [titleOpen, setTitleOpen] = useState(false)
   const [findFocusEpoch, setFindFocusEpoch] = useState(0)
   const [draftDownloadNotice, setDraftDownloadNotice] = useState('')
-  const { editorHostRef, toolbarHostRef, connection, users, error, title, permission, isOwner,
+  const { editorHostRef, toolbarHostRef, connection, users, error, loadErrorCode, title, permission, isOwner,
     saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, dismissSkippedDraftNotice, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor, revealDocumentMatch,
     documentImagesState, startDocumentImages, closeDocumentImages, saveDocumentImageDescription } = useQuillCollab(docId)
   useLayoutEffect(() => {
     if (showFind) revealDocumentMatch()
   }, [showFind, findFocusEpoch, revealDocumentMatch])
   const isConnected = connection === '已连接'
+  const loadFailed = connection === '加载失败'
+  const awaitingDocument = permission === 0 && ['未连接', '加载中'].includes(connection)
+  const accessDenied = loadFailed && loadErrorCode === 403
+  const deniedAccount = accessDenied && pageSession.current() ? pageSession.identity.account : null
+  const loadFailureTitle = accessDenied ? '当前账号没有访问权限' : loadErrorCode === 404 ? '找不到这篇文档' : '文档加载失败'
   const formatExpanded = expandedFormatDoc === docId
   const renaming = renameEntry?.docId === docId ? renameEntry.source : null
   const canNameDocument = permission === 2 && title === UNTITLED_DOCUMENT_TITLE
@@ -254,7 +260,7 @@ export default function Editor() {
         <PendingCopyHint sourceId={docId} />
         {templateNotice && currentTemplateContext(templateNotice.context) && <Alert className="editor-alert" type={templateNotice.type} showIcon
           message={templateNotice.message} action={<Button onClick={() => { if (currentTemplateContext(templateNotice.context)) viewPersonalTemplates(templateNotice.name) }}>{templateNotice.type === 'warning' ? '核对我的模板' : '查看我的模板'}</Button>} />}
-        <div className="editor-status-row" ref={statusRef}>
+        <div className="editor-status-row" ref={statusRef} hidden={loadFailed}>
           <Space wrap className="editor-save-state">
             <Tag color={isConnected ? 'green' : 'gold'} icon={<CloudOutlined />}>{connection}</Tag>
             <Typography.Text className="editor-save-status" role="status" aria-live="polite">{saveStatus}</Typography.Text>
@@ -265,6 +271,17 @@ export default function Editor() {
             </Tooltip>)}
           </Avatar.Group></div>}
         </div>
+        {loadFailed && <section className="editor-load-failure" aria-labelledby="editor-load-failure-title">
+          <div className="editor-load-failure-copy" role="alert">
+            <span className="editor-load-failure-icon" aria-hidden="true">
+              {accessDenied ? <LockOutlined /> : <ExclamationCircleOutlined />}
+            </span>
+            <h2 id="editor-load-failure-title">{loadFailureTitle}</h2>
+            {deniedAccount && <p className="editor-load-account">当前登录账号 <strong>{deniedAccount}</strong></p>}
+            <p>{error}</p>
+          </div>
+          <Button type="primary" className="editor-load-retry" onClick={retryLoad}>重试加载</Button>
+        </section>}
         {titleError && <Alert className="editor-alert" type="warning" message={titleError}
           action={<Button onClick={refreshTitle}>重试标题</Button>} />}
         {permission === 1 && (!showFind || !isConnected) && <Alert className="editor-alert" type="info" showIcon message="你拥有只读权限，不能修改此文档" />}
@@ -277,8 +294,7 @@ export default function Editor() {
           description={<><p>{connection === '加载失败' ? '服务器正文未能加载。' : '当前正文来自服务器已保存版本。'}请保存原始草稿副本留存；它不能直接作为文档导入。</p>
             <Button onClick={saveRawDrafts}>保存原始草稿</Button>
             {draftDownloadNotice && <p role="status">{draftDownloadNotice}</p>}</>} />}
-        {error && <Alert className="editor-alert" type="warning" showIcon message={error}
-          action={connection === '加载失败' ? <Button onClick={retryLoad}>重试加载</Button> : undefined} />}
+        {error && !loadFailed && <Alert className="editor-alert" type="warning" showIcon message={error} />}
         {unavailableDrafts.length > 0 && <Alert className="editor-alert" type="info" showIcon
           message="文档未能打开，但此账号的本地草稿仍可保存"
           description={<><p>以下是此浏览器中保存的草稿副本，可能包含未同步内容。保存副本不会恢复原文档访问权限，也不会向服务器提交修改。</p>
@@ -290,7 +306,7 @@ export default function Editor() {
         {showFind && permission > 0 && <DocumentFindPanel state={documentFindState} permission={permission}
           focusEpoch={findFocusEpoch} onQuery={queryDocument} onNext={nextDocumentMatch}
           onReplace={replaceDocumentMatch} onReveal={revealDocumentMatch} onClose={closeFind} />}
-        <section className="editor-canvas">
+        <section className="editor-canvas" hidden={loadFailed || awaitingDocument}>
           <div className="editor-writing-column" data-format-available={permission === 2} data-format-expanded={formatExpanded} data-find-open={showFind}>
             <div className="editor-format-controls">
               {permission === 2 && <Button type="text" className="editor-format-toggle" icon={<FontSizeOutlined aria-hidden="true" />}

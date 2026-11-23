@@ -89,6 +89,41 @@ test('login, logout, and protected route redirect', async ({ page, request }) =>
   await expect(page.getByRole('group', { name: '本地演示账号' })).toHaveCount(0)
 })
 
+test('a denied shared document shows the active account and opens after permission is granted', async ({ page, browser, request }) => {
+  await login(page, await createAccount(request))
+  const reader = await createAccount(request)
+  const readerContext = await browser.newContext({ baseURL: new URL(page.url()).origin })
+  try {
+    const peer = await readerContext.newPage()
+    await login(peer, reader)
+    const token = await page.evaluate(() => localStorage.getItem('collab-token'))
+    for (const width of [1280, 320]) {
+      await page.goto('/home')
+      const docId = await createDocument(page)
+      await append(page, 'Shared document content')
+      await peer.setViewportSize({ width, height: width === 320 ? 640 : 850 })
+      await peer.goto(`/docs/${docId}`)
+      const recovery = peer.getByRole('region', { name: '当前账号没有访问权限' })
+      await expect(recovery.getByRole('alert')).toContainText(reader.username)
+      await expect(editor(peer)).toBeHidden()
+      const retry = recovery.getByRole('button', { name: '重试加载' })
+      await expect(retry).toBeInViewport({ ratio: 1 })
+
+      const grant = await request.post(`${backend}/api/doc/${docId}/collaborators`, {
+        headers: { Authorization: `Bearer ${token}` }, data: { username: reader.username, permission: 1 },
+      })
+      expect((await grant.json()).code).toBe(0)
+      await retry.press('Enter')
+      await expect(recovery).toBeHidden()
+      await expect(editor(peer)).toHaveText('Shared document content')
+      await expect(editor(peer)).toHaveAttribute('aria-readonly', 'true')
+      await expect(saved(peer)).toHaveText('只读 · 内容已同步')
+    }
+  } finally {
+    await readerContext.close()
+  }
+})
+
 test('narrow navigation keeps primary links visible and keyboard access to other pages', async ({ page, request }) => {
   await page.setViewportSize({ width: 320, height: 850 })
   await login(page, await createAccount(request))
