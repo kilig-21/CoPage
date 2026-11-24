@@ -216,7 +216,7 @@ export default function useQuillCollab(docId) {
       const editable = canEdit && connected && synced
       quill.enable(editable)
       quill.root.setAttribute('aria-readonly', String(!editable))
-      setPlaceholder(editable ? '开始协同编辑…' : '正文当前只读')
+      setPlaceholder(editable ? '开始协同编辑…' : canEdit ? '暂无正文' : '正文当前只读')
       documentFind?.refreshStatus()
       imageDescriptions?.refreshStatus()
       updateToolbar()

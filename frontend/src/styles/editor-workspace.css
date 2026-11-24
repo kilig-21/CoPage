@@ -29,7 +29,7 @@
   background: var(--cp-paper); border-bottom: 1px solid var(--cp-line); }
 .editor-save-state { flex: 1; min-width: 0; }
 .editor-save-state .ant-tag { margin-inline-end: 0; }
-.editor-save-status { font-size: var(--cp-type-meta); overflow-wrap: anywhere; }
+.editor-save-copy { font-size: var(--cp-type-meta); overflow-wrap: anywhere; }
 .editor-opening-status { display: inline-flex; align-items: center; min-height: 22px;
   color: var(--cp-muted); font-size: var(--cp-type-meta); }
 .editor-status-row .editor-permission-draft-action.ant-btn { flex-shrink: 0; min-height: 44px; }
@@ -141,6 +141,7 @@
   }
   .editor-format-toggle .editor-format-chevron { margin-inline-start: auto; }
   .editor-format-toggle[aria-expanded="true"] .editor-format-chevron { transform: rotate(180deg); }
+  .editor-writing-column .editor-format-toggle.ant-btn:disabled { color: var(--cp-muted); }
   .editor-writing-column .editor-format-toggle.ant-btn:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 2px; }
   .editor-workspace .editor-writing-column[data-format-expanded="false"] .ql-toolbar.ql-snow { display: none; }
   .editor-workspace .document-find-panel { padding: 8px 12px; }

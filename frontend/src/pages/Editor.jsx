@@ -69,6 +69,17 @@ export default function Editor() {
   const [findFocusEpoch, setFindFocusEpoch] = useState(0)
   const [draftDownloadNotice, setDraftDownloadNotice] = useState('')
   const [openedPermissionDraft, setOpenedPermissionDraft] = useState(null)
+  const [browserOffline, setBrowserOffline] = useState(() => navigator.onLine === false)
+  useEffect(() => {
+    const update = () => setBrowserOffline(navigator.onLine === false)
+    window.addEventListener('online', update)
+    window.addEventListener('offline', update)
+    update()
+    return () => {
+      window.removeEventListener('online', update)
+      window.removeEventListener('offline', update)
+    }
+  }, [])
   const { editorHostRef, toolbarHostRef, connection, users, error, loadErrorCode, title, permission, isOwner,
     saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, permissionDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, dismissSkippedDraftNotice, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor, revealDocumentMatch,
     documentImagesState, startDocumentImages, closeDocumentImages, saveDocumentImageDescription } = useQuillCollab(docId)
@@ -76,6 +87,8 @@ export default function Editor() {
     if (showFind) revealDocumentMatch()
   }, [showFind, findFocusEpoch, revealDocumentMatch])
   const isConnected = connection === '已连接'
+  const connectionText = browserOffline && ['正在连接', '正在重连', '同步中', '正在恢复编辑'].includes(connection)
+    ? '已离线' : connection
   const visibleSaveStatus = permission === 1 ? '只读 · ' + saveStatus : saveStatus
   const loadFailed = connection === '加载失败'
   const awaitingDocument = permission === 0 && ['未连接', '加载中'].includes(connection)
@@ -299,9 +312,12 @@ export default function Editor() {
           message={templateNotice.message} action={<Button onClick={() => { if (currentTemplateContext(templateNotice.context)) viewPersonalTemplates(templateNotice.name) }}>{templateNotice.type === 'warning' ? '核对我的模板' : '查看我的模板'}</Button>} />}
         <div className="editor-status-row" ref={statusRef} hidden={loadFailed}>
           <Space wrap className="editor-save-state">
-            {!awaitingDocument && <Tag color={isConnected ? 'green' : 'gold'} icon={<CloudOutlined />}>{connection}</Tag>}
-            <Typography.Text className={awaitingDocument ? 'editor-opening-status' : 'editor-save-status'} role="status" aria-live="polite">
-              {awaitingDocument ? '正在读取正文…' : visibleSaveStatus}
+            {!awaitingDocument && <Tag color={isConnected ? 'green' : 'gold'} icon={<CloudOutlined />}>{connectionText}</Tag>}
+            <Typography.Text className={awaitingDocument ? 'editor-opening-status' : 'editor-save-copy'} role="status" aria-live="polite">
+              {awaitingDocument ? '正在读取正文…' : <>
+                {permission === 2 && !isConnected && '暂不可编辑 · '}
+                <span className="editor-save-status">{visibleSaveStatus}</span>
+              </>}
             </Typography.Text>
           </Space>
           {currentPermissionDraft && <Button ref={permissionDraftButtonRef} className="editor-permission-draft-action" aria-haspopup="dialog"
@@ -350,6 +366,7 @@ export default function Editor() {
             data-format-expanded={formatExpanded} data-find-open={showFind} onKeyDownCapture={closeFormatOnEscape}>
             <div className="editor-format-controls">
               {permission === 2 && <Button ref={formatToggleRef} type="text" className="editor-format-toggle" icon={<FontSizeOutlined aria-hidden="true" />}
+                disabled={!isConnected && !formatExpanded}
                 aria-expanded={formatExpanded} aria-controls={EDITOR_FORMAT_TOOLBAR_ID}
                 onMouseDown={event => event.preventDefault()}
                 onClick={() => setExpandedFormatDoc(formatExpanded ? null : docId)}>
