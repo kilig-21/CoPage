@@ -47,6 +47,8 @@ export default function useQuillCollab(docId) {
   const [unreadableDrafts, setUnreadableDrafts] = useState([])
   const [unavailableDrafts, setUnavailableDrafts] = useState([])
   const [skippedDraftNotice, setSkippedDraftNotice] = useState(false)
+  const [failedDraftDoc, setFailedDraftDoc] = useState(null)
+  const pendingDraftBackupRef = useRef(null)
   const skippedDraftNoticeRef = useRef(null)
   const recoveryActionsRef = useRef(null)
   const historyReadyRef = useRef(null)
@@ -75,6 +77,7 @@ export default function useQuillCollab(docId) {
     setUnreadableDrafts([])
     setUnavailableDrafts([])
     setSkippedDraftNotice(false)
+    setFailedDraftDoc(null)
     setUsers([])
     setError('')
     setLoadErrorCode(null)
@@ -507,18 +510,25 @@ export default function useQuillCollab(docId) {
         const draft = client.hasUnconfirmedChanges() ? client.exportDraft(quill.getContents(), { copy: false }) : null
         if (draft) localStorage.setItem(key, JSON.stringify(draft))
         else localStorage.removeItem(key)
+        setFailedDraftDoc(null)
         return true
       } catch {
-        setError('本地草稿保存失败；离开页面前请复制当前内容')
+        const pending = client.hasUnconfirmedChanges()
+        setFailedDraftDoc(pending ? docId : null)
+        if (!pending) setError('本地草稿记录暂未清理')
         return false
       }
     })
+    const snapshotPendingDraft = () => client.hasUnconfirmedChanges()
+      ? createDraftBackup({ docId, username, title: draftTitle, content: quill.getContents() })
+      : null
+    pendingDraftBackupRef.current = () => active && pageSession.current() ? snapshotPendingDraft() : null
     const preserveFailedDraft = () => {
-      if (backupSent || !client.hasUnconfirmedChanges()) return
+      if (backupSent) return
+      const backup = snapshotPendingDraft()
+      if (!backup) return
       backupSent = true
-      window.dispatchEvent(new CustomEvent('copage-draft-backup', { detail: createDraftBackup({
-        docId, username, title: draftTitle, content: quill.getContents(),
-      }) }))
+      window.dispatchEvent(new CustomEvent('copage-draft-backup', { detail: backup }))
     }
     const findDrafts = () => {
       if (!draftPrefix) return []
@@ -810,6 +820,7 @@ export default function useQuillCollab(docId) {
       recoveryActionsRef.current = null
       historyReadyRef.current = null
       exportReadyRef.current = null
+      pendingDraftBackupRef.current = null
       documentFind?.dispose()
       documentFindRef.current = null
       imageDescriptions?.dispose()
@@ -833,6 +844,8 @@ export default function useQuillCollab(docId) {
     },
     canRestoreHistory: () => Boolean(historyReadyRef.current?.()),
     canExportDocument: () => Boolean(exportReadyRef.current?.()),
+    draftWriteFailed: failedDraftDoc === docId,
+    getPendingDraftBackup: () => pendingDraftBackupRef.current?.(),
     documentFindState,
     documentImagesState,
     startDocumentImages: () => documentImagesRef.current?.start(),

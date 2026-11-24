@@ -1297,6 +1297,80 @@ test('two accounts converge and recover a draft after losing the connection', as
   }
 })
 
+test('a failed local draft write can download the latest formatting and clears after recovery', async ({ page, context, request }) => {
+  await page.setViewportSize({ width: 320, height: 480 })
+  await page.addInitScript(() => {
+    const set = Storage.prototype.setItem
+    window.qaFailDraftWrites = true
+    Storage.prototype.setItem = function (key, value) {
+      if (window.qaFailDraftWrites && key.startsWith('copage-draft:v1:')) {
+        throw new DOMException('Draft write fixture', 'QuotaExceededError')
+      }
+      return set.call(this, key, value)
+    }
+  })
+  let hold = false
+  let sent = false
+  await page.routeWebSocket('**/ws/collab', route => {
+    const server = route.connectToServer()
+    route.onMessage(frame => {
+      if (hold && JSON.parse(frame).type === 'op') sent = true
+      else server.send(frame)
+    })
+  })
+  await login(page, await createAccount(request))
+  const docId = await createDocument(page)
+  const writing = editor(page)
+  const backup = page.getByRole('button', { name: '下载草稿副本' })
+  hold = true
+  await append(page, '未同步的校刊笔记', { acknowledge: false })
+  await expect.poll(() => sent).toBe(true)
+  await expect(page.locator('.editor-save-copy')).toContainText('本地草稿未写入')
+  await expect(backup).toBeInViewport({ ratio: 1 })
+  await writing.press('End')
+  await page.keyboard.press('Control+b')
+  await page.keyboard.insertText('需要保留的粗体')
+  await expect(writing.locator('strong')).toHaveText('需要保留的粗体')
+  const download = page.waitForEvent('download')
+  await backup.press('Enter')
+  const file = await readFile(await (await download).path())
+  const content = JSON.parse(file.toString('utf8'))
+  expect(content.format).toBe('copage')
+  expect(content.content.ops).toContainEqual({ insert: '需要保留的粗体', attributes: { bold: true } })
+  expect(content.content.ops).toContainEqual({ insert: '未同步的校刊笔记' })
+  const token = await page.evaluate(() => localStorage.getItem('collab-token'))
+  const before = await request.get(`${backend}/api/doc/${docId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect((await before.json()).data.revision).toBe(0)
+  const imported = await request.post(`${backend}/api/doc/import`, {
+    headers: { Authorization: `Bearer ${token}`, 'Idempotency-Key': randomUUID() },
+    multipart: { file: { name: '草稿.copage.json', mimeType: 'application/json', buffer: file } },
+  })
+  expect(imported.ok()).toBe(true)
+  const copyId = (await imported.json()).data.id
+  expect(copyId).not.toBe(docId)
+  const copy = await request.get(`${backend}/api/doc/${copyId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  expect((await copy.json()).data.content.ops).toContainEqual({ insert: '需要保留的粗体', attributes: { bold: true } })
+
+  await page.evaluate(() => { window.qaFailDraftWrites = false })
+  await append(page, '恢复存储', { acknowledge: false })
+  await expect(backup).toHaveCount(0)
+  await expect(saved(page)).toHaveText('正在保存…')
+  await page.evaluate(() => { window.qaFailDraftWrites = true })
+  await append(page, '并等待保存', { acknowledge: false })
+  await expect(backup).toBeVisible()
+  hold = false
+  await context.setOffline(true)
+  await expect(saved(page)).toHaveText('有修改尚未同步')
+  await context.setOffline(false)
+  await expect(saved(page)).toHaveText('所有修改已保存')
+  await expect(backup).toHaveCount(0)
+  await expect(writing).toContainText('并等待保存')
+})
+
 test('the online collaborator roster stays accessible and follows live membership', async ({ page, browser, context, request }) => {
   const owner = await createAccount(request)
   const members = [await createAccount(request), await createAccount(request)]

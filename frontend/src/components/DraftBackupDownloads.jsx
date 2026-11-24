@@ -3,19 +3,20 @@ import { Button, Space, Typography } from 'antd'
 import { draftBackupExceedsImportLimits, draftBackupJson, draftBackupText } from '../editor/draftBackup'
 import { downloadTextFile } from '../editor/downloadTextFile'
 
-export default function DraftBackupDownloads({ backup }) {
+export default function DraftBackupDownloads({ backup, inMemory = false }) {
   const [notice, setNotice] = useState('')
   const json = draftBackupJson(backup)
   const large = draftBackupExceedsImportLimits(backup, json)
+  const retention = inMemory ? '' : '原草稿仍保存在此浏览器。'
   function download(content, extension, type) {
     try {
       downloadTextFile(content, `本地草稿-${backup.docId}.${extension}`, type)
-      setNotice('副本已生成，请确认浏览器下载完成；原草稿仍保存在此浏览器。')
-    } catch { setNotice('下载失败，请重试；原草稿仍保存在此浏览器。') }
+      setNotice('副本已生成，请确认浏览器下载完成。' + retention)
+    } catch { setNotice('下载失败，请重试。' + retention) }
   }
   return <>
     {Number.isFinite(backup.savedAt) && <Typography.Paragraph type="secondary">
-      保存时间：{new Date(backup.savedAt).toLocaleString()}
+      {inMemory ? '备份时间' : '保存时间'}：{new Date(backup.savedAt).toLocaleString()}
     </Typography.Paragraph>}
     <Space wrap>
       <Button onClick={() => download(json, 'copage.json', 'application/json;charset=utf-8')}>下载富文本草稿</Button>

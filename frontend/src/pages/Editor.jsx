@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeftOutlined, CloudOutlined, DownOutlined, EditOutlined, ExclamationCircleOutlined, FontSizeOutlined, LockOutlined, MoreOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons'
-import { Alert, Button, Dropdown, Layout, Modal, Popover, Space, Tag, Tooltip, Typography } from 'antd'
+import { Alert, App, Button, Dropdown, Layout, Modal, Popover, Space, Tag, Tooltip, Typography } from 'antd'
 import { useLocation, useNavigate, useNavigationType, useParams } from 'react-router-dom'
 import { documentHref, documentReturn } from '../navigation/documents'
 import useQuillCollab from '../editor/useQuillCollab'
@@ -15,6 +15,7 @@ import SavePersonalTemplateModal from '../components/SavePersonalTemplateModal'
 import RenameModal from '../components/RenameModal'
 import ShareModal from '../components/ShareModal'
 import { draftRecordsJson } from '../editor/draftRecords'
+import { draftBackupJson } from '../editor/draftBackup'
 import { downloadTextFile } from '../editor/downloadTextFile'
 import DraftBackupDownloads from '../components/DraftBackupDownloads'
 import DraftRecoveryModal from '../components/DraftRecoveryModal'
@@ -28,6 +29,7 @@ import { UNTITLED_DOCUMENT_TITLE } from '../api/documentRename'
 import '../styles/editor-workspace.css'
 
 export default function Editor() {
+  const { message } = App.useApp()
   const pageSession = usePageSession()
   const { request } = pageSession
   const { id } = useParams()
@@ -82,7 +84,8 @@ export default function Editor() {
   }, [])
   const { editorHostRef, toolbarHostRef, connection, users, error, loadErrorCode, title, permission, isOwner,
     saveStatus, titleError, refreshTitle, retryLoad, recoveryDraft, permissionDraft, unreadableDrafts, unavailableDrafts, skippedDraftNotice, dismissSkippedDraftNotice, recoverDraft, discardDraft, canRestoreHistory, canExportDocument, documentFindState, startDocumentFind, closeDocumentFind, queryDocument, nextDocumentMatch, replaceDocumentMatch, focusDocumentEditor, revealDocumentMatch,
-    documentImagesState, startDocumentImages, closeDocumentImages, saveDocumentImageDescription } = useQuillCollab(docId)
+    documentImagesState, startDocumentImages, closeDocumentImages, saveDocumentImageDescription,
+    draftWriteFailed, getPendingDraftBackup } = useQuillCollab(docId)
   useLayoutEffect(() => {
     if (showFind) revealDocumentMatch()
   }, [showFind, findFocusEpoch, revealDocumentMatch])
@@ -106,6 +109,7 @@ export default function Editor() {
   const renaming = renameEntry?.docId === docId ? renameEntry.source : null
   const canNameDocument = permission === 2 && title === UNTITLED_DOCUMENT_TITLE
   const currentPermissionDraft = permissionDraft?.docId === docId && pageSession.current() ? permissionDraft : null
+  const showDraftWriteFailure = draftWriteFailed && pageSession.current()
   const showingPermissionDraft = currentPermissionDraft && openedPermissionDraft === currentPermissionDraft
   managementScope.current = { docId, isOwner, permission }
   templateScope.current = { docId, permission, routeKey: location.key }
@@ -272,6 +276,16 @@ export default function Editor() {
       setDraftDownloadNotice('下载失败，请重试；原始记录仍保存在此浏览器。')
     }
   }
+  function downloadPendingDraft() {
+    try {
+      const backup = getPendingDraftBackup()
+      if (!backup) { message.info('当前暂无待备份的修改。'); return }
+      downloadTextFile(draftBackupJson(backup), `本地草稿-${backup.docId}.copage.json`, 'application/json;charset=utf-8')
+      message.success('草稿副本已生成，请确认下载完成。')
+    } catch {
+      message.error('草稿副本未能下载，请重试。')
+    }
+  }
 
   return (
     <Layout className="app-shell editor-workspace">
@@ -310,17 +324,19 @@ export default function Editor() {
         <PendingCopyHint sourceId={docId} />
         {templateNotice && currentTemplateContext(templateNotice.context) && <Alert className="editor-alert" type={templateNotice.type} showIcon
           message={templateNotice.message} action={<Button onClick={() => { if (currentTemplateContext(templateNotice.context)) viewPersonalTemplates(templateNotice.name) }}>{templateNotice.type === 'warning' ? '核对我的模板' : '查看我的模板'}</Button>} />}
-        <div className="editor-status-row" ref={statusRef} hidden={loadFailed}>
+        <div className="editor-status-row" ref={statusRef} hidden={loadFailed} data-draft-write-failed={showDraftWriteFailure}>
           <Space wrap className="editor-save-state">
             {!awaitingDocument && <Tag color={isConnected ? 'green' : 'gold'} icon={<CloudOutlined />}>{connectionText}</Tag>}
             <Typography.Text className={awaitingDocument ? 'editor-opening-status' : 'editor-save-copy'} role="status" aria-live="polite">
               {awaitingDocument ? '正在读取正文…' : <>
                 {permission === 2 && !isConnected && '暂不可编辑 · '}
                 <span className="editor-save-status">{visibleSaveStatus}</span>
+                {showDraftWriteFailure && ' · 本地草稿未写入'}
               </>}
             </Typography.Text>
           </Space>
-          {currentPermissionDraft && <Button ref={permissionDraftButtonRef} className="editor-permission-draft-action" aria-haspopup="dialog"
+          {showDraftWriteFailure && !currentPermissionDraft && <Button className="editor-draft-action" onClick={downloadPendingDraft}>下载草稿副本</Button>}
+          {currentPermissionDraft && <Button ref={permissionDraftButtonRef} className="editor-draft-action" aria-haspopup="dialog"
             onClick={() => setOpenedPermissionDraft(currentPermissionDraft)}>备份草稿</Button>}
           {isConnected && users.length > 0 && <EditorPresence key={docId} users={users} />}
         </div>
@@ -417,7 +433,7 @@ export default function Editor() {
         onDiscard={discardDraft} onLater={returnToSource} onRecover={recoverDraft} />}
       {showingPermissionDraft && <Modal className="document-transfer-modal editor-permission-draft-modal" open title="备份未同步的编辑"
         onCancel={closePermissionDraft} footer={<Button onClick={closePermissionDraft}>关闭</Button>}>
-        <DraftBackupDownloads backup={currentPermissionDraft} />
+        <DraftBackupDownloads backup={currentPermissionDraft} inMemory />
       </Modal>}
     </Layout>
   )
