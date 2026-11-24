@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ArrowRightOutlined } from '@ant-design/icons'
 import { Alert, Button, Card, Input, Layout, List, Modal, Pagination, Popconfirm, Radio, Space, Tag, Typography } from 'antd'
 import ListEmptyState from '../components/ListEmptyState'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
@@ -372,18 +373,19 @@ export default function Projects() {
           {summary && detailPending && <Typography.Paragraph role="status" type="secondary">正在读取项目文档…</Typography.Paragraph>}
           {current && <>
             <List rowKey="id" dataSource={current.list} locale={{ emptyText: <ListEmptyState description={docKeyword ? '没有符合条件且可访问的文档' : '还没有你可访问的文档，可以新建一篇或加入已有文档'} /> }}
-              renderItem={doc => <List.Item actions={[
-                <Link key="open" to={documentHref(doc.id, sourcePath)}>打开</Link>,
-                doc.canRemove && <Popconfirm key="remove" overlayClassName="document-action-confirm" title={'将“' + doc.title + '”移出项目？'}
+              renderItem={doc => <List.Item actions={doc.canRemove ? [
+                <Popconfirm key="remove" overlayClassName="document-action-confirm" title={'将“' + doc.title + '”移出项目？'}
                   description="只移除当前关联，保留原文档和成员权限。" disabled={!detailReady} onConfirm={() => mutate({ kind: 'remove', projectId: current.id, groupId: current.groupId, docId: doc.id, title: doc.title, associationId: doc.associationId }, config =>
                     request.delete('/projects/' + current.id + '/documents/' + doc.id, { ...config, params: { associationId: doc.associationId } }))}>
                   <Button disabled={!detailReady} danger>移出项目</Button></Popconfirm>,
-              ].filter(Boolean)}><List.Item.Meta title={<Link ref={doc.id === returnedDocumentId ? returnedDocumentLink : undefined}
-                to={documentHref(doc.id, sourcePath)}>{doc.title}</Link>}
-                description={<Space wrap><Tag>{doc.isOwner === true ? '所有者' : doc.permission === 2 ? '可编辑' : doc.permission === 1 ? '只读' : '打开后查看权限'}</Tag>
+              ] : undefined}><List.Item.Meta title={<Link className="project-document-link"
+                ref={doc.id === returnedDocumentId ? returnedDocumentLink : undefined} to={documentHref(doc.id, sourcePath)}>
+                <span>{doc.title}</span><ArrowRightOutlined aria-hidden="true" />
+              </Link>}
+                description={<div className="project-document-meta"><Tag>{doc.isOwner === true ? '所有者' : doc.permission === 2 ? '可编辑' : doc.permission === 1 ? '只读' : '打开后查看权限'}</Tag>
                   <span>文档 #{doc.id}</span>
                   <span>所有者：{typeof doc.ownerName === 'string' && doc.ownerName.trim() ? doc.ownerName : '用户 #' + doc.ownerId}</span>
-                  <span>更新于 {doc.updateTime}</span></Space>} />
+                  <span>更新于 {doc.updateTime}</span></div>} />
               </List.Item>} />
             {current.total > SIZE && <Pagination current={docPage} total={current.total} pageSize={SIZE} showSizeChanger={false}
               disabled={!detailReady} onChange={next => navigate({ docPage: String(next) })} />}

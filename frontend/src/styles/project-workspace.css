@@ -1,5 +1,12 @@
 .project-read-alert { margin-bottom: 16px; overflow-wrap: anywhere; }
 .project-document-results { margin-top: 12px; }
+.project-document-results .ant-list .ant-list-item { padding-block: 10px; }
+.project-document-link { display: inline-flex; align-items: center; gap: 8px; min-height: 28px; max-width: 100%; }
+.project-document-link > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.project-document-link .anticon { flex: none; color: var(--cp-accent); font-size: 12px; }
+.project-document-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+  color: var(--cp-muted); font-size: var(--cp-type-meta); overflow-wrap: anywhere; }
+.project-document-meta .ant-tag { margin-inline-end: 0; }
 .project-fields-modal .ant-input-textarea-show-count { margin-bottom: 20px; }
 .project-page .ant-card-head-title { white-space: normal; overflow-wrap: anywhere; }
 .project-page .ant-list-item-meta-title { overflow-wrap: anywhere; }
@@ -43,6 +50,7 @@
   .project-fields-modal .ant-modal-footer .ant-btn { height: auto; max-width: 100%; margin-inline-start: 0; white-space: normal; }
 }
 @media (max-width: 640px) {
+  .project-document-link { min-height: 44px; }
   .project-document-picker-modal { top: 24px; }
   .project-document-picker-modal .ant-modal-content { max-height: calc(100dvh - 48px); }
   .project-document-picker-modal .ant-btn, .project-document-picker-modal .ant-input,
