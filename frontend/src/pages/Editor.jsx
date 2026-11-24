@@ -44,6 +44,7 @@ export default function Editor() {
   const findButtonRef = useRef(null)
   const titleButtonRef = useRef(null)
   const permissionDraftButtonRef = useRef(null)
+  const formatToggleRef = useRef(null)
   const handledWritingFocus = useRef(null)
   useEditorStickyOffsets(topbarRef, statusRef)
   const [renameEntry, setRenameEntry] = useState(null)
@@ -184,6 +185,17 @@ export default function Editor() {
   function retryOpeningDocument() {
     documentMain.current?.focus({ preventScroll: true })
     retryLoad()
+  }
+  function closeFormatOnEscape(event) {
+    if (event.key !== 'Escape' || event.defaultPrevented || event.nativeEvent.isComposing || !formatExpanded) return
+    const toggle = formatToggleRef.current
+    // 段落样式选项和链接浮层优先处理自己的 Escape。
+    if (!toggle?.getClientRects().length || event.target.closest('.ql-picker.ql-expanded, .ql-tooltip')) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    if (toolbarHostRef.current?.contains(event.target)) toggle.focus({ preventScroll: true })
+    setExpandedFormatDoc(null)
   }
   useEffect(() => { setToolsOpen(false); setTitleOpen(false) }, [docId, permission])
   useEffect(() => { changeManagement(null); setSharing(false); setShareError(''); setShowImages(false) }, [docId])
@@ -334,13 +346,14 @@ export default function Editor() {
           {awaitingDocument && <div className="editor-writing-column editor-opening-paper" aria-hidden="true">
             <span /><span /><span />
           </div>}
-          <div className="editor-writing-column" hidden={awaitingDocument} data-format-available={permission === 2} data-format-expanded={formatExpanded} data-find-open={showFind}>
+          <div className="editor-writing-column" hidden={awaitingDocument} data-format-available={permission === 2}
+            data-format-expanded={formatExpanded} data-find-open={showFind} onKeyDownCapture={closeFormatOnEscape}>
             <div className="editor-format-controls">
-              {permission === 2 && <Button type="text" className="editor-format-toggle" icon={<FontSizeOutlined aria-hidden="true" />}
+              {permission === 2 && <Button ref={formatToggleRef} type="text" className="editor-format-toggle" icon={<FontSizeOutlined aria-hidden="true" />}
                 aria-expanded={formatExpanded} aria-controls={EDITOR_FORMAT_TOOLBAR_ID}
                 onMouseDown={event => event.preventDefault()}
                 onClick={() => setExpandedFormatDoc(formatExpanded ? null : docId)}>
-                格式工具 <DownOutlined className="editor-format-chevron" aria-hidden="true" />
+                {formatExpanded ? '收起格式工具' : '格式工具'} <DownOutlined className="editor-format-chevron" aria-hidden="true" />
               </Button>}
               <div ref={toolbarHostRef} />
             </div>
