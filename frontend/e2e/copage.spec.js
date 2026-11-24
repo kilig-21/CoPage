@@ -1175,6 +1175,78 @@ test('two accounts converge and recover a draft after losing the connection', as
   }
 })
 
+test('the online collaborator roster stays accessible and follows live membership', async ({ page, browser, context, request }) => {
+  const owner = await createAccount(request)
+  const members = [await createAccount(request), await createAccount(request)]
+  await login(page, owner)
+  const id = await createDocument(page)
+  const peerContexts = []
+  try {
+    for (const member of members) {
+      await grantEditor(page, request, id, member.username)
+      const peerContext = await browser.newContext({ baseURL: new URL(page.url()).origin })
+      peerContexts.push(peerContext)
+      const peer = await peerContext.newPage()
+      await login(peer, member)
+      await peer.goto(`/docs/${id}`)
+      await expect(saved(peer)).toHaveText('所有修改已保存')
+    }
+
+    const presence = page.getByRole('group', { name: '在线协作者' })
+    const threePeople = presence.getByLabel('查看在线协作者（3 位）')
+    const roster = presence.getByRole('list', { name: '在线协作者名单' })
+    const panel = presence.locator('.editor-presence-panel')
+    const status = page.locator('.editor-status-row')
+    for (const [width, height] of [[1280, 850], [320, 480]]) {
+      await page.setViewportSize({ width, height })
+      await expect(threePeople).toBeVisible()
+      await expect(threePeople).toHaveText(/\+1$/)
+      const rowHeight = (await status.boundingBox()).height
+      await page.getByRole('button', { name: '更多文档操作' }).focus()
+      await page.keyboard.press('Tab')
+      await expect(threePeople).toBeFocused()
+      await page.keyboard.press('Enter')
+      await expect(roster.getByRole('listitem')).toHaveCount(3)
+      for (const person of [owner, ...members]) {
+        await expect(roster.getByText(person.username, { exact: true })).toBeVisible()
+      }
+      await expect(panel).toBeInViewport({ ratio: 1 })
+      expect((await status.boundingBox()).height).toBe(rowHeight)
+      await expect(page.locator('html')).toHaveJSProperty('scrollWidth', width)
+      await page.keyboard.press('Tab')
+      await expect(roster).toBeFocused()
+      await page.keyboard.press('Escape')
+      await expect(roster).toBeHidden()
+      await expect(threePeople).toBeFocused()
+
+      await threePeople.click()
+      await expect(roster).toBeVisible()
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }))
+      const writingArea = await editor(page).boundingBox()
+      await page.mouse.click(writingArea.x + 12, writingArea.y + 24)
+      await expect(roster).toBeHidden()
+      await expect(editor(page)).toBeFocused()
+    }
+
+    await threePeople.press('Enter')
+    await peerContexts.pop().close()
+    await expect(roster.getByRole('listitem')).toHaveCount(2)
+    await expect(roster.getByText(members[1].username, { exact: true })).toHaveCount(0)
+    await peerContexts.pop().close()
+    await expect(roster.getByRole('listitem')).toHaveCount(1)
+    await expect(roster.getByText(owner.username, { exact: true })).toBeVisible()
+    await context.setOffline(true)
+    await expect(presence).toHaveCount(0)
+    await expect(saved(page)).toHaveText('等待同步')
+    await context.setOffline(false)
+    await expect(presence.getByLabel('查看在线协作者（1 位）')).toBeVisible()
+    await expect(roster).toBeHidden()
+    await append(page, '继续写校刊')
+  } finally {
+    await Promise.all(peerContexts.map(peer => peer.close()))
+  }
+})
+
 test('a collaborator can download held edits from the editor after a permission change', async ({ page, browser, request }) => {
   await login(page, await createAccount(request))
   const reader = await createAccount(request)

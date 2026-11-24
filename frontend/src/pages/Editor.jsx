@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ArrowLeftOutlined, CloudOutlined, DownOutlined, EditOutlined, ExclamationCircleOutlined, FontSizeOutlined, LockOutlined, MoreOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons'
-import { Alert, Avatar, Button, Dropdown, Layout, Modal, Popover, Space, Tag, Tooltip, Typography } from 'antd'
+import { Alert, Button, Dropdown, Layout, Modal, Popover, Space, Tag, Tooltip, Typography } from 'antd'
 import { useLocation, useNavigate, useNavigationType, useParams } from 'react-router-dom'
 import { documentHref, documentReturn } from '../navigation/documents'
 import useQuillCollab from '../editor/useQuillCollab'
@@ -20,6 +20,7 @@ import DraftBackupDownloads from '../components/DraftBackupDownloads'
 import DraftRecoveryModal from '../components/DraftRecoveryModal'
 import DocumentFindPanel from '../components/DocumentFindPanel'
 import DocumentImagesModal from '../components/DocumentImagesModal'
+import EditorPresence from '../components/EditorPresence'
 import LazyUserGuide from '../components/LazyUserGuide'
 import PendingCopyHint from '../components/PendingCopyHint'
 import { usePageSession } from '../auth/PageSessionContext'
@@ -286,11 +287,7 @@ export default function Editor() {
           </Space>
           {currentPermissionDraft && <Button ref={permissionDraftButtonRef} className="editor-permission-draft-action" aria-haspopup="dialog"
             onClick={() => setOpenedPermissionDraft(currentPermissionDraft)}>备份草稿</Button>}
-          {isConnected && <div className="editor-presence" role="group" aria-label="在线协作者"><Avatar.Group size={28} max={{ count: 2 }}>
-            {users.map(user => <Tooltip key={user.userId} title={user.nickname} trigger={['hover', 'focus']}>
-              <Avatar tabIndex={0} aria-label={user.nickname} style={{ backgroundColor: user.color }}>{user.nickname?.slice(0, 1).toUpperCase()}</Avatar>
-            </Tooltip>)}
-          </Avatar.Group></div>}
+          {isConnected && users.length > 0 && <EditorPresence key={docId} users={users} />}
         </div>
         {loadFailed && <section className="editor-load-failure" aria-labelledby="editor-load-failure-title">
           <div className="editor-load-failure-copy" role="alert">
