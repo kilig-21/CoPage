@@ -81,12 +81,16 @@ function SessionApp() {
         ? location.state?.from : location.pathname + location.search + location.hash),
     } })
   }), [location, navigate])
-  if (localBackup) return <LocalDraftBackup backup={localBackup} onContinue={() => {
-    setLocalBackup(null)
-    navigate('/login', { replace: true, state: {
-      backupHandled: true, from: safeReturnPath(`/docs/${localBackup.docId}`),
-    } })
-  }} />
+  if (localBackup) {
+    const { backup, canResume } = localBackup
+    const requiresLogin = location.pathname === '/login' || !canResume()
+    return <LocalDraftBackup backup={backup} requiresLogin={requiresLogin} onContinue={() => {
+      setLocalBackup(null)
+      if (requiresLogin || !canResume()) navigate('/login', { replace: true, state: {
+        backupHandled: true, from: safeReturnPath(`/docs/${backup.docId}`),
+      } })
+    }} />
+  }
   return (
     <PageBoundary key={`${location.pathname}:${sessionEpoch}`}>
     <PageSessionProvider>

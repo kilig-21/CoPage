@@ -528,7 +528,9 @@ export default function useQuillCollab(docId) {
       const backup = snapshotPendingDraft()
       if (!backup) return
       backupSent = true
-      window.dispatchEvent(new CustomEvent('copage-draft-backup', { detail: backup }))
+      window.dispatchEvent(new CustomEvent('copage-draft-backup', {
+        detail: { backup, canResume: pageSession.current },
+      }))
     }
     const findDrafts = () => {
       if (!draftPrefix) return []

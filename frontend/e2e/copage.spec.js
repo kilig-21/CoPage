@@ -1297,8 +1297,7 @@ test('two accounts converge and recover a draft after losing the connection', as
   }
 })
 
-test('a failed local draft write can download the latest formatting and clears after recovery', async ({ page, context, request }) => {
-  await page.setViewportSize({ width: 320, height: 480 })
+async function rejectDraftWrites(page) {
   await page.addInitScript(() => {
     const set = Storage.prototype.setItem
     window.qaFailDraftWrites = true
@@ -1309,6 +1308,11 @@ test('a failed local draft write can download the latest formatting and clears a
       return set.call(this, key, value)
     }
   })
+}
+
+test('a failed local draft write can download the latest formatting and clears after recovery', async ({ page, context, request }) => {
+  await page.setViewportSize({ width: 320, height: 480 })
+  await rejectDraftWrites(page)
   let hold = false
   let sent = false
   await page.routeWebSocket('**/ws/collab', route => {
@@ -1369,6 +1373,52 @@ test('a failed local draft write can download the latest formatting and clears a
   await expect(saved(page)).toHaveText('所有修改已保存')
   await expect(backup).toHaveCount(0)
   await expect(writing).toContainText('并等待保存')
+})
+
+test('the draft backup resumes navigation only for the same live session', async ({ page, context, request }) => {
+  const owner = await createAccount(request)
+  const other = await createAccount(request)
+  await page.setViewportSize({ width: 320, height: 480 })
+  await rejectDraftWrites(page)
+  await page.routeWebSocket('**/ws/collab', route => {
+    const server = route.connectToServer()
+    route.onMessage(frame => {
+      if (JSON.parse(frame).type !== 'op') server.send(frame)
+    })
+  })
+  await login(page, owner)
+  const source = '/docs?scope=owned&keyword=' + encodeURIComponent('校刊')
+  const heading = page.getByRole('heading', { name: '请先备份未确认内容' })
+  const resume = page.getByRole('button', { name: '已备份，继续浏览' })
+
+  for (const changeAccount of [false, true]) {
+    const id = await createDocument(page)
+    await page.goto(`/docs/${id}?returnTo=${encodeURIComponent(source)}`)
+    await expect(saved(page)).toHaveText('所有修改已保存')
+    await append(page, '离开前还没同步的校刊内容', { acknowledge: false })
+    await expect(page.getByRole('button', { name: '下载草稿副本' })).toBeVisible()
+    await page.getByRole('button', { name: '返回文档列表' }).press('Enter')
+    await expect(heading).toBeFocused()
+    await expect(page.getByRole('textbox', { name: '未确认内容备份' })).toHaveValue('离开前还没同步的校刊内容\n')
+    await expect(resume).toBeVisible()
+    if (!changeAccount) {
+      await resume.press('Enter')
+      await expect(page.getByRole('region', { name: '文档列表' })).toBeVisible()
+      await expect(page.getByRole('textbox', { name: '按文档标题筛选' })).toHaveValue('校刊')
+      continue
+    }
+    const secondTab = await context.newPage()
+    await login(secondTab, other)
+    const relogin = page.getByRole('button', { name: '已备份，继续登录' })
+    await expect(resume).toHaveCount(0)
+    await expect(relogin).toBeVisible()
+    await expect(heading).toBeVisible()
+    await relogin.press('Enter')
+    await expect(page).toHaveURL(/\/login$/)
+    await expect(page.getByLabel('用户名')).toBeVisible()
+    await expect(heading).toHaveCount(0)
+    await secondTab.close()
+  }
 })
 
 test('the online collaborator roster stays accessible and follows live membership', async ({ page, browser, context, request }) => {
