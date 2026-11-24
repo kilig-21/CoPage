@@ -38,6 +38,7 @@ export default function Editor() {
   const docId = Number(id)
   const topbarRef = useRef(null)
   const statusRef = useRef(null)
+  const documentMain = useRef(null)
   const toolsButtonRef = useRef(null)
   const shareButtonRef = useRef(null)
   const findButtonRef = useRef(null)
@@ -180,6 +181,10 @@ export default function Editor() {
   function returnToSource() {
     navigate(returnTarget.path, { state: { returnDocumentId: docId } })
   }
+  function retryOpeningDocument() {
+    documentMain.current?.focus({ preventScroll: true })
+    retryLoad()
+  }
   useEffect(() => { setToolsOpen(false); setTitleOpen(false) }, [docId, permission])
   useEffect(() => { changeManagement(null); setSharing(false); setShareError(''); setShowImages(false) }, [docId])
   useEffect(() => { setSavingTemplate(null); setTemplateNotice(null) }, [docId, location.key])
@@ -276,14 +281,16 @@ export default function Editor() {
           </Dropdown>
         </Space>
       </header>
-      <main className="editor-wrap">
+      <main ref={documentMain} tabIndex={-1} aria-label="文档内容" className="editor-wrap">
         <PendingCopyHint sourceId={docId} />
         {templateNotice && currentTemplateContext(templateNotice.context) && <Alert className="editor-alert" type={templateNotice.type} showIcon
           message={templateNotice.message} action={<Button onClick={() => { if (currentTemplateContext(templateNotice.context)) viewPersonalTemplates(templateNotice.name) }}>{templateNotice.type === 'warning' ? '核对我的模板' : '查看我的模板'}</Button>} />}
         <div className="editor-status-row" ref={statusRef} hidden={loadFailed}>
           <Space wrap className="editor-save-state">
-            <Tag color={isConnected ? 'green' : 'gold'} icon={<CloudOutlined />}>{connection}</Tag>
-            <Typography.Text className="editor-save-status" role="status" aria-live="polite">{visibleSaveStatus}</Typography.Text>
+            {!awaitingDocument && <Tag color={isConnected ? 'green' : 'gold'} icon={<CloudOutlined />}>{connection}</Tag>}
+            <Typography.Text className={awaitingDocument ? 'editor-opening-status' : 'editor-save-status'} role="status" aria-live="polite">
+              {awaitingDocument ? '正在读取正文…' : visibleSaveStatus}
+            </Typography.Text>
           </Space>
           {currentPermissionDraft && <Button ref={permissionDraftButtonRef} className="editor-permission-draft-action" aria-haspopup="dialog"
             onClick={() => setOpenedPermissionDraft(currentPermissionDraft)}>备份草稿</Button>}
@@ -298,7 +305,7 @@ export default function Editor() {
             {deniedAccount && <p className="editor-load-account">当前登录账号 <strong>{deniedAccount}</strong></p>}
             <p>{error}</p>
           </div>
-          <Button type="primary" className="editor-load-retry" onClick={retryLoad}>重试加载</Button>
+          <Button type="primary" className="editor-load-retry" onClick={retryOpeningDocument}>重试加载</Button>
         </section>}
         {titleError && <Alert className="editor-alert" type="warning" message={titleError}
           action={<Button onClick={refreshTitle}>重试标题</Button>} />}
@@ -323,8 +330,11 @@ export default function Editor() {
         {showFind && permission > 0 && <DocumentFindPanel state={documentFindState} permission={permission}
           focusEpoch={findFocusEpoch} onQuery={queryDocument} onNext={nextDocumentMatch}
           onReplace={replaceDocumentMatch} onReveal={revealDocumentMatch} onClose={closeFind} />}
-        <section className="editor-canvas" hidden={loadFailed || awaitingDocument}>
-          <div className="editor-writing-column" data-format-available={permission === 2} data-format-expanded={formatExpanded} data-find-open={showFind}>
+        <section className="editor-canvas" hidden={loadFailed} aria-busy={awaitingDocument}>
+          {awaitingDocument && <div className="editor-writing-column editor-opening-paper" aria-hidden="true">
+            <span /><span /><span />
+          </div>}
+          <div className="editor-writing-column" hidden={awaitingDocument} data-format-available={permission === 2} data-format-expanded={formatExpanded} data-find-open={showFind}>
             <div className="editor-format-controls">
               {permission === 2 && <Button type="text" className="editor-format-toggle" icon={<FontSizeOutlined aria-hidden="true" />}
                 aria-expanded={formatExpanded} aria-controls={EDITOR_FORMAT_TOOLBAR_ID}

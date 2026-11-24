@@ -129,6 +129,61 @@ test('a denied shared document shows the active account and opens after permissi
   }
 })
 
+test('opening a document separates the reading state from saving and keeps retry focus', async ({ page, request }) => {
+  await login(page, await createAccount(request))
+  const id = await createDocument(page)
+  await rename(page, '校刊活动记录')
+  await append(page, '这是已保存的正文')
+  const route = `**/api/doc/${id}`
+  const content = page.getByRole('main', { name: '文档内容' })
+  const canvas = content.locator('.editor-canvas')
+  const status = content.getByRole('status')
+  const retry = content.getByRole('button', { name: '重试加载' })
+  const more = page.getByRole('button', { name: '更多文档操作' })
+
+  for (const [width, height] of [[1280, 850], [320, 480]]) {
+    await page.setViewportSize({ width, height })
+    let fail
+    const firstRead = new Promise(resolve => { fail = resolve })
+    await page.route(route, async request => {
+      await firstRead
+      await request.fulfill({ status: 503, json: { code: 503, message: '文档暂不可用' } })
+    }, { times: 1 })
+    try {
+      await page.goto(`/docs/${id}`)
+      await expect(status).toHaveText('正在读取正文…')
+      await expect(canvas).toBeVisible()
+      await expect(canvas).toHaveAttribute('aria-busy', 'true')
+      await expect(editor(page)).toBeHidden()
+      await expect(saved(page)).toHaveCount(0)
+    } finally {
+      fail()
+    }
+    await expect(content.getByRole('alert')).toBeVisible()
+    await expect(canvas).toBeHidden()
+    let release
+    const realRead = new Promise(resolve => { release = resolve })
+    await page.route(route, async request => {
+      await realRead
+      await request.continue()
+    }, { times: 1 })
+    try {
+      await retry.press('Enter')
+      await expect(content).toBeFocused()
+      await expect(status).toHaveText('正在读取正文…')
+      await expect(editor(page)).toBeHidden()
+      if (width === 320) await more.focus()
+    } finally {
+      release()
+    }
+    await expect(editor(page)).toHaveText('这是已保存的正文')
+    await expect(saved(page)).toHaveText('所有修改已保存')
+    await expect(canvas).toHaveAttribute('aria-busy', 'false')
+    await expect(width === 320 ? more : content).toBeFocused()
+  }
+  await append(page, '并继续写作')
+})
+
 test('narrow navigation keeps primary links visible and keyboard access to other pages', async ({ page, request }) => {
   await page.setViewportSize({ width: 320, height: 850 })
   await login(page, await createAccount(request))

@@ -20,12 +20,18 @@
 .editor-workspace .editor-topbar .ant-btn { min-height: var(--cp-control-height); }
 .editor-workspace .editor-actions { flex-shrink: 0; }
 .editor-workspace .editor-wrap { width: min(1000px, calc(100% - 48px)); padding: 20px 0 64px; }
+.editor-workspace .editor-wrap:focus-visible { outline: none; }
+.editor-workspace .editor-wrap:focus-visible > :is(.editor-status-row:not([hidden]), .editor-load-failure) {
+  outline: 2px solid var(--cp-accent); outline-offset: 4px;
+}
 .editor-workspace .editor-status-row { position: sticky; top: var(--editor-topbar-offset, var(--editor-bar-height)); z-index: 18;
   min-height: 32px; gap: 8px; align-items: center; padding-block: 6px;
   background: var(--cp-paper); border-bottom: 1px solid var(--cp-line); }
 .editor-save-state { flex: 1; min-width: 0; }
 .editor-save-state .ant-tag { margin-inline-end: 0; }
 .editor-save-status { font-size: var(--cp-type-meta); overflow-wrap: anywhere; }
+.editor-opening-status { display: inline-flex; align-items: center; min-height: 22px;
+  color: var(--cp-muted); font-size: var(--cp-type-meta); }
 .editor-status-row .editor-permission-draft-action.ant-btn { flex-shrink: 0; min-height: 44px; }
 .editor-permission-draft-modal .ant-modal-body .ant-btn { min-height: 44px; }
 .editor-presence { position: relative; flex-shrink: 0; }
@@ -64,6 +70,10 @@
 .editor-presence-color { flex: 0 0 8px; height: 8px; align-self: center; border-radius: 50%; }
 .editor-workspace .editor-canvas { margin-top: 12px; padding: 48px 64px; background: var(--cp-surface); }
 .editor-writing-column { width: min(100%, 712px); margin-inline: auto; }
+.editor-opening-paper { display: grid; gap: 16px; padding-block: var(--cp-space-6); }
+.editor-opening-paper > span { height: 10px; width: 75%; border-radius: 6px; background: var(--cp-line); }
+.editor-opening-paper > span:first-child { width: 89%; }
+.editor-opening-paper > span:last-child { width: 52%; }
 .editor-format-controls {
   position: sticky; z-index: 2;
   top: calc(var(--editor-topbar-offset, var(--editor-bar-height)) + var(--editor-status-height, 32px));
